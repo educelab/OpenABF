@@ -3,9 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <vector>
+
+namespace OpenABF
+{
 
 namespace detail
 {
@@ -17,19 +21,24 @@ struct ExpandType {
 };
 }  // namespace detail
 
-struct DefaultEdgeProperties {
-};
+template <typename T>
 struct DefaultVertexProperties {
 };
+
+template <typename T>
+struct DefaultEdgeProperties {
+};
+
+template <typename T>
 struct DefaultFaceProperties {
 };
 
 template <
-    typename T = float,
+    typename T,
     size_t Dim = 3,
-    typename VertexProperties = DefaultVertexProperties,
-    typename EdgeProperties = DefaultEdgeProperties,
-    typename FaceProperties = DefaultFaceProperties>
+    typename VertexProperties = DefaultVertexProperties<T>,
+    typename EdgeProperties = DefaultEdgeProperties<T>,
+    typename FaceProperties = DefaultFaceProperties<T>>
 class HalfEdgeMesh
 {
 private:
@@ -57,13 +66,31 @@ private:
             return std::make_shared<Vertex>(std::forward<Args>(args)...);
         }
 
-        bool is_boundary() const
+        auto edges() -> std::vector<EdgePtr>
         {
-            if (edge) {
-                return edge->pair == nullptr;
-            }
-            throw std::runtime_error(
-                "Unreferenced vertex: " + std::to_string(idx));
+            std::vector<EdgePtr> ret;
+            auto e = edge;
+            do {
+                if (not e->pair) {
+                    throw std::runtime_error(
+                        "Cannot enumerate edges for boundary_vertices vertex.");
+                }
+                ret.push_back(e);
+                e = e->pair->next;
+            } while (e != edge);
+            return ret;
+        }
+
+        auto is_boundary() const -> bool
+        {
+            auto e = edge;
+            do {
+                if (not e->pair) {
+                    return true;
+                }
+                e = e->pair->next;
+            } while (e != edge);
+            return false;
         }
 
         size_t idx{0};
@@ -77,6 +104,8 @@ private:
         {
             return std::make_shared<Edge>(std::forward<Args>(args)...);
         }
+
+        auto is_boundary() const -> bool { return pair == nullptr; }
 
         EdgePtr pair;
         EdgePtr next;
@@ -102,7 +131,7 @@ public:
     HalfEdgeMesh() = default;
 
     template <typename... Args>
-    size_t insertVertex(Args... args)
+    auto insertVertex(Args... args) -> size_t
     {
         auto vert = Vertex::New(std::forward<Args>(args)...);
         vert->idx = verts_.size();
@@ -111,7 +140,7 @@ public:
     }
 
     template <typename... Args>
-    size_t insertFace(Args... args)
+    auto insertFace(Args... args) -> size_t
     {
         // Make a new face structure
         auto face = Face::New();
@@ -121,6 +150,7 @@ public:
         EdgePtr prevEdge;
         for (const auto& idx : {args...}) {
             // Make a new edge
+            // TODO: Make sure edge doesn't already exist?
             auto newEdge = Edge::New();
             newEdge->face = face;
 
@@ -178,9 +208,33 @@ public:
         return faces_.size() - 1;
     }
 
+    auto vertices() -> std::vector<VertPtr> { return verts_; }
+
+    auto edges() -> std::vector<EdgePtr> { return edges_; }
+
+    auto faces() -> std::vector<FacePtr> { return faces_; }
+
+    auto interior_vertices() -> std::vector<VertPtr>
+    {
+        std::vector<VertPtr> ret;
+        std::copy_if(
+            verts_.begin(), verts_.end(), std::back_inserter(ret),
+            [](auto x) { return not x->is_boundary(); });
+        return ret;
+    }
+
+    auto boundary_vertices() -> std::vector<VertPtr>
+    {
+        std::vector<VertPtr> ret;
+        std::copy_if(
+            verts_.begin(), verts_.end(), std::back_inserter(ret),
+            [](auto x) { return x->is_boundary(); });
+        return ret;
+    }
+
 private:
     // Find edge by start and end vertex indices
-    EdgePtr find_edge_(size_t start, size_t end)
+    auto find_edge_(size_t start, size_t end) -> EdgePtr
     {
         // Get edges with this start index
         auto range = edges_.equal_range(start);
@@ -195,3 +249,4 @@ private:
         return nullptr;
     }
 };
+}  // namespace OpenABF
