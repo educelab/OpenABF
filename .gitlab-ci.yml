@@ -1,0 +1,35 @@
+### Prototype build jobs ###
+.build_script: &build_script
+  - mkdir -p build/
+  - cd build/
+  - echo $CMAKE_CMD
+  - $CMAKE_CMD
+  - ninja
+
+.test_script: &test_script
+  - ctest -V
+
+.build:
+  variables:
+    EXTRA_CMAKE_FLAGS: ""
+  before_script:
+    - export CMAKE_CMD="cmake -GNinja $EXTRA_CMAKE_FLAGS .."
+  script:
+    - *build_script
+
+.build_and_test:
+  extends: .build
+  script:
+    - *build_script
+    - *test_script
+
+### Tests ###
+test:debian:10:
+  extends: .build_and_test
+  stage: test
+  needs: []
+  image: volcart/vcbuilder-debian:10_v1.static
+  variables:
+    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON"
+  tags:
+    - docker

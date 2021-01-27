@@ -1,0 +1,14 @@
+/**
+ * @namespace OpenABF
+ * @brief %OpenABF top-level namespace
+ */
+
+/**
+ * @namespace OpenABF::detail
+ * @brief Implementation details
+ */
+
+/**
+ * @namespace OpenABF::traits
+ * @brief Traits for meshes and algorithms
+ */

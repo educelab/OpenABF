@@ -1,0 +1,8 @@
+{
+  "project": "OpenABF",
+  "target": "single_include/OpenABF/OpenABF.hpp",
+  "sources": [
+    "include/OpenABF/OpenABF.hpp"
+  ],
+  "include_paths": ["include"]
+}

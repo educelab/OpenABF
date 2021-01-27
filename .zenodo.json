@@ -1,0 +1,30 @@
+{
+  "title": "OpenABF",
+  "description": "A header-only library of angle-based flattening algorithms for C++.",
+  "upload_type": "software",
+  "license": "other-open",
+  "creators": [
+    {
+      "orcid": "0000-0002-3887-1237",
+      "affiliation": "University of Kentucky",
+      "name": "Parker, C. Seth"
+    }
+  ],
+  "keywords" : [
+    "c-plus-plus",
+    "parameterization",
+    "flattening"
+  ],
+  "related_identifiers": [
+    {
+      "scheme": "url",
+      "identifier": "https://gitlab.com/educelab/OpenABF/",
+      "relation": "isSupplementTo"
+    },
+    {
+      "scheme": "url",
+      "identifier": "https://github.com/educelab/OpenABF/",
+      "relation": "isSupplementTo"
+    }
+  ]
+}
