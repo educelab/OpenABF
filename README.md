@@ -1,6 +1,6 @@
 [![OpenABF](docs/images/banner.svg)](https://gitlab.com/educelab/OpenABF)
 
-**OpenABF** is A header-only library of angle-based flattening algorithms for 
+**OpenABF** is a header-only library of angle-based flattening algorithms for 
 C++. It is designed to be as simple as possible to integrate into existing 
 projects.
 
