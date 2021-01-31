@@ -61,7 +61,8 @@ Any changes intentionally contributed to this repository are assumed to
 be licensed under the terms outlined in [LICENSE](LICENSE).
 
 ## Attribution
-This project actively maintains a citable record on Zenodo. 
+This project actively maintains a 
+[citable record on Zenodo](https://doi.org/10.5281/zenodo.4483858). 
 We are happy to list our active community of contributors as authors on 
 this record. After you have contributed 10 or more commits to this project,
 please open a new pull request which adds your name and ORCID to 
