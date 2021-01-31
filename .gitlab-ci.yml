@@ -33,3 +33,13 @@ test:debian:10:
     EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON"
   tags:
     - docker
+
+examples:debian:10:
+  extends: .build
+  stage: test
+  needs: []
+  image: volcart/vcbuilder-debian:10_v1.static
+  variables:
+    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_EXAMPLES=ON"
+  tags:
+    - docker

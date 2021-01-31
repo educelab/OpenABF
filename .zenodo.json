@@ -1,6 +1,6 @@
 {
   "title": "OpenABF",
-  "description": "A header-only library of angle-based flattening algorithms for C++.",
+  "description": "A single-header C++ library of angle-based flattening algorithms.",
   "upload_type": "software",
   "license": "other-open",
   "creators": [
@@ -13,7 +13,8 @@
   "keywords" : [
     "c-plus-plus",
     "parameterization",
-    "flattening"
+    "flattening",
+    "angle-based flattening"
   ],
   "related_identifiers": [
     {

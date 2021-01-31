@@ -175,7 +175,6 @@ public:
     template <typename T2>
     Vec& operator=(const std::initializer_list<T2>& b)
     {
-        std::size_t idx{0};
         auto it = b.begin();
         for (auto& v : val_) {
             v = *it;

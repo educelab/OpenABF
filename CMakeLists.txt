@@ -62,9 +62,15 @@ install(
 
 # Docs
 find_package(Doxygen OPTIONAL_COMPONENTS dot)
-CMAKE_DEPENDENT_OPTION(OPENABF_BUILD_DOCS "Build Doxygen documentation" on "DOXYGEN_FOUND" off)
+CMAKE_DEPENDENT_OPTION(OPENABF_BUILD_DOCS "Build Doxygen documentation" off "DOXYGEN_FOUND" off)
 if(OPENABF_BUILD_DOCS)
     add_subdirectory(docs)
+endif()
+
+# Examples
+option(OPENABF_BUILD_EXAMPLES "Compile OpenABF example applications" off)
+if(OPENABF_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
 # Tests
@@ -74,6 +80,5 @@ if(OPENABF_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# Example app
-add_executable(abf_test main.cpp)
-target_link_libraries(abf_test OpenABF::OpenABF)
+# Install
+include(InstallProject)

@@ -23,6 +23,7 @@ limitations under the License.
 
 
 #include <exception>
+#include <string>
 
 namespace OpenABF
 {
@@ -328,7 +329,6 @@ public:
     template <typename T2>
     Vec& operator=(const std::initializer_list<T2>& b)
     {
-        std::size_t idx{0};
         auto it = b.begin();
         for (auto& v : val_) {
             v = *it;
@@ -468,7 +468,6 @@ std::ostream& operator<<(std::ostream& os, const OpenABF::Vec<T, Dims>& vec)
 
 #include <algorithm>
 #include <array>
-#include <iostream>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -499,6 +498,41 @@ template <typename T>
 struct DefaultFaceTraits {
 };
 }  // namespace traits
+
+/**
+ * @brief Compute the internal angles of a face
+ *
+ * Updates the current angle (DefaultEdgeTraits::alpha) with the internal angles
+ * derived from the face's vertex positions. Useful if you want to reset a face
+ * after being processed by ABF or ABFPlusPlus.
+ *
+ * @tparam FacePtr A Face-type pointer implementing DefaultEdgeTraits
+ */
+template <class FacePtr>
+void ComputeFaceAngles(FacePtr& face)
+{
+    for (auto& e : *face) {
+        auto ab = e->next->vertex->pos - e->vertex->pos;
+        auto ac = e->next->next->vertex->pos - e->vertex->pos;
+        e->alpha = interior_angle(ab, ac);
+    }
+}
+
+/**
+ * @brief Compute the internal angles for all faces in a mesh
+ *
+ * Runs ComputeFaceAngles on all faces in the mesh. Useful if you want to reset
+ * a mesh after running through ABF or ABFPlusPlus.
+ *
+ * @tparam MeshPtr A Mesh-type pointer with faces implementing DefaultEdgeTraits
+ */
+template <class MeshPtr>
+void ComputeMeshAngles(MeshPtr& mesh)
+{
+    for (auto& f : mesh->faces()) {
+        ComputeFaceAngles(f);
+    }
+}
 
 /**
  * @brief Half-edge mesh class
@@ -625,9 +659,7 @@ private:
 
 public:
     /** @brief %Vertex type */
-    class Vertex : public VertexTraits
-    {
-    public:
+    struct Vertex : public VertexTraits {
         /** @brief Default constructor */
         Vertex() = default;
 
@@ -688,9 +720,7 @@ public:
     };
 
     /** @brief %Edge type */
-    class Edge : public EdgeTraits
-    {
-    public:
+    struct Edge : public EdgeTraits {
         /** @brief Construct a new Edge pointer */
         template <typename... Args>
         static EdgePtr New(Args&&... args)
@@ -727,8 +757,6 @@ public:
             return std::make_shared<Face>(std::forward<Args>(args)...);
         }
 
-        // TODO: Improve the interface for edge iteration.
-
         /** Face edge iterator type */
         using iterator = FaceIterator<false>;
         /** Face edge const iterator type */
@@ -744,6 +772,8 @@ public:
 
         /** @brief First edge in the face */
         EdgePtr head;
+        /** @brief The next face in the mesh */
+        FacePtr next;
         /** @brief Insertion index */
         std::size_t idx;
     };
@@ -759,6 +789,28 @@ private:
 public:
     /** @brief Default constructor */
     HalfEdgeMesh() = default;
+
+    /** @brief Destructor deallocating all element pointers */
+    ~HalfEdgeMesh()
+    {
+        // Remove smart pointers from all items
+        for (auto& v : verts_) {
+            v->edge = nullptr;
+        }
+        for (auto& e : edges_) {
+            e.second->pair = nullptr;
+            e.second->next = nullptr;
+            e.second->vertex = nullptr;
+            e.second->face = nullptr;
+        }
+        for (auto& f : faces_) {
+            f->head = nullptr;
+            f->next = nullptr;
+        }
+        verts_.clear();
+        edges_.clear();
+        faces_.clear();
+    }
 
     /** @brief Construct a new HalfEdgeMesh pointer */
     template <typename... Args>
@@ -781,20 +833,22 @@ public:
         return vert->idx;
     }
 
-    /** @brief Insert a new face from an ordered list of Vertex indices */
-    template <typename... Args>
-    auto insert_face(Args... args) -> std::size_t
+    /**
+     * @brief Insert a face from an ordered list of Vertex indices
+     *
+     * Accepts an iterable supporting range-based for loops.
+     */
+    template <class Vector>
+    auto insert_face(const Vector& vector) -> std::size_t
     {
-        static_assert(sizeof...(args) >= 3, "Faces require >= 3 indices");
         // Make a new face structure
         auto face = Face::New();
 
         // Iterate over the vertex indices
-        std::size_t prevIdx;
+        std::size_t prevIdx{0};
         EdgePtr prevEdge;
-        for (const auto& idx : {args...}) {
+        for (const auto& idx : vector) {
             // Make a new edge
-            // TODO: Make sure edge doesn't already exist?
             auto newEdge = Edge::New();
             newEdge->face = face;
 
@@ -850,16 +904,25 @@ public:
         }
 
         // Compute angles for edges in face
-        for (auto& e : *face) {
-            auto ab = e->next->vertex->pos - e->vertex->pos;
-            auto ac = e->next->next->vertex->pos - e->vertex->pos;
-            e->alpha = interior_angle(ab, ac);
-        }
+        ComputeFaceAngles(face);
 
-        // Give this face an idx
+        // Give this face an idx and link the previous face with this one
         face->idx = faces_.size();
+        if (not faces_.empty()) {
+            faces_.back()->next = face;
+        }
         faces_.emplace_back(face);
         return face->idx;
+    }
+
+    /** @brief Insert a new face from an ordered list of Vertex indices */
+    template <typename... Args>
+    auto insert_face(Args... args) -> std::size_t
+    {
+        static_assert(sizeof...(args) >= 3, "Faces require >= 3 indices");
+        using Tuple = std::tuple<Args...>;
+        using ElemT = typename std::tuple_element<0, Tuple>::type;
+        return insert_face(std::initializer_list<ElemT>{args...});
     }
 
     /** @brief Get the list of vertices in insertion order */
@@ -869,7 +932,7 @@ public:
     auto edges() const -> std::vector<EdgePtr>
     {
         std::vector<EdgePtr> edges;
-        for (const auto f : faces_) {
+        for (const auto& f : faces_) {
             for (const auto& e : *f) {
                 edges.emplace_back(e);
             }
@@ -980,7 +1043,7 @@ struct ABFEdgeTraits : public DefaultEdgeTraits<T> {
     T alpha_cos{0};
 };
 
-/** @brief %ABF and ABFPlusPlus face traits */
+/** @brief ABF and ABFPlusPlus face traits */
 template <typename T>
 struct ABFFaceTraits : public DefaultFaceTraits<T> {
     /** Lagrange Multiplier: Triangle validity constraint */
@@ -990,9 +1053,48 @@ struct ABFFaceTraits : public DefaultFaceTraits<T> {
 
 namespace detail
 {
+
 /** @brief %ABF and ABF++ implementation details */
 namespace ABF
 {
+
+/** @brief A HalfEdgeMesh with the %ABF traits */
+template <typename T>
+using Mesh = HalfEdgeMesh<
+    T,
+    3,
+    traits::ABFVertexTraits<T>,
+    traits::ABFEdgeTraits<T>,
+    traits::ABFFaceTraits<T>>;
+
+/** @brief Initialize the %ABF angles and weights from the edge alpha values */
+template <typename T, class MeshPtr>
+void InitializeAnglesAndWeights(MeshPtr& m)
+{
+    // Initialize and bound angle properties
+    static constexpr auto MinAngle = PI<T> / T(180);
+    static constexpr auto MaxAngle = PI<T> - MinAngle;
+    for (auto& e : m->edges()) {
+        e->alpha = e->beta = e->phi =
+            std::min(std::max(e->alpha, MinAngle), MaxAngle);
+        e->alpha_sin = std::sin(e->alpha);
+        e->alpha_cos = std::cos(e->alpha);
+        e->weight = T(1) / (e->phi * e->phi);
+    }
+
+    // Update weights for interior vertices
+    for (auto& v : m->vertices_interior()) {
+        auto wheel = v->wheel();
+        auto angle_sum = std::accumulate(
+            wheel.begin(), wheel.end(), T(0),
+            [](auto a, auto b) { return a + b->beta; });
+        for (auto& e : wheel) {
+            e->phi *= 2 * PI<T> / angle_sum;
+            e->weight = T(1) / (e->phi * e->phi);
+        }
+    }
+}
+
 /** @brief Compute ∇CTri w.r.t LambdaTri == CTri */
 template <
     typename T,
@@ -1150,24 +1252,22 @@ auto Gradient(const MeshPtr& mesh) -> T
  *
  * @tparam T Floating-point type
  * @tparam MeshType HalfEdgeMesh type which implements the ABF traits
+ * @tparam Solver A solver implementing the
+ * [Eigen Sparse solver
+ * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
+ * and templated on Eigen::SparseMatrix<T>
  */
 template <
     typename T,
-    class MeshType = HalfEdgeMesh<
-        T,
-        3,
-        traits::ABFVertexTraits<T>,
-        traits::ABFEdgeTraits<T>,
-        traits::ABFFaceTraits<T>>,
+    class MeshType = detail::ABF::Mesh<T>,
+    class Solver =
+        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
     std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 class ABF
 {
 public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
-
-    /** @brief Set the mesh to be processed */
-    void setMesh(typename Mesh::Pointer m) { mesh_ = m; }
 
     /** @brief Set the maximum number of iterations */
     void setMaxIterations(std::size_t it) { maxIters_ = it; }
@@ -1186,70 +1286,57 @@ public:
      */
     auto iterations() const -> std::size_t { return iters_; }
 
-    /** @brief Compute the interior angles */
-    virtual void compute()
+    /** @brief Compute parameterized interior angles */
+    void compute(typename Mesh::Pointer& mesh)
+    {
+        Compute(mesh, iters_, grad_, maxIters_);
+    }
+
+    /** @brief Compute parameterized interior angles */
+    static void Compute(
+        typename Mesh::Pointer& mesh,
+        std::size_t& iters,
+        T& gradient,
+        std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
-        // TODO: Deep copy mesh
 
-        // Initialize and bound angle properties
-        static constexpr auto MinAngle = PI<T> / T(180);
-        static constexpr auto MaxAngle = PI<T> - MinAngle;
-        for (auto& e : mesh_->edges()) {
-            e->alpha = e->beta = e->phi =
-                std::min(std::max(e->alpha, MinAngle), MaxAngle);
-            e->alpha_sin = std::sin(e->alpha);
-            e->alpha_cos = std::cos(e->alpha);
-            e->weight = T(1) / (e->phi * e->phi);
-        }
-
-        // Update weights for interior vertices
-        for (auto& v : mesh_->vertices_interior()) {
-            auto wheel = v->wheel();
-            auto angle_sum = std::accumulate(
-                wheel.begin(), wheel.end(), T(0),
-                [](auto a, auto b) { return a + b->beta; });
-            for (auto& e : wheel) {
-                e->phi *= 2 * PI<T> / angle_sum;
-                e->weight = T(1) / (e->phi * e->phi);
-            }
-        }
+        // Initialize angles and weights
+        InitializeAnglesAndWeights<T>(mesh);
 
         // while ||∇F(x)|| > ε
-        grad_ = Gradient<T>(mesh_);
+        gradient = Gradient<T>(mesh);
         auto gradDelta = INF<T>;
-        iters_ = 0;
-        while (grad_ > 0.001 and gradDelta > 0.001 and iters_ < maxIters_) {
+        iters = 0;
+        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
             // Typedefs
             using Triplet = Eigen::Triplet<T>;
             using SparseMatrix = Eigen::SparseMatrix<T>;
             using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-            using Ordering = Eigen::COLAMDOrdering<int>;
-            using Solver = Eigen::SparseLU<SparseMatrix, Ordering>;
 
             // Helpful parameters
-            auto vCnt = mesh_->num_vertices();
-            auto vIntCnt = mesh_->num_vertices_interior();
-            auto edgeCnt = mesh_->num_edges();
-            auto faceCnt = mesh_->num_faces();
+            auto vCnt = mesh->num_vertices();
+            auto vIntCnt = mesh->num_vertices_interior();
+            auto edgeCnt = mesh->num_edges();
+            auto faceCnt = mesh->num_faces();
 
             //// RHS ////
             // b1 = -alpha gradient
             std::vector<Triplet> triplets;
             std::size_t idx{0};
-            for (const auto& e : mesh_->edges()) {
+            for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, 0, -AlphaGrad<T>(e));
                 ++idx;
             }
 
             // b2 = -lambda gradient
             // lambda tri
-            for (const auto& f : mesh_->faces()) {
+            for (const auto& f : mesh->faces()) {
                 triplets.emplace_back(idx, 0, -TriGrad<T>(f));
                 ++idx;
             }
             // lambda plan and lambda len
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 triplets.emplace_back(idx, 0, -PlanGrad<T>(v));
                 triplets.emplace_back(vIntCnt + idx, 0, -LenGrad<T>(v));
                 ++idx;
@@ -1261,7 +1348,7 @@ public:
             // vertex idx -> interior vertex idx permutation
             std::map<std::size_t, std::size_t> vIdx2vIntIdx;
             std::size_t newIdx{0};
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 vIdx2vIntIdx[v->idx] = newIdx++;
             }
 
@@ -1271,7 +1358,7 @@ public:
             // We only need Lambda Inverse, so this is 1 / 2*weight
             triplets.clear();
             idx = 0;
-            for (const auto& e : mesh_->edges()) {
+            for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, idx, 2 * e->weight);
                 ++idx;
             }
@@ -1290,7 +1377,7 @@ public:
                 triplets.emplace_back(col + 1, row, 1);
                 triplets.emplace_back(col + 2, row, 1);
             }
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 auto row = idx + edgeCnt;
                 for (const auto& e0 : v->wheel()) {
                     // Jacobian of the CPlan constraint
@@ -1328,7 +1415,7 @@ public:
             // alpha += delta_alpha
             // Update sin and cos
             idx = 0;
-            for (auto& e : mesh_->edges()) {
+            for (auto& e : mesh->edges()) {
                 e->alpha += delta(idx++, 0);
                 e->alpha = std::min(std::max(e->alpha, T(0)), PI<T>);
                 e->alpha_sin = std::sin(e->alpha);
@@ -1336,10 +1423,10 @@ public:
             }
 
             // lambda += delta_lambda
-            for (auto& f : mesh_->faces()) {
+            for (auto& f : mesh->faces()) {
                 f->lambda_tri += delta(idx++, 0);
             }
-            for (auto& v : mesh_->vertices_interior()) {
+            for (auto& v : mesh->vertices_interior()) {
                 auto intIdx = vIdx2vIntIdx.at(v->idx);
                 v->lambda_plan += delta(idx + intIdx, 0);
                 v->lambda_len += delta(idx + vIntCnt + intIdx, 0);
@@ -1347,16 +1434,22 @@ public:
             }
 
             // Recalculate gradient for next iteration
-            auto newGrad = detail::ABF::Gradient<T>(mesh_);
-            gradDelta = std::abs(newGrad - grad_);
-            grad_ = newGrad;
-            iters_++;
+            auto newGrad = detail::ABF::Gradient<T>(mesh);
+            gradDelta = std::abs(newGrad - gradient);
+            gradient = newGrad;
+            iters++;
         }
     }
 
+    /** @brief Compute parameterized interior angles */
+    static void Compute(typename Mesh::Pointer& mesh)
+    {
+        std::size_t iters{0};
+        T grad{0};
+        Compute(mesh, iters, grad);
+    }
+
 protected:
-    /** Mesh */
-    typename Mesh::Pointer mesh_;
     /** Gradient */
     T grad_{0};
     /** Number of executed iterations */
@@ -1403,24 +1496,22 @@ namespace OpenABF
  *
  * @tparam T Floating-point type
  * @tparam MeshType HalfEdgeMesh type which implements the ABF traits
+ * @tparam Solver A solver implementing the
+ * [Eigen Sparse solver
+ * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
+ * and templated on Eigen::SparseMatrix<T>
  */
 template <
     typename T,
-    class MeshType = HalfEdgeMesh<
-        T,
-        3,
-        traits::ABFVertexTraits<T>,
-        traits::ABFEdgeTraits<T>,
-        traits::ABFFaceTraits<T>>,
+    class MeshType = detail::ABF::Mesh<T>,
+    class Solver =
+        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
     std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 class ABFPlusPlus
 {
 public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
-
-    /** @brief Set the mesh to be processed */
-    void setMesh(typename Mesh::Pointer m) { mesh_ = m; }
 
     /** @brief Set the maximum number of iterations */
     void setMaxIterations(std::size_t it) { maxIters_ = it; }
@@ -1439,57 +1530,43 @@ public:
      */
     auto iterations() const -> std::size_t { return iters_; }
 
-    /** @brief Compute the interior angles */
-    void compute()
+    /** @brief Compute parameterized interior angles */
+    void compute(typename Mesh::Pointer& mesh)
+    {
+        Compute(mesh, iters_, grad_, maxIters_);
+    }
+
+    /** @brief Compute parameterized interior angles */
+    static void Compute(
+        typename Mesh::Pointer& mesh,
+        std::size_t& iters,
+        T& gradient,
+        std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
-        // TODO: Deep copy mesh
 
-        // Initialize and bound angle properties
-        static constexpr auto MinAngle = PI<T> / T(180);
-        static constexpr auto MaxAngle = PI<T> - MinAngle;
-        for (auto& e : mesh_->edges()) {
-            e->alpha = e->beta = e->phi =
-                std::min(std::max(e->alpha, MinAngle), MaxAngle);
-            e->alpha_sin = std::sin(e->alpha);
-            e->alpha_cos = std::cos(e->alpha);
-            e->weight = T(1) / (e->phi * e->phi);
-        }
-
-        // Update weights for interior vertices
-        for (auto& v : mesh_->vertices_interior()) {
-            auto wheel = v->wheel();
-            auto angle_sum = std::accumulate(
-                wheel.begin(), wheel.end(), T(0),
-                [](auto a, auto b) { return a + b->beta; });
-            for (auto& e : wheel) {
-                e->phi *= 2 * PI<T> / angle_sum;
-                e->weight = T(1) / (e->phi * e->phi);
-            }
-        }
+        // Initialize angles and weights
+        InitializeAnglesAndWeights<T>(mesh);
 
         // while ||∇F(x)|| > ε
-        grad_ = Gradient<T>(mesh_);
+        gradient = Gradient<T>(mesh);
         auto gradDelta = INF<T>;
-        iters_ = 0;
-        while (grad_ > 0.001 and gradDelta > 0.001 and iters_ < maxIters_) {
+        iters = 0;
+        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
             // Typedefs
             using Triplet = Eigen::Triplet<T>;
             using SparseMatrix = Eigen::SparseMatrix<T>;
             using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-            using Ordering = Eigen::COLAMDOrdering<int>;
-            using Solver = Eigen::SparseLU<SparseMatrix, Ordering>;
 
             // Helpful parameters
-            auto vCnt = mesh_->num_vertices();
-            auto vIntCnt = mesh_->num_vertices_interior();
-            auto edgeCnt = mesh_->num_edges();
-            auto faceCnt = mesh_->num_faces();
+            auto vIntCnt = mesh->num_vertices_interior();
+            auto edgeCnt = mesh->num_edges();
+            auto faceCnt = mesh->num_faces();
 
             // b1 = -alpha gradient
             std::vector<Triplet> triplets;
             std::size_t idx{0};
-            for (const auto& e : mesh_->edges()) {
+            for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, 0, -AlphaGrad<T>(e));
                 ++idx;
             }
@@ -1501,12 +1578,12 @@ public:
             triplets.clear();
             idx = 0;
             // lambda tri
-            for (const auto& f : mesh_->faces()) {
+            for (const auto& f : mesh->faces()) {
                 triplets.emplace_back(idx, 0, -TriGrad<T>(f));
                 idx++;
             }
             // lambda plan and lambda len
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 triplets.emplace_back(idx, 0, -PlanGrad<T>(v));
                 triplets.emplace_back(vIntCnt + idx, 0, -LenGrad<T>(v));
                 idx++;
@@ -1518,7 +1595,7 @@ public:
             // vertex idx -> interior vertex idx permutation
             std::map<std::size_t, std::size_t> vIdx2vIntIdx;
             std::size_t newIdx{0};
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 vIdx2vIntIdx[v->idx] = newIdx++;
             }
 
@@ -1531,7 +1608,7 @@ public:
                 triplets.emplace_back(idx, 3 * idx + 1, 1);
                 triplets.emplace_back(idx, 3 * idx + 2, 1);
             }
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 for (const auto& e0 : v->wheel()) {
                     // Jacobian of the CPlan constraint
                     triplets.emplace_back(idx, e0->idx, 1);
@@ -1555,7 +1632,7 @@ public:
             // We only need Lambda Inverse, so this is 1 / 2*weight
             triplets.clear();
             idx = 0;
-            for (const auto& e : mesh_->edges()) {
+            for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, idx, T(1) / (2 * e->weight));
                 ++idx;
             }
@@ -1568,7 +1645,7 @@ public:
             auto JLiJt = J * LambdaInv * J.transpose();
 
             SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
-            for (std::size_t k=0; k < LambdaStarInv.outerSize(); ++k) {
+            for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
                 for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k);
                      it; ++it) {
                     it.valueRef() = 1.F / it.value();
@@ -1608,10 +1685,10 @@ public:
                 LambdaInv * (b1 - J.transpose() * deltaLambda);
 
             // lambda += delta_lambda
-            for (auto& f : mesh_->faces()) {
+            for (auto& f : mesh->faces()) {
                 f->lambda_tri += deltaLambda(f->idx, 0);
             }
-            for (auto& v : mesh_->vertices_interior()) {
+            for (auto& v : mesh->vertices_interior()) {
                 auto intIdx = vIdx2vIntIdx.at(v->idx);
                 v->lambda_plan += deltaLambda(faceCnt + intIdx, 0);
                 v->lambda_len += deltaLambda(faceCnt + vIntCnt + intIdx, 0);
@@ -1620,7 +1697,7 @@ public:
             // alpha += delta_alpha
             // Update sin and cos
             idx = 0;
-            for (auto& e : mesh_->edges()) {
+            for (auto& e : mesh->edges()) {
                 e->alpha += deltaAlpha(idx++, 0);
                 e->alpha = std::min(std::max(e->alpha, T(0)), PI<T>);
                 e->alpha_sin = std::sin(e->alpha);
@@ -1628,15 +1705,22 @@ public:
             }
 
             // Recalculate gradient for next iteration
-            auto newGrad = Gradient<T>(mesh_);
-            gradDelta = std::abs(newGrad - grad_);
-            grad_ = newGrad;
-            iters_++;
+            auto newGrad = Gradient<T>(mesh);
+            gradDelta = std::abs(newGrad - gradient);
+            gradient = newGrad;
+            iters++;
         }
     }
+
+    /** @brief Compute parameterized interior angles */
+    static void Compute(typename Mesh::Pointer& mesh)
+    {
+        std::size_t iters{0};
+        T grad{0};
+        Compute(mesh, iters, grad);
+    }
+
 private:
-    /** Mesh */
-    typename Mesh::Pointer mesh_;
     /** Gradient */
     T grad_{0};
     /** Number of executed iterations */
@@ -1676,17 +1760,18 @@ namespace OpenABF
  * automatic texture atlas generation" by Lévy _et al._ (2002)
  * \cite levy2002lscm.
  *
- * @tparam T
- * @tparam MeshType
+ * @tparam T Floating-point type
+ * @tparam MeshType HalfEdgeMesh type which implements the default mesh traits
+ * @tparam Solver A solver implementing the
+ * [Eigen Sparse solver
+ * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
+ * and templated on Eigen::SparseMatrix<T>
  */
 template <
     typename T,
-    class MeshType = HalfEdgeMesh<
-        T,
-        3,
-        traits::DefaultVertexTraits<T>,
-        traits::DefaultEdgeTraits<T>,
-        traits::DefaultFaceTraits<T>>,
+    class MeshType = HalfEdgeMesh<T>,
+    class Solver =
+        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
     std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 class AngleBasedLSCM
 {
@@ -1694,22 +1779,19 @@ public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
 
-    /** @brief Set the mesh to be processed */
-    void setMesh(const typename Mesh::Pointer& m) { mesh_ = m; }
+    /** @brief Compute the parameterized mesh */
+    void compute(typename Mesh::Pointer& mesh) const { Compute(mesh); }
 
     /** @brief Compute the parameterized mesh */
-    void compute()
+    static void Compute(typename Mesh::Pointer& mesh)
     {
         using Triplet = Eigen::Triplet<T>;
         using SparseMatrix = Eigen::SparseMatrix<T>;
         using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-        using Ordering = Eigen::COLAMDOrdering<int>;
-        using Solver = Eigen::SparseLU<SparseMatrix, Ordering>;
 
         // Pinned vertex selection
         // Get the end points of a boundary edge
-        // TODO: Initial pin selection could be better
-        auto p0 = mesh_->vertices_boundary()[0];
+        auto p0 = mesh->vertices_boundary()[0];
         auto e = p0->edge;
         do {
             if (not e->pair) {
@@ -1717,19 +1799,20 @@ public:
             }
             e = e->pair->next;
         } while (e != p0->edge);
-        if (e == p0->edge) {
+        if (e == p0->edge and e->pair) {
             throw std::invalid_argument("Vertex not on boundary");
         }
         auto p1 = e->next->vertex;
 
         // Map selected edge to closest XY axis
-        // TODO: Project this triangle's plane to UV?
+        // Use sign to select direction
         auto pinVec = p1->pos - p0->pos;
         auto dist = norm(pinVec);
         pinVec /= dist;
         p0->pos = {T(0), T(0), T(0)};
         auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
         auto maxAxis = std::distance(pinVec.begin(), maxElem);
+        dist = std::copysign(dist, *maxElem);
         if (maxAxis == 0) {
             p1->pos = {dist, T(0), T(0)};
         } else {
@@ -1737,15 +1820,15 @@ public:
         }
 
         // For convenience
-        auto numFaces = mesh_->num_faces();
-        auto numVerts = mesh_->num_vertices();
+        auto numFaces = mesh->num_faces();
+        auto numVerts = mesh->num_vertices();
         auto numFixed = 2;
         auto numFree = numVerts - numFixed;
 
         // Permutation for free vertices
         // This helps us find a vert's row in the solution matrix
         std::map<std::size_t, std::size_t> freeIdxTable;
-        for (const auto& v : mesh_->vertices()) {
+        for (const auto& v : mesh->vertices()) {
             if (v == p0 or v == p1) {
                 continue;
             }
@@ -1767,7 +1850,7 @@ public:
         // Are only solving for free vertices, so push pins in special matrix
         std::vector<Triplet> tripletsA;
         tripletsB.clear();
-        for (const auto& f : mesh_->faces()) {
+        for (const auto& f : mesh->faces()) {
             auto e0 = f->head;
             auto e1 = e0->next;
             auto e2 = e1->next;
@@ -1804,9 +1887,8 @@ public:
             auto cosine = std::cos(e0->alpha) * ratio;
             auto sine = sin0 * ratio;
 
-            auto row = f->idx;
             // If pin0 or pin1, put in fixedB matrix, else put in A
-            // TODO: This can be improved
+            auto row = 2 * f->idx;
             if (e0->vertex == p0) {
                 tripletsB.emplace_back(row, 0, cosine - T(1));
                 tripletsB.emplace_back(row, 1, -sine);
@@ -1883,7 +1965,7 @@ public:
 
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices
-        for (const auto& v : mesh_->vertices()) {
+        for (const auto& v : mesh->vertices()) {
             if (v == p0 or v == p1) {
                 continue;
             }
@@ -1893,10 +1975,6 @@ public:
             v->pos[2] = T(0);
         }
     }
-
-private:
-    /** Mesh */
-    typename Mesh::Pointer mesh_;
 };
 
 }  // namespace OpenABF
