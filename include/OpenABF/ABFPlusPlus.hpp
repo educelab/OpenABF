@@ -30,24 +30,22 @@ namespace OpenABF
  *
  * @tparam T Floating-point type
  * @tparam MeshType HalfEdgeMesh type which implements the ABF traits
+ * @tparam Solver A solver implementing the
+ * [Eigen Sparse solver
+ * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
+ * and templated on Eigen::SparseMatrix<T>
  */
 template <
     typename T,
-    class MeshType = HalfEdgeMesh<
-        T,
-        3,
-        traits::ABFVertexTraits<T>,
-        traits::ABFEdgeTraits<T>,
-        traits::ABFFaceTraits<T>>,
+    class MeshType = detail::ABF::Mesh<T>,
+    class Solver =
+        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
     std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 class ABFPlusPlus
 {
 public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
-
-    /** @brief Set the mesh to be processed */
-    void setMesh(typename Mesh::Pointer m) { mesh_ = m; }
 
     /** @brief Set the maximum number of iterations */
     void setMaxIterations(std::size_t it) { maxIters_ = it; }
@@ -66,57 +64,43 @@ public:
      */
     auto iterations() const -> std::size_t { return iters_; }
 
-    /** @brief Compute the interior angles */
-    void compute()
+    /** @brief Compute parameterized interior angles */
+    void compute(typename Mesh::Pointer& mesh)
+    {
+        Compute(mesh, iters_, grad_, maxIters_);
+    }
+
+    /** @brief Compute parameterized interior angles */
+    static void Compute(
+        typename Mesh::Pointer& mesh,
+        std::size_t& iters,
+        T& gradient,
+        std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
-        // TODO: Deep copy mesh
 
-        // Initialize and bound angle properties
-        static constexpr auto MinAngle = PI<T> / T(180);
-        static constexpr auto MaxAngle = PI<T> - MinAngle;
-        for (auto& e : mesh_->edges()) {
-            e->alpha = e->beta = e->phi =
-                std::min(std::max(e->alpha, MinAngle), MaxAngle);
-            e->alpha_sin = std::sin(e->alpha);
-            e->alpha_cos = std::cos(e->alpha);
-            e->weight = T(1) / (e->phi * e->phi);
-        }
-
-        // Update weights for interior vertices
-        for (auto& v : mesh_->vertices_interior()) {
-            auto wheel = v->wheel();
-            auto angle_sum = std::accumulate(
-                wheel.begin(), wheel.end(), T(0),
-                [](auto a, auto b) { return a + b->beta; });
-            for (auto& e : wheel) {
-                e->phi *= 2 * PI<T> / angle_sum;
-                e->weight = T(1) / (e->phi * e->phi);
-            }
-        }
+        // Initialize angles and weights
+        InitializeAnglesAndWeights<T>(mesh);
 
         // while ||∇F(x)|| > ε
-        grad_ = Gradient<T>(mesh_);
+        gradient = Gradient<T>(mesh);
         auto gradDelta = INF<T>;
-        iters_ = 0;
-        while (grad_ > 0.001 and gradDelta > 0.001 and iters_ < maxIters_) {
+        iters = 0;
+        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
             // Typedefs
             using Triplet = Eigen::Triplet<T>;
             using SparseMatrix = Eigen::SparseMatrix<T>;
             using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-            using Ordering = Eigen::COLAMDOrdering<int>;
-            using Solver = Eigen::SparseLU<SparseMatrix, Ordering>;
 
             // Helpful parameters
-            auto vCnt = mesh_->num_vertices();
-            auto vIntCnt = mesh_->num_vertices_interior();
-            auto edgeCnt = mesh_->num_edges();
-            auto faceCnt = mesh_->num_faces();
+            auto vIntCnt = mesh->num_vertices_interior();
+            auto edgeCnt = mesh->num_edges();
+            auto faceCnt = mesh->num_faces();
 
             // b1 = -alpha gradient
             std::vector<Triplet> triplets;
             std::size_t idx{0};
-            for (const auto& e : mesh_->edges()) {
+            for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, 0, -AlphaGrad<T>(e));
                 ++idx;
             }
@@ -128,12 +112,12 @@ public:
             triplets.clear();
             idx = 0;
             // lambda tri
-            for (const auto& f : mesh_->faces()) {
+            for (const auto& f : mesh->faces()) {
                 triplets.emplace_back(idx, 0, -TriGrad<T>(f));
                 idx++;
             }
             // lambda plan and lambda len
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 triplets.emplace_back(idx, 0, -PlanGrad<T>(v));
                 triplets.emplace_back(vIntCnt + idx, 0, -LenGrad<T>(v));
                 idx++;
@@ -145,7 +129,7 @@ public:
             // vertex idx -> interior vertex idx permutation
             std::map<std::size_t, std::size_t> vIdx2vIntIdx;
             std::size_t newIdx{0};
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 vIdx2vIntIdx[v->idx] = newIdx++;
             }
 
@@ -158,7 +142,7 @@ public:
                 triplets.emplace_back(idx, 3 * idx + 1, 1);
                 triplets.emplace_back(idx, 3 * idx + 2, 1);
             }
-            for (const auto& v : mesh_->vertices_interior()) {
+            for (const auto& v : mesh->vertices_interior()) {
                 for (const auto& e0 : v->wheel()) {
                     // Jacobian of the CPlan constraint
                     triplets.emplace_back(idx, e0->idx, 1);
@@ -182,7 +166,7 @@ public:
             // We only need Lambda Inverse, so this is 1 / 2*weight
             triplets.clear();
             idx = 0;
-            for (const auto& e : mesh_->edges()) {
+            for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, idx, T(1) / (2 * e->weight));
                 ++idx;
             }
@@ -195,7 +179,7 @@ public:
             auto JLiJt = J * LambdaInv * J.transpose();
 
             SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
-            for (std::size_t k=0; k < LambdaStarInv.outerSize(); ++k) {
+            for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
                 for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k);
                      it; ++it) {
                     it.valueRef() = 1.F / it.value();
@@ -235,10 +219,10 @@ public:
                 LambdaInv * (b1 - J.transpose() * deltaLambda);
 
             // lambda += delta_lambda
-            for (auto& f : mesh_->faces()) {
+            for (auto& f : mesh->faces()) {
                 f->lambda_tri += deltaLambda(f->idx, 0);
             }
-            for (auto& v : mesh_->vertices_interior()) {
+            for (auto& v : mesh->vertices_interior()) {
                 auto intIdx = vIdx2vIntIdx.at(v->idx);
                 v->lambda_plan += deltaLambda(faceCnt + intIdx, 0);
                 v->lambda_len += deltaLambda(faceCnt + vIntCnt + intIdx, 0);
@@ -247,7 +231,7 @@ public:
             // alpha += delta_alpha
             // Update sin and cos
             idx = 0;
-            for (auto& e : mesh_->edges()) {
+            for (auto& e : mesh->edges()) {
                 e->alpha += deltaAlpha(idx++, 0);
                 e->alpha = std::min(std::max(e->alpha, T(0)), PI<T>);
                 e->alpha_sin = std::sin(e->alpha);
@@ -255,15 +239,22 @@ public:
             }
 
             // Recalculate gradient for next iteration
-            auto newGrad = Gradient<T>(mesh_);
-            gradDelta = std::abs(newGrad - grad_);
-            grad_ = newGrad;
-            iters_++;
+            auto newGrad = Gradient<T>(mesh);
+            gradDelta = std::abs(newGrad - gradient);
+            gradient = newGrad;
+            iters++;
         }
     }
+
+    /** @brief Compute parameterized interior angles */
+    static void Compute(typename Mesh::Pointer& mesh)
+    {
+        std::size_t iters{0};
+        T grad{0};
+        Compute(mesh, iters, grad);
+    }
+
 private:
-    /** Mesh */
-    typename Mesh::Pointer mesh_;
     /** Gradient */
     T grad_{0};
     /** Number of executed iterations */

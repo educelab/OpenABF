@@ -11,7 +11,7 @@ int main()
     mesh->insert_vertex(0, 0, 0);
     mesh->insert_vertex(2, 0, 0);
     mesh->insert_vertex(1, std::sqrt(3), 0);
-    mesh->insert_vertex(1, std::sqrt(3) / 3, 1);
+    mesh->insert_vertex(1, std::sqrt(3) / 3, std::sqrt(6) * 2 / 3);
 
     mesh->insert_face(0, 3, 1);
     mesh->insert_face(0, 2, 3);
@@ -22,16 +22,14 @@ int main()
         orig.push_back(v->pos);
     }
 
-    ABF abf;
-    abf.setMesh(mesh);
-    abf.compute();
+    std::size_t iters{0};
+    float grad{OpenABF::INF<float>};
+    ABF::Compute(mesh, iters, grad);
 
-    std::cout << "ABF Final gradient: " << abf.gradient() << std::endl;
-    std::cout << "ABF Iterations: " << abf.iterations() << std::endl;
+    std::cout << "ABF++ Final gradient: " << grad << std::endl;
+    std::cout << "ABF++ Iterations: " << iters << std::endl;
 
-    LSCM lscm;
-    lscm.setMesh(mesh);
-    lscm.compute();
+    LSCM::Compute(mesh);
 
     std::vector<OpenABF::Vec3f> uvs;
     for (const auto& v : mesh->vertices()) {

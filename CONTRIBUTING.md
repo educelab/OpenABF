@@ -8,7 +8,7 @@ feature requests, and code contributions.
 If you think you have found a bug or if you would like to request a new 
 feature, please check our 
 [issue tracker](https://gitlab.com/educelab/OpenABF/-/issues) to make sure
-an issue has not already been opened on your topic.
+that an issue has not already been opened on your topic.
 
 ## Workflow
 1) Fork this repository
@@ -49,7 +49,7 @@ always process an entire branch's diff by comparing against the default
 branch:
 
 ```shell
-git clang-format dev
+git clang-format develop
 ```
 
 Unfortunately, `clang-format` does not handle all style issues. For a general 
@@ -58,7 +58,7 @@ overview of the EduceLab C++ style, please refer to our
 
 ## License
 Any changes intentionally contributed to this repository are assumed to
-be licensed under the terms outlined in `LICENSE`.
+be licensed under the terms outlined in [LICENSE](LICENSE).
 
 ## Attribution
 This project actively maintains a citable record on Zenodo. 

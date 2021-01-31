@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <iostream>
 #include <iterator>
 #include <map>
 #include <memory>
@@ -32,6 +31,41 @@ template <typename T>
 struct DefaultFaceTraits {
 };
 }  // namespace traits
+
+/**
+ * @brief Compute the internal angles of a face
+ *
+ * Updates the current angle (DefaultEdgeTraits::alpha) with the internal angles
+ * derived from the face's vertex positions. Useful if you want to reset a face
+ * after being processed by ABF or ABFPlusPlus.
+ *
+ * @tparam FacePtr A Face-type pointer implementing DefaultEdgeTraits
+ */
+template <class FacePtr>
+void ComputeFaceAngles(FacePtr& face)
+{
+    for (auto& e : *face) {
+        auto ab = e->next->vertex->pos - e->vertex->pos;
+        auto ac = e->next->next->vertex->pos - e->vertex->pos;
+        e->alpha = interior_angle(ab, ac);
+    }
+}
+
+/**
+ * @brief Compute the internal angles for all faces in a mesh
+ *
+ * Runs ComputeFaceAngles on all faces in the mesh. Useful if you want to reset
+ * a mesh after running through ABF or ABFPlusPlus.
+ *
+ * @tparam MeshPtr A Mesh-type pointer with faces implementing DefaultEdgeTraits
+ */
+template <class MeshPtr>
+void ComputeMeshAngles(MeshPtr& mesh)
+{
+    for (auto& f : mesh->faces()) {
+        ComputeFaceAngles(f);
+    }
+}
 
 /**
  * @brief Half-edge mesh class
@@ -158,9 +192,7 @@ private:
 
 public:
     /** @brief %Vertex type */
-    class Vertex : public VertexTraits
-    {
-    public:
+    struct Vertex : public VertexTraits {
         /** @brief Default constructor */
         Vertex() = default;
 
@@ -221,9 +253,7 @@ public:
     };
 
     /** @brief %Edge type */
-    class Edge : public EdgeTraits
-    {
-    public:
+    struct Edge : public EdgeTraits {
         /** @brief Construct a new Edge pointer */
         template <typename... Args>
         static EdgePtr New(Args&&... args)
@@ -260,8 +290,6 @@ public:
             return std::make_shared<Face>(std::forward<Args>(args)...);
         }
 
-        // TODO: Improve the interface for edge iteration.
-
         /** Face edge iterator type */
         using iterator = FaceIterator<false>;
         /** Face edge const iterator type */
@@ -277,6 +305,8 @@ public:
 
         /** @brief First edge in the face */
         EdgePtr head;
+        /** @brief The next face in the mesh */
+        FacePtr next;
         /** @brief Insertion index */
         std::size_t idx;
     };
@@ -292,6 +322,28 @@ private:
 public:
     /** @brief Default constructor */
     HalfEdgeMesh() = default;
+
+    /** @brief Destructor deallocating all element pointers */
+    ~HalfEdgeMesh()
+    {
+        // Remove smart pointers from all items
+        for (auto& v : verts_) {
+            v->edge = nullptr;
+        }
+        for (auto& e : edges_) {
+            e.second->pair = nullptr;
+            e.second->next = nullptr;
+            e.second->vertex = nullptr;
+            e.second->face = nullptr;
+        }
+        for (auto& f : faces_) {
+            f->head = nullptr;
+            f->next = nullptr;
+        }
+        verts_.clear();
+        edges_.clear();
+        faces_.clear();
+    }
 
     /** @brief Construct a new HalfEdgeMesh pointer */
     template <typename... Args>
@@ -314,20 +366,22 @@ public:
         return vert->idx;
     }
 
-    /** @brief Insert a new face from an ordered list of Vertex indices */
-    template <typename... Args>
-    auto insert_face(Args... args) -> std::size_t
+    /**
+     * @brief Insert a face from an ordered list of Vertex indices
+     *
+     * Accepts an iterable supporting range-based for loops.
+     */
+    template <class Vector>
+    auto insert_face(const Vector& vector) -> std::size_t
     {
-        static_assert(sizeof...(args) >= 3, "Faces require >= 3 indices");
         // Make a new face structure
         auto face = Face::New();
 
         // Iterate over the vertex indices
-        std::size_t prevIdx;
+        std::size_t prevIdx{0};
         EdgePtr prevEdge;
-        for (const auto& idx : {args...}) {
+        for (const auto& idx : vector) {
             // Make a new edge
-            // TODO: Make sure edge doesn't already exist?
             auto newEdge = Edge::New();
             newEdge->face = face;
 
@@ -383,16 +437,25 @@ public:
         }
 
         // Compute angles for edges in face
-        for (auto& e : *face) {
-            auto ab = e->next->vertex->pos - e->vertex->pos;
-            auto ac = e->next->next->vertex->pos - e->vertex->pos;
-            e->alpha = interior_angle(ab, ac);
-        }
+        ComputeFaceAngles(face);
 
-        // Give this face an idx
+        // Give this face an idx and link the previous face with this one
         face->idx = faces_.size();
+        if (not faces_.empty()) {
+            faces_.back()->next = face;
+        }
         faces_.emplace_back(face);
         return face->idx;
+    }
+
+    /** @brief Insert a new face from an ordered list of Vertex indices */
+    template <typename... Args>
+    auto insert_face(Args... args) -> std::size_t
+    {
+        static_assert(sizeof...(args) >= 3, "Faces require >= 3 indices");
+        using Tuple = std::tuple<Args...>;
+        using ElemT = typename std::tuple_element<0, Tuple>::type;
+        return insert_face(std::initializer_list<ElemT>{args...});
     }
 
     /** @brief Get the list of vertices in insertion order */
@@ -402,7 +465,7 @@ public:
     auto edges() const -> std::vector<EdgePtr>
     {
         std::vector<EdgePtr> edges;
-        for (const auto f : faces_) {
+        for (const auto& f : faces_) {
             for (const auto& e : *f) {
                 edges.emplace_back(e);
             }

@@ -25,17 +25,18 @@ namespace OpenABF
  * automatic texture atlas generation" by Lévy _et al._ (2002)
  * \cite levy2002lscm.
  *
- * @tparam T
- * @tparam MeshType
+ * @tparam T Floating-point type
+ * @tparam MeshType HalfEdgeMesh type which implements the default mesh traits
+ * @tparam Solver A solver implementing the
+ * [Eigen Sparse solver
+ * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
+ * and templated on Eigen::SparseMatrix<T>
  */
 template <
     typename T,
-    class MeshType = HalfEdgeMesh<
-        T,
-        3,
-        traits::DefaultVertexTraits<T>,
-        traits::DefaultEdgeTraits<T>,
-        traits::DefaultFaceTraits<T>>,
+    class MeshType = HalfEdgeMesh<T>,
+    class Solver =
+        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
     std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
 class AngleBasedLSCM
 {
@@ -43,22 +44,19 @@ public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
 
-    /** @brief Set the mesh to be processed */
-    void setMesh(const typename Mesh::Pointer& m) { mesh_ = m; }
+    /** @brief Compute the parameterized mesh */
+    void compute(typename Mesh::Pointer& mesh) const { Compute(mesh); }
 
     /** @brief Compute the parameterized mesh */
-    void compute()
+    static void Compute(typename Mesh::Pointer& mesh)
     {
         using Triplet = Eigen::Triplet<T>;
         using SparseMatrix = Eigen::SparseMatrix<T>;
         using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-        using Ordering = Eigen::COLAMDOrdering<int>;
-        using Solver = Eigen::SparseLU<SparseMatrix, Ordering>;
 
         // Pinned vertex selection
         // Get the end points of a boundary edge
-        // TODO: Initial pin selection could be better
-        auto p0 = mesh_->vertices_boundary()[0];
+        auto p0 = mesh->vertices_boundary()[0];
         auto e = p0->edge;
         do {
             if (not e->pair) {
@@ -66,19 +64,20 @@ public:
             }
             e = e->pair->next;
         } while (e != p0->edge);
-        if (e == p0->edge) {
+        if (e == p0->edge and e->pair) {
             throw std::invalid_argument("Vertex not on boundary");
         }
         auto p1 = e->next->vertex;
 
         // Map selected edge to closest XY axis
-        // TODO: Project this triangle's plane to UV?
+        // Use sign to select direction
         auto pinVec = p1->pos - p0->pos;
         auto dist = norm(pinVec);
         pinVec /= dist;
         p0->pos = {T(0), T(0), T(0)};
         auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
         auto maxAxis = std::distance(pinVec.begin(), maxElem);
+        dist = std::copysign(dist, *maxElem);
         if (maxAxis == 0) {
             p1->pos = {dist, T(0), T(0)};
         } else {
@@ -86,15 +85,15 @@ public:
         }
 
         // For convenience
-        auto numFaces = mesh_->num_faces();
-        auto numVerts = mesh_->num_vertices();
+        auto numFaces = mesh->num_faces();
+        auto numVerts = mesh->num_vertices();
         auto numFixed = 2;
         auto numFree = numVerts - numFixed;
 
         // Permutation for free vertices
         // This helps us find a vert's row in the solution matrix
         std::map<std::size_t, std::size_t> freeIdxTable;
-        for (const auto& v : mesh_->vertices()) {
+        for (const auto& v : mesh->vertices()) {
             if (v == p0 or v == p1) {
                 continue;
             }
@@ -116,7 +115,7 @@ public:
         // Are only solving for free vertices, so push pins in special matrix
         std::vector<Triplet> tripletsA;
         tripletsB.clear();
-        for (const auto& f : mesh_->faces()) {
+        for (const auto& f : mesh->faces()) {
             auto e0 = f->head;
             auto e1 = e0->next;
             auto e2 = e1->next;
@@ -153,9 +152,8 @@ public:
             auto cosine = std::cos(e0->alpha) * ratio;
             auto sine = sin0 * ratio;
 
-            auto row = f->idx;
             // If pin0 or pin1, put in fixedB matrix, else put in A
-            // TODO: This can be improved
+            auto row = 2 * f->idx;
             if (e0->vertex == p0) {
                 tripletsB.emplace_back(row, 0, cosine - T(1));
                 tripletsB.emplace_back(row, 1, -sine);
@@ -232,7 +230,7 @@ public:
 
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices
-        for (const auto& v : mesh_->vertices()) {
+        for (const auto& v : mesh->vertices()) {
             if (v == p0 or v == p1) {
                 continue;
             }
@@ -242,10 +240,6 @@ public:
             v->pos[2] = T(0);
         }
     }
-
-private:
-    /** Mesh */
-    typename Mesh::Pointer mesh_;
 };
 
 }  // namespace OpenABF
