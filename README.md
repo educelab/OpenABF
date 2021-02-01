@@ -4,6 +4,8 @@
 The templated interface is designed for simple out-of-the-box use, and 
 integration with existing geometric processing pipelines is quick and easy.
 
+[[_TOC_]]
+
 ## Dependencies
 - C++14 compiler
 - [Eigen 3.3+](http://eigen.tuxfamily.org/)
@@ -47,11 +49,15 @@ for (const auto& v : mesh->vertices()) {
     std::cout << v->idx << ": " << v->pos << std::endl;
 }
 ```
+
 **Note:** The `HalfEdgeMesh` class 
 [currently assumes](https://gitlab.com/educelab/OpenABF/-/issues/4) that the 
 surface has a boundary, is manifold, and that the winding order of all faces is 
 the same. Care should be taken that this assumption is not violated when 
 constructing your mesh.
+
+## Documentation
+Visit our full library documentation [here](https://educelab.gitlab.io/OpenABF/docs/).
 
 ## Installation
 ### CMake
@@ -124,21 +130,11 @@ path. As OpenABF depends upon the Eigen library, you will also need to add the
 Eigen headers to your include path:
 
 ```shell
-g++ -I /path/to/eigen/ -DNDEBUG -std=c++14 -O3 main.cpp -o main
+g++ -I /path/to/eigen/ -std=c++14 -DNDEBUG -O3 main.cpp -o main
 ```
 
-**Note:** For best performance, compile your application with the `NDEBUG` 
-preprocessor definition.
-
-## License
-OpenABF is licensed under [the Apache 2.0 license](LICENSE). This allows you to 
-use OpenABF freely in open source or proprietary software. However, any software 
-released in source or binary form must include and preserve a readable copy of 
-the attributions provided in [NOTICE](NOTICE).
-
-The OpenABF logo and banner graphic are by Seth Parker (EduceLab, University 
-of Kentucky) and are licensed under 
-[CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/).
+**Note:** For best performance, compile your application with the `-DNDEBUG -03`
+preprocessor definitions.
 
 ## Contributors
 OpenABF is glad to welcome contributors of all skill sets. If you have found a 
@@ -155,6 +151,16 @@ command from the root of the source directory:
 ```shell
 python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .
 ```
+
+## License
+OpenABF is licensed under [the Apache 2.0 license](LICENSE). This allows you to
+use OpenABF freely in open source or proprietary software. However, any software
+released in source or binary form must include and preserve a readable copy of
+the attributions provided in [NOTICE](NOTICE).
+
+The OpenABF logo and banner graphic are by Seth Parker (EduceLab, University
+of Kentucky) and are licensed under
+[CC BY-NC-SA 4.0](http://creativecommons.org/licenses/by-nc-sa/4.0/).
 
 ## References
 This project implements data structures and algorithms derived from the 
