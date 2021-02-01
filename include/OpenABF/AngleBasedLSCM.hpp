@@ -15,11 +15,14 @@ namespace OpenABF
  * @brief Compute parameterized mesh using Angle-based LSCM
  *
  * Computes a least-squares conformal parameterization of a mesh. Unlike the
- * original LSCM algorithm, this class ignores the vertex positions and instead
- * uses the associated edge angles (MeshType::EdgeTraits::alpha) to compute the
- * initial vertex positions. The parameterization can be improved by processing
- * the mesh with a parameterized angle optimizer, such as ABFPlusPlus, before
- * processing with this class.
+ * original LSCM algorithm, this class ignores the 3D vertex positions and
+ * instead uses the angle associated with the mesh's edge trait
+ * (MeshType::EdgeTraits::alpha) to calculate the initial per-triangle edge
+ * lengths. Without previously modifying the angles of the provided mesh, this
+ * class produces the same result as a vertex-based LSCM implementation.
+ * However, by first processing the mesh with a parameterized angle optimizer,
+ * such as ABFPlusPlus, the parameterization can be improved, sometimes
+ * significantly.
  *
  * Implements the angle-based variant of "Least squares conformal maps for
  * automatic texture atlas generation" by Lévy _et al._ (2002)
@@ -128,8 +131,7 @@ public:
             auto sinMaxElem = std::max_element(sins.begin(), sins.end());
             auto sinMaxIdx = std::distance(sins.begin(), sinMaxElem);
 
-            // Rotate the edges of the triangle so the final one has max sin
-            // Blender's implementation notes that this is stable ordering
+            // Rotate the edge order of the face so last angle is largest
             if (sinMaxIdx == 0) {
                 auto temp = e0;
                 e0 = e1;

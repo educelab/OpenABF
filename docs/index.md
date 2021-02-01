@@ -1,6 +1,7 @@
-**OpenABF** is a single-header C++ library of angle-based flattening algorithms.
+**%OpenABF** is a single-header C++ library of angle-based flattening algorithms.
 The templated interface is designed for simple out-of-the-box use, and 
 integration with existing geometric processing pipelines is quick and easy.
+View the latest source code on [GitLab](https://gitlab.com/educelab/OpenABF).
 
 ## Dependencies
 - C++14 compiler
@@ -122,8 +123,8 @@ path. As OpenABF depends upon the Eigen library, you will also need to add the
 Eigen headers to your include path:
 
 ```{.sh}
-g++ -I /path/to/eigen/ -DNDEBUG -std=c++14 -O3 main.cpp -o main
+g++ -I /path/to/eigen/ -std=c++14 -DNDEBUG -O3 main.cpp -o main
 ```
 
-**Note:** For best performance, compile your application with the `NDEBUG` 
-preprocessor definition.
+**Note:** For best performance, compile your application with the `-DNDEBUG -03` 
+preprocessor definitions.

@@ -43,3 +43,25 @@ examples:debian:10:
     EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_EXAMPLES=ON"
   tags:
     - docker
+
+### Docs ###
+pages:
+  stage: deploy
+  image: debian:buster-backports
+  before_script:
+    - apt-get update
+    - apt-get install -y build-essential doxygen graphviz texlive ghostscript
+    - apt-get -t buster-backports install -y cmake libeigen3-dev
+  script:
+    - mkdir -p build/
+    - mkdir -p public/
+    - cmake -S . -B build/ -DOPENABF_BUILD_DOCS=ON
+    - cmake --build build/ --target docs
+    - mv build/docs/html/ public/docs/
+  artifacts:
+    paths:
+      - public
+  tags:
+    - docker
+  only:
+    - develop
