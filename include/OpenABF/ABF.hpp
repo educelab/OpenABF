@@ -280,13 +280,19 @@ public:
      */
     auto iterations() const -> std::size_t { return iters_; }
 
-    /** @brief Compute parameterized interior angles */
+    /** @copydoc ABF::Compute */
     void compute(typename Mesh::Pointer& mesh)
     {
         Compute(mesh, iters_, grad_, maxIters_);
     }
 
-    /** @brief Compute parameterized interior angles */
+    /**
+     * @brief Compute parameterized interior angles
+     *
+     * @throws SolverException If matrix cannot be decomposed or if solver fails
+     * to find a solution.
+     * @throws MeshException If mesh gradient cannot be calculated.
+     */
     static void Compute(
         typename Mesh::Pointer& mesh,
         std::size_t& iters,
@@ -300,9 +306,15 @@ public:
 
         // while ||∇F(x)|| > ε
         gradient = Gradient<T>(mesh);
+        if (std::isnan(gradient) or std::isinf(gradient)) {
+            throw MeshException("Mesh gradient cannot be computed");
+        }
         auto gradDelta = INF<T>;
         iters = 0;
         while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
+            if (std::isnan(gradient) or std::isinf(gradient)) {
+                throw MeshException("Mesh gradient cannot be computed");
+            }
             // Typedefs
             using Triplet = Eigen::Triplet<T>;
             using SparseMatrix = Eigen::SparseMatrix<T>;
@@ -435,7 +447,7 @@ public:
         }
     }
 
-    /** @brief Compute parameterized interior angles */
+    /** @copydoc ABF::Compute */
     static void Compute(typename Mesh::Pointer& mesh)
     {
         std::size_t iters{0};

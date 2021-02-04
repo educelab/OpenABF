@@ -5,6 +5,7 @@
 
 #include <Eigen/SparseLU>
 
+#include "OpenABF/Exceptions.hpp"
 #include "OpenABF/HalfEdgeMesh.hpp"
 #include "OpenABF/Math.hpp"
 
@@ -47,10 +48,16 @@ public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
 
-    /** @brief Compute the parameterized mesh */
+    /** @copydoc AngleBasedLSCM::Compute */
     void compute(typename Mesh::Pointer& mesh) const { Compute(mesh); }
 
-    /** @brief Compute the parameterized mesh */
+    /**
+     * @brief Compute the parameterized mesh
+     *
+     * @throws MeshException If pinned vertex is not on boundary.
+     * @throws SolverException If matrix cannot be decomposed or if solver fails
+     * to find a solution.
+     */
     static void Compute(typename Mesh::Pointer& mesh)
     {
         using Triplet = Eigen::Triplet<T>;
@@ -68,7 +75,7 @@ public:
             e = e->pair->next;
         } while (e != p0->edge);
         if (e == p0->edge and e->pair) {
-            throw std::invalid_argument("Vertex not on boundary");
+            throw MeshException("Pinned vertex not on boundary");
         }
         auto p1 = e->next->vertex;
 
