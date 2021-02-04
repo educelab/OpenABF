@@ -17,6 +17,7 @@ endif()
 
 ## Build the tests ##
 set(tests
+    src/TestHalfEdgeMesh.cpp
     src/TestMath.cpp
     src/TestVec.cpp
 )

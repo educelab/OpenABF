@@ -7,6 +7,7 @@
 #include <memory>
 #include <vector>
 
+#include "OpenABF/Exceptions.hpp"
 #include "OpenABF/Vector.hpp"
 
 namespace OpenABF
@@ -40,6 +41,7 @@ struct DefaultFaceTraits {
  * after being processed by ABF or ABFPlusPlus.
  *
  * @tparam FacePtr A Face-type pointer implementing DefaultEdgeTraits
+ * @throws MeshException If interior angle is NaN or Inf
  */
 template <class FacePtr>
 void ComputeFaceAngles(FacePtr& face)
@@ -48,6 +50,11 @@ void ComputeFaceAngles(FacePtr& face)
         auto ab = e->next->vertex->pos - e->vertex->pos;
         auto ac = e->next->next->vertex->pos - e->vertex->pos;
         e->alpha = interior_angle(ab, ac);
+        if (std::isnan(e->alpha) or std::isinf(e->alpha)) {
+            auto msg = "Interior angle for edge " + std::to_string(e->idx) +
+                       " is nan/inf";
+            throw MeshException(msg);
+        }
     }
 }
 
@@ -65,6 +72,32 @@ void ComputeMeshAngles(MeshPtr& mesh)
     for (auto& f : mesh->faces()) {
         ComputeFaceAngles(f);
     }
+}
+
+/** @brief Determines if mesh is open or closed */
+template <class MeshPtr>
+bool HasBoundary(const MeshPtr& mesh)
+{
+    for (const auto& v : mesh->vertices()) {
+        if (v->is_boundary()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** @brief Check if mesh is manifold */
+template <class MeshPtr>
+bool IsManifold(const MeshPtr& mesh)
+{
+    // insert_face won't allow non-manifold edge, so true by default
+    // Check vertices for manifold
+    for (const auto& v : mesh->vertices()) {
+        if (not v->is_manifold()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /**
@@ -209,14 +242,18 @@ public:
             return std::make_shared<Vertex>(std::forward<Args>(args)...);
         }
 
-        /** @brief Get the edges of a vertex's wheel */
+        /**
+         * @brief Get the edges of a vertex's wheel
+         *
+         * @throws MeshException If vertex is a boundary vertex.
+         */
         auto wheel() const -> std::vector<EdgePtr>
         {
             std::vector<EdgePtr> ret;
             auto e = edge;
             do {
                 if (not e->pair) {
-                    throw std::runtime_error(
+                    throw MeshException(
                         "Cannot enumerate wheel of boundary vertex.");
                 }
                 ret.push_back(e);
@@ -241,6 +278,23 @@ public:
         /** @brief Returns if vertex is interior to mesh */
         auto is_interior() const -> bool { return not is_boundary(); }
 
+        /** @brief Returns if vertex is unreferenced */
+        auto is_unreferenced() const -> bool { return edges.empty(); }
+
+        /** @brief Returns if vertex is manifold */
+        auto is_manifold() const -> bool
+        {
+            std::size_t boundaryCnt{0};
+            for (const auto& e : edges) {
+                if (e->is_boundary()) {
+                    if (++boundaryCnt > 2) {
+                        return false;
+                    }
+                }
+            }
+            return boundaryCnt == 0 or boundaryCnt == 2;
+        }
+
         /** Insertion index */
         std::size_t idx{0};
         /** Vertex position */
@@ -250,6 +304,8 @@ public:
          * may be many such vertices.
          */
         EdgePtr edge;
+        /** List of all edges with this vertex as an end point */
+        std::vector<EdgePtr> edges;
     };
 
     /** @brief %Edge type */
@@ -329,6 +385,7 @@ public:
         // Remove smart pointers from all items
         for (auto& v : verts_) {
             v->edge = nullptr;
+            v->edges.clear();
         }
         for (auto& e : edges_) {
             e.second->pair = nullptr;
@@ -370,6 +427,12 @@ public:
      * @brief Insert a face from an ordered list of Vertex indices
      *
      * Accepts an iterable supporting range-based for loops.
+     *
+     * @throws std::out_of_range If one of the vertex indices is out of bounds.
+     * @throws MeshException (1) If one of provided edges is already paired.
+     * This indicates that the mesh is not 2-manifold. (2) If an edge has
+     * zero length. This means the face has zero area. (3) If an edge's interior
+     * angle is NaN or Inf.
      */
     template <class Vector>
     auto insert_face(const Vector& vector) -> std::size_t
@@ -393,6 +456,7 @@ public:
             // Get the vertex by index
             auto vert = verts_.at(idx);
             newEdge->vertex = vert;
+            vert->edges.push_back(newEdge);
             if (not vert->edge) {
                 vert->edge = newEdge;
             }
@@ -401,13 +465,16 @@ public:
             if (prevEdge) {
                 // Update the previous edge's successor
                 prevEdge->next = newEdge;
+                vert->edges.push_back(prevEdge);
 
                 // Try to find a pair for prev edge using this edge's index
                 auto pair = find_edge_(idx, prevIdx);
                 if (pair) {
                     if (pair->pair) {
-                        throw std::invalid_argument(
-                            "Resolved edge already paired.");
+                        auto msg = "Resolved edge pair already paired. Edge (" +
+                                   std::to_string(prevIdx) + ", " +
+                                   std::to_string(idx) + ") is not 2-manifold.";
+                        throw MeshException(msg);
                     }
                     prevEdge->pair = pair;
                     pair->pair = prevEdge;
@@ -425,15 +492,30 @@ public:
 
         // Link back to the beginning
         prevEdge->next = face->head;
+        face->head->vertex->edges.push_back(prevEdge);
 
         // Try to find a pair for final edge using this edge's index
         auto pair = find_edge_(face->head->vertex->idx, prevIdx);
         if (pair) {
             if (pair->pair) {
-                throw std::invalid_argument("Resolved edge already paired.");
+                auto msg = "Resolved edge pair already paired. Edge (" +
+                           std::to_string(prevIdx) + ", " +
+                           std::to_string(face->head->vertex->idx) +
+                           ") is not 2-manifold.";
+                throw MeshException(msg);
             }
             prevEdge->pair = pair;
             pair->pair = prevEdge;
+        }
+
+        // Sanity check: edge lengths
+        for (const auto& e : *face) {
+            if (norm(e->next->vertex->pos - e->vertex->pos) == 0.0) {
+                auto msg = "Zero-length edge (" +
+                           std::to_string(e->vertex->idx) + ", " +
+                           std::to_string(e->next->vertex->idx) + ")";
+                throw MeshException(msg);
+            }
         }
 
         // Compute angles for edges in face
@@ -448,7 +530,13 @@ public:
         return face->idx;
     }
 
-    /** @brief Insert a new face from an ordered list of Vertex indices */
+    /**
+     * @brief Insert a new face from an ordered list of Vertex indices
+     *
+     * @throws std::out_of_range If one of the vertex indices is out of bounds.
+     * @throws MeshException If one of provided edges is already paired. This
+     * indicates that the mesh is not 2-manifold.
+     */
     template <typename... Args>
     auto insert_face(Args... args) -> std::size_t
     {
