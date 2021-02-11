@@ -155,7 +155,7 @@ constexpr auto to_degrees(T2 rad) -> T
 }
 
 }  // namespace OpenABF
-// #include "OpenABF/Vector.hpp"
+// #include "OpenABF/Vec.hpp"
 
 
 #include <array>
@@ -167,6 +167,7 @@ namespace OpenABF
 {
 namespace detail
 {
+#if __cplusplus > 201103L
 /** @brief Helper type to perform parameter pack folding in C++11/14 */
 struct ExpandType {
     /** Constructor */
@@ -175,6 +176,7 @@ struct ExpandType {
     {
     }
 };
+#endif
 }  // namespace detail
 
 /**
@@ -234,7 +236,7 @@ public:
         std::size_t i{0};
 #if __cplusplus >= 201703L
         // C++17 folding
-        (val_[i++] = args, ...);
+        ((val_[i++] = args), ...);
 #elif __cplusplus > 201103L
         detail::ExpandType{0, ((val_[i++] = args), 0)...};
 #endif
@@ -480,7 +482,7 @@ std::ostream& operator<<(std::ostream& os, const OpenABF::Vec<T, Dims>& vec)
 
 // #include "OpenABF/Exceptions.hpp"
 
-// #include "OpenABF/Vector.hpp"
+// #include "OpenABF/Vec.hpp"
 
 
 namespace OpenABF

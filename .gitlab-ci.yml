@@ -24,7 +24,7 @@
     - *test_script
 
 ### Tests ###
-test:debian:10:
+test:cpp14:debian:10:
   extends: .build_and_test
   stage: test
   needs: []
@@ -33,6 +33,11 @@ test:debian:10:
     EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON"
   tags:
     - docker
+
+test:cpp17:debian:10:
+  extends: test:cpp14:debian:10
+  variables:
+    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON -DCMAKE_CXX_STANDARD=17"
 
 examples:debian:10:
   extends: .build

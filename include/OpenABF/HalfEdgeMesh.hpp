@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "OpenABF/Exceptions.hpp"
-#include "OpenABF/Vector.hpp"
+#include "OpenABF/Vec.hpp"
 
 namespace OpenABF
 {
