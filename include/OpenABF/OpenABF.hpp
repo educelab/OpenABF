@@ -21,7 +21,7 @@ limitations under the License.
 // clang-format off
 #include "OpenABF/Exceptions.hpp"
 #include "OpenABF/Math.hpp"
-#include "OpenABF/Vector.hpp"
+#include "OpenABF/Vec.hpp"
 
 #include "OpenABF/HalfEdgeMesh.hpp"
 

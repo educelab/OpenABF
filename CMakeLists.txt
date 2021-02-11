@@ -25,7 +25,7 @@ if(OPENABF_MULTIHEADER)
         include/OpenABF/HalfEdgeMesh.hpp
         include/OpenABF/AngleBasedLSCM.hpp
         include/OpenABF/Math.hpp
-        include/OpenABF/Vector.hpp
+        include/OpenABF/Vec.hpp
     )
     set(OPENABF_LINK_DIR ${PROJECT_SOURCE_DIR}/include/)
     message(STATUS "Using multi-header OpenABF library: ${OPENABF_LINK_DIR}")
