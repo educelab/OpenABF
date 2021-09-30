@@ -551,7 +551,7 @@ void ComputeMeshAngles(MeshPtr& mesh)
 
 /** @brief Determines if mesh is open or closed */
 template <class MeshPtr>
-bool HasBoundary(const MeshPtr& mesh)
+auto HasBoundary(const MeshPtr& mesh) -> bool
 {
     for (const auto& v : mesh->vertices()) {
         if (v->is_boundary()) {
@@ -561,9 +561,44 @@ bool HasBoundary(const MeshPtr& mesh)
     return false;
 }
 
+/**
+ * @brief Check if a mesh has unreferenced vertices
+ *
+ * @note This only checks if the vertex is associated with at least one edge.
+ * A face is not currently guaranteed.
+ */
+template <class MeshPtr>
+auto HasUnreferencedVertices(const MeshPtr& mesh) -> bool
+{
+    for (const auto& v : mesh->vertices()) {
+        if (v->edges.empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief Get a list of unreferenced vertices
+ *
+ * @note This only checks if the vertex is associated with at least one edge.
+ * A face is not currently guaranteed.
+ */
+template <class MeshPtr>
+auto UnreferencedVertices(const MeshPtr& mesh) -> std::vector<std::size_t>
+{
+    std::vector<std::size_t> indices;
+    for (const auto& v : mesh->vertices()) {
+        if (v->edges.empty()) {
+            indices.emplace_back(v->idx);
+        }
+    }
+    return indices;
+}
+
 /** @brief Check if mesh is manifold */
 template <class MeshPtr>
-bool IsManifold(const MeshPtr& mesh)
+auto IsManifold(const MeshPtr& mesh) -> bool
 {
     // insert_face won't allow non-manifold edge, so true by default
     // Check vertices for manifold
@@ -787,7 +822,7 @@ public:
     struct Edge : public EdgeTraits {
         /** @brief Construct a new Edge pointer */
         template <typename... Args>
-        static EdgePtr New(Args&&... args)
+        static auto New(Args&&... args) -> EdgePtr
         {
             return std::make_shared<Edge>(std::forward<Args>(args)...);
         }

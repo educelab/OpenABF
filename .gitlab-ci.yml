@@ -26,7 +26,6 @@
 ### Tests ###
 test:cpp14:debian:10:
   extends: .build_and_test
-  stage: test
   needs: []
   image: volcart/vcbuilder-debian:10_v1.static
   variables:
@@ -39,9 +38,18 @@ test:cpp17:debian:10:
   variables:
     EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON -DCMAKE_CXX_STANDARD=17"
 
+single_header_updated:
+  needs: []
+  image: python:3.8
+  script:
+    - python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .
+    - changed=$(git diff --stat)
+    - if [[ "${changed}" != '' ]]; then echo "Files changed:" ${changed}; exit 1; fi
+  tags:
+    - docker
+
 examples:debian:10:
   extends: .build
-  stage: test
   needs: []
   image: volcart/vcbuilder-debian:10_v1.static
   variables:
@@ -51,7 +59,7 @@ examples:debian:10:
 
 ### Docs ###
 pages:
-  stage: deploy
+  needs: []
   image: debian:buster-backports
   before_script:
     - apt-get update
