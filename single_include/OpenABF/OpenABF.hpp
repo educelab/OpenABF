@@ -22,7 +22,7 @@ limitations under the License.
 // #include "OpenABF/Exceptions.hpp"
 
 
-#include <exception>
+#include <stdexcept>
 #include <string>
 
 namespace OpenABF
@@ -159,6 +159,7 @@ constexpr auto to_degrees(T2 rad) -> T
 
 
 #include <array>
+#include <iostream>
 
 // #include "OpenABF/Math.hpp"
 
