@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
-project(OpenABF VERSION 1.1)
+project(OpenABF VERSION 1.1.1)
 
 # Setup project directories
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
