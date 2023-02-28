@@ -4,8 +4,6 @@
 The templated interface is designed for simple out-of-the-box use, and 
 integration with existing geometric processing pipelines is quick and easy.
 
-[[_TOC_]]
-
 ## Dependencies
 - C++14 compiler
 - [Eigen 3.3+](http://eigen.tuxfamily.org/)

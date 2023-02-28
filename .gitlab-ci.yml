@@ -33,14 +33,22 @@ test:cpp14:debian:10:
   tags:
     - docker
 
+test:cpp14:debian:11:
+  extends: test:cpp14:debian:10
+  image: ghcr.io/educelab/ci-docker:11_v2.static
+
 test:cpp17:debian:10:
   extends: test:cpp14:debian:10
   variables:
     EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON -DCMAKE_CXX_STANDARD=17"
 
+test:cpp17:debian:11:
+  extends: test:cpp17:debian:10
+  image: ghcr.io/educelab/ci-docker:11_v2.static
+
 single_header_updated:
   needs: []
-  image: python:3.8
+  image: python:3.11
   script:
     - python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .
     - changed=$(git diff --stat)
@@ -57,14 +65,22 @@ examples:debian:10:
   tags:
     - docker
 
+examples:debian:11:
+  extends: .build
+  needs: []
+  image: ghcr.io/educelab/ci-docker:11_v2.static
+  variables:
+    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_EXAMPLES=ON"
+  tags:
+    - docker
+
 ### Docs ###
 pages:
   needs: []
-  image: debian:buster-backports
+  image: debian:bullseye-backports
   before_script:
     - apt-get update
-    - apt-get install -y build-essential doxygen graphviz texlive ghostscript
-    - apt-get -t buster-backports install -y cmake libeigen3-dev
+    - apt-get install -y build-essential doxygen graphviz texlive ghostscript cmake libeigen3-dev
   script:
     - mkdir -p build/
     - mkdir -p public/
