@@ -526,7 +526,7 @@ void ComputeFaceAngles(FacePtr& face)
         auto ab = e->next->vertex->pos - e->vertex->pos;
         auto ac = e->next->next->vertex->pos - e->vertex->pos;
         e->alpha = interior_angle(ab, ac);
-        if (std::isnan(e->alpha) or std::isinf(e->alpha)) {
+        if (std::isnan(e->alpha) || std::isinf(e->alpha)) {
             auto msg = "Interior angle for edge " + std::to_string(e->idx) +
                        " is nan/inf";
             throw MeshException(msg);
@@ -604,7 +604,7 @@ auto IsManifold(const MeshPtr& mesh) -> bool
     // insert_face won't allow non-manifold edge, so true by default
     // Check vertices for manifold
     for (const auto& v : mesh->vertices()) {
-        if (not v->is_manifold()) {
+        if (! v->is_manifold()) {
             return false;
         }
     }
@@ -696,7 +696,7 @@ private:
 
         /** Dereference operator */
         template <bool Const_ = Const>
-        std::enable_if_t<not Const_, reference> operator*()
+        std::enable_if_t<! Const_, reference> operator*()
         {
             return current_;
         }
@@ -763,7 +763,7 @@ public:
             std::vector<EdgePtr> ret;
             auto e = edge;
             do {
-                if (not e->pair) {
+                if (! e->pair) {
                     throw MeshException(
                         "Cannot enumerate wheel of boundary vertex.");
                 }
@@ -778,7 +778,7 @@ public:
         {
             auto e = edge;
             do {
-                if (not e->pair) {
+                if (! e->pair) {
                     return true;
                 }
                 e = e->pair->next;
@@ -787,7 +787,7 @@ public:
         }
 
         /** @brief Returns if vertex is interior to mesh */
-        auto is_interior() const -> bool { return not is_boundary(); }
+        auto is_interior() const -> bool { return ! is_boundary(); }
 
         /** @brief Returns if vertex is unreferenced */
         auto is_unreferenced() const -> bool { return edges.empty(); }
@@ -960,7 +960,7 @@ public:
             newEdge->face = face;
 
             // Set the head edge for this face
-            if (not face->head) {
+            if (! face->head) {
                 face->head = newEdge;
             }
 
@@ -968,7 +968,7 @@ public:
             auto vert = verts_.at(idx);
             newEdge->vertex = vert;
             vert->edges.push_back(newEdge);
-            if (not vert->edge) {
+            if (! vert->edge) {
                 vert->edge = newEdge;
             }
 
@@ -1034,7 +1034,7 @@ public:
 
         // Give this face an idx and link the previous face with this one
         face->idx = faces_.size();
-        if (not faces_.empty()) {
+        if (! faces_.empty()) {
             faces_.back()->next = face;
         }
         faces_.emplace_back(face);
@@ -1081,7 +1081,7 @@ public:
         std::vector<VertPtr> ret;
         std::copy_if(
             verts_.begin(), verts_.end(), std::back_inserter(ret),
-            [](auto x) { return not x->is_boundary(); });
+            [](auto x) { return ! x->is_boundary(); });
         return ret;
     }
 
@@ -1103,7 +1103,7 @@ public:
     {
         return std::accumulate(
             verts_.begin(), verts_.end(), std::size_t{0}, [](auto a, auto b) {
-                return a + static_cast<std::size_t>(not b->is_boundary());
+                return a + static_cast<std::size_t>(! b->is_boundary());
             });
     }
 
@@ -1123,7 +1123,7 @@ private:
         // Loop over potential edges
         for (auto it = range.first; it != range.second; it++) {
             const auto& e = it->second;
-            if (e->next and e->next->vertex->idx == end) {
+            if (e->next && e->next->vertex->idx == end) {
                 return e;
             }
         }
@@ -1444,13 +1444,13 @@ public:
 
         // while ||∇F(x)|| > ε
         gradient = Gradient<T>(mesh);
-        if (std::isnan(gradient) or std::isinf(gradient)) {
+        if (std::isnan(gradient) || std::isinf(gradient)) {
             throw MeshException("Mesh gradient cannot be computed");
         }
         auto gradDelta = INF<T>;
         iters = 0;
-        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
-            if (std::isnan(gradient) or std::isinf(gradient)) {
+        while (gradient > 0.001 && gradDelta > 0.001 && iters < maxIters) {
+            if (std::isnan(gradient) || std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
             // Typedefs
@@ -1700,13 +1700,13 @@ public:
 
         // while ||∇F(x)|| > ε
         gradient = Gradient<T>(mesh);
-        if (std::isnan(gradient) or std::isinf(gradient)) {
+        if (std::isnan(gradient) || std::isinf(gradient)) {
             throw MeshException("Mesh gradient cannot be computed");
         }
         auto gradDelta = INF<T>;
         iters = 0;
-        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
-            if (std::isnan(gradient) or std::isinf(gradient)) {
+        while (gradient > 0.001 && gradDelta > 0.001 && iters < maxIters) {
+            if (std::isnan(gradient) || std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
             // Typedefs
@@ -1961,12 +1961,12 @@ public:
         auto p0 = mesh->vertices_boundary()[0];
         auto e = p0->edge;
         do {
-            if (not e->pair) {
+            if (! e->pair) {
                 break;
             }
             e = e->pair->next;
         } while (e != p0->edge);
-        if (e == p0->edge and e->pair) {
+        if (e == p0->edge && e->pair) {
             throw MeshException("Pinned vertex not on boundary");
         }
         auto p1 = e->next->vertex;
@@ -1996,7 +1996,7 @@ public:
         // This helps us find a vert's row in the solution matrix
         std::map<std::size_t, std::size_t> freeIdxTable;
         for (const auto& v : mesh->vertices()) {
-            if (v == p0 or v == p1) {
+            if (v == p0 || v == p1) {
                 continue;
             }
             auto newIdx = freeIdxTable.size();
@@ -2132,7 +2132,7 @@ public:
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices
         for (const auto& v : mesh->vertices()) {
-            if (v == p0 or v == p1) {
+            if (v == p0 || v == p1) {
                 continue;
             }
             auto newIdx = 2 * freeIdxTable.at(v->idx);

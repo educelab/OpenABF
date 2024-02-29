@@ -69,12 +69,12 @@ public:
         auto p0 = mesh->vertices_boundary()[0];
         auto e = p0->edge;
         do {
-            if (not e->pair) {
+            if (! e->pair) {
                 break;
             }
             e = e->pair->next;
         } while (e != p0->edge);
-        if (e == p0->edge and e->pair) {
+        if (e == p0->edge && e->pair) {
             throw MeshException("Pinned vertex not on boundary");
         }
         auto p1 = e->next->vertex;
@@ -104,7 +104,7 @@ public:
         // This helps us find a vert's row in the solution matrix
         std::map<std::size_t, std::size_t> freeIdxTable;
         for (const auto& v : mesh->vertices()) {
-            if (v == p0 or v == p1) {
+            if (v == p0 || v == p1) {
                 continue;
             }
             auto newIdx = freeIdxTable.size();
@@ -240,7 +240,7 @@ public:
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices
         for (const auto& v : mesh->vertices()) {
-            if (v == p0 or v == p1) {
+            if (v == p0 || v == p1) {
                 continue;
             }
             auto newIdx = 2 * freeIdxTable.at(v->idx);

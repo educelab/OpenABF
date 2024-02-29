@@ -90,13 +90,13 @@ public:
 
         // while ||∇F(x)|| > ε
         gradient = Gradient<T>(mesh);
-        if (std::isnan(gradient) or std::isinf(gradient)) {
+        if (std::isnan(gradient) || std::isinf(gradient)) {
             throw MeshException("Mesh gradient cannot be computed");
         }
         auto gradDelta = INF<T>;
         iters = 0;
-        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
-            if (std::isnan(gradient) or std::isinf(gradient)) {
+        while (gradient > 0.001 && gradDelta > 0.001 && iters < maxIters) {
+            if (std::isnan(gradient) || std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
             // Typedefs
