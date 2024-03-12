@@ -240,6 +240,8 @@ public:
         ((val_[i++] = args), ...);
 #elif __cplusplus > 201103L
         detail::ExpandType{0, ((val_[i++] = args), 0)...};
+#else
+        static_assert(false, "C++ standard >= C++14 not detected");
 #endif
     }
 

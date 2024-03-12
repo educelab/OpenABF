@@ -134,6 +134,49 @@ g++ -I /path/to/eigen/ -std=c++14 -DNDEBUG -O3 main.cpp -o main
 **Note:** For best performance, compile your application with the `-DNDEBUG -03`
 preprocessor definitions.
 
+### Compilation on Windows
+
+For many legacy reasons, the Microsoft Visual C++ compiler (MSVC) is not 
+automatically conformant with the C++ standard in all cases. This may lead to 
+the following issues when compiling against OpenABF.
+
+**Note:** As this project only supports C++14 and up, you should always compile 
+with at least `/std:c++14` or `/std:c++17`.
+
+#### Undeclared identifier errors
+
+At the time of this writing, MSVC does not automatically recognize the 
+alternative boolean operators `and`, `or`, and `not`. There are multiple ways to 
+fix this issue.
+
+- **Compile with the `/permissive-` flag:** This flag enables C++ language 
+conformance for the entire compilation. This is currently Microsoft's suggested 
+method for enabling the alternative operators, and is added by default when 
+creating new projects in Visual Studio 2017 version 15.5 and later (but not when 
+using MSVC on the command line). Since the `/permissive-` flag enables strict 
+C++ conformance for the entire project (it enables much more than just operator 
+support), it may lead to other compilation problems in existing code.
+[See the flag documentation](https://learn.microsoft.com/en-us/cpp/build/reference/permissive-standards-conformance) 
+to decide if this is the right solution for your project.
+
+- **Include `iso646.h`:** This header file provides definitions for the 
+alternative operators and should be included before including OpenABF. This 
+was Microsoft's previous recommendation for enabling alternative operator 
+support. It may have fewer side effects in existing code bases than 
+the `/permissive-` flag.
+
+#### Static assert: C++ standard >= C++14 not detected
+
+A few places in OpenABF use the `__cplusplus` macro to check the current C++ 
+standard library version. When this macro does not indicate at least C++14, we 
+raise a static assert: `C++ standard >= C++14 not detected`. By default, MSVC 
+defines this macro as `199711L`, which results in an assertion error. To fix 
+this issue, compile with the `/Zc:__cplusplus` flag. This flag was added in 
+Visual Studio 2017 version 15.7. It **is not** enabled by the`/permissive-` flag 
+and must be added separately. 
+[See the flag documentation](https://learn.microsoft.com/en-us/cpp/build/reference/zc-cplusplus) 
+for more information.
+
 ## Contributors
 OpenABF is glad to welcome contributors of all skill sets. If you have found a 
 bug or wish to contribute a new feature, please see 
