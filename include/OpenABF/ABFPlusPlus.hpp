@@ -40,7 +40,7 @@ template <
     class MeshType = detail::ABF::Mesh<T>,
     class Solver =
         Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class ABFPlusPlus
 {
 public:
@@ -62,7 +62,7 @@ public:
      *
      * **Note:** Result is only valid after running compute().
      */
-    auto iterations() const -> std::size_t { return iters_; }
+    [[nodiscard]] auto iterations() const -> std::size_t { return iters_; }
 
     /** @copydoc ABFPlusPlus::Compute */
     void compute(typename Mesh::Pointer& mesh)
@@ -81,7 +81,7 @@ public:
         typename Mesh::Pointer& mesh,
         std::size_t& iters,
         T& gradient,
-        std::size_t maxIters = 10)
+        const std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
 
@@ -157,15 +157,15 @@ public:
             for (const auto& v : mesh->vertices_interior()) {
                 for (const auto& e0 : v->wheel()) {
                     // Jacobian of the CPlan constraint
-                    triplets.emplace_back(idx, e0->idx, 1);
+                    triplets.emplace_back(idx, e0->idxI.value(), 1);
 
                     // Jacobian of the CLen constraint
                     auto e1 = e0->next;
                     auto e2 = e1->next;
                     auto d1 = LenGrad<T>(v, e1);
                     auto d2 = LenGrad<T>(v, e2);
-                    triplets.emplace_back(vIntCnt + idx, e1->idx, d1);
-                    triplets.emplace_back(vIntCnt + idx, e2->idx, d2);
+                    triplets.emplace_back(vIntCnt + idx, e1->idxI.value(), d1);
+                    triplets.emplace_back(vIntCnt + idx, e2->idxI.value(), d2);
                 }
                 ++idx;
             }

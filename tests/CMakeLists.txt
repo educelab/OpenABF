@@ -13,6 +13,7 @@ set(tests
     src/TestHalfEdgeMesh.cpp
     src/TestMath.cpp
     src/TestVec.cpp
+    src/TestParameterization.cpp
 )
 
 foreach(src ${tests})

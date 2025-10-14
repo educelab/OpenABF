@@ -86,7 +86,7 @@ auto interior_angle(const Vector1& a, const Vector2& b)
 template <
     typename T = float,
     typename T2,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_radians(T2 deg) -> T
 {
     return deg * PI<T> / T(180);
@@ -96,7 +96,7 @@ constexpr auto to_radians(T2 deg) -> T
 template <
     typename T = float,
     typename T2,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_degrees(T2 rad) -> T
 {
     return rad * T(180) / PI<T>;

@@ -7,20 +7,6 @@
 
 namespace OpenABF
 {
-namespace detail
-{
-#if __cplusplus > 201103L
-/** @brief Helper type to perform parameter pack folding in C++11/14 */
-struct ExpandType {
-    /** Constructor */
-    template <typename... T>
-    explicit ExpandType(T&&...)
-    {
-    }
-};
-#endif
-}  // namespace detail
-
 /**
  * @brief N-dimensional vector class
  *
@@ -76,21 +62,14 @@ public:
     {
         static_assert(sizeof...(args) == Dims, "Incorrect number of arguments");
         std::size_t i{0};
-#if __cplusplus >= 201703L
-        // C++17 folding
         ((val_[i++] = args), ...);
-#elif __cplusplus > 201103L
-        detail::ExpandType{0, ((val_[i++] = args), 0)...};
-#else
-        static_assert(false, "C++ standard >= C++14 not detected");
-#endif
     }
 
     /** @brief Copy constructor */
     template <typename Vector>
     explicit Vec(const Vector& vec)
     {
-        std::copy(val_.begin(), val_.end(), std::begin(vec));
+        std::copy(std::begin(vec), std::end(vec), val_.begin());
     }
 
     /** @brief Bounds-checked element access */

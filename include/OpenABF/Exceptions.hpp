@@ -13,7 +13,9 @@ public:
     /** @brief Constructor with message */
     explicit SolverException(const char* msg) : std::runtime_error(msg) {}
     /** @brief Constructor with message */
-    explicit SolverException(std::string msg) : std::runtime_error(msg) {}
+    explicit SolverException(const std::string& msg) : std::runtime_error(msg)
+    {
+    }
 };
 
 /** @brief Solver exception */
@@ -23,7 +25,7 @@ public:
     /** @brief Constructor with message */
     explicit MeshException(const char* msg) : std::runtime_error(msg) {}
     /** @brief Constructor with message */
-    explicit MeshException(std::string msg) : std::runtime_error(msg) {}
+    explicit MeshException(const std::string& msg) : std::runtime_error(msg) {}
 };
 
 }  // namespace OpenABF

@@ -41,7 +41,7 @@ template <
     class MeshType = HalfEdgeMesh<T>,
     class Solver =
         Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point<T>::value, bool> = true>
+    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class AngleBasedLSCM
 {
 public:
@@ -69,12 +69,12 @@ public:
         auto p0 = mesh->vertices_boundary()[0];
         auto e = p0->edge;
         do {
-            if (not e->pair) {
+            if (e->pair->is_boundary()) {
                 break;
             }
             e = e->pair->next;
         } while (e != p0->edge);
-        if (e == p0->edge and e->pair) {
+        if (e == p0->edge and not e->pair->is_boundary()) {
             throw MeshException("Pinned vertex not on boundary");
         }
         auto p1 = e->next->vertex;

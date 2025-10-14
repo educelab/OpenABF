@@ -2,7 +2,7 @@
 OpenABF
 https://gitlab.com/educelab/OpenABF
 
-Copyright 2021 EduceLab
+Copyright 2025 EduceLab
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,4 +28,6 @@ limitations under the License.
 #include "OpenABF/ABF.hpp"
 #include "OpenABF/ABFPlusPlus.hpp"
 #include "OpenABF/AngleBasedLSCM.hpp"
+
+#include "OpenABF/MeshIO.hpp"
 // clang-format on
