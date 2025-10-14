@@ -407,11 +407,11 @@ public:
             Solver solver;
             solver.compute(A);
             if (solver.info() != Eigen::ComputationInfo::Success) {
-                throw SolverException(solver.lastErrorMessage());
+                throw SolverException("ABF: Failed to solve A");
             }
             DenseVector delta = solver.solve(b);
             if (solver.info() != Eigen::ComputationInfo::Success) {
-                throw SolverException(solver.lastErrorMessage());
+                throw SolverException("ABF: Failed to solve b");
             }
 
             // alpha += delta_alpha

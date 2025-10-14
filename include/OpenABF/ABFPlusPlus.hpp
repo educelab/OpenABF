@@ -210,11 +210,11 @@ public:
             Solver solver;
             solver.compute(A);
             if (solver.info() != Eigen::ComputationInfo::Success) {
-                throw SolverException(solver.lastErrorMessage());
+                throw SolverException("ABF++: Failed to solve A");
             }
             auto deltaLambda2 = solver.solve(b);
             if (solver.info() != Eigen::ComputationInfo::Success) {
-                throw SolverException(solver.lastErrorMessage());
+                throw SolverException("ABF++: Failed to solve b");
             }
 
             // Compute Eq. 17 -> delta_lambda_1
