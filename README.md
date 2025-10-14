@@ -5,7 +5,7 @@ The templated interface is designed for simple out-of-the-box use, and
 integration with existing geometric processing pipelines is quick and easy.
 
 ## Dependencies
-- C++14 compiler
+- C++17 compiler
 - [Eigen 3.3+](http://eigen.tuxfamily.org/)
 - CMake 3.15+ (optional)
 
@@ -27,9 +27,11 @@ mesh->insert_vertex(2, 0, 0);
 mesh->insert_vertex(1, std::sqrt(3), 0);
 mesh->insert_vertex(1, std::sqrt(3) / 3, 1);
 
-mesh->insert_face(0, 3, 1);
-mesh->insert_face(0, 2, 3);
-mesh->insert_face(2, 1, 3);
+mesh->insert_faces({
+  {1, 3, 0}, 
+  {3, 2, 0}, 
+  {3, 1, 2}
+});
 
 // Print original coordinates
 for (const auto& v : mesh->vertices()) {
@@ -68,7 +70,7 @@ cmake --install build/
 ```
 
 This will install the OpenABF header(s) to your system include path and provide 
-an easy method for including OpenABF inside of your own CMake project:
+an easy method for including OpenABF inside your own CMake project:
 
 ```cmake
 # Find OpenABF libraries
@@ -102,15 +104,10 @@ include(FetchContent)
 FetchContent_Declare(
   openabf
   GIT_REPOSITORY https://gitlab.com/educelab/OpenABF.git
-  GIT_TAG v1.0
+  GIT_TAG v2.0.0
+  EXCLUDE_FROM_ALL
 )
-
-# Populate the project but exclude from All targets
-FetchContent_GetProperties(openabf)
-if(NOT openabf_POPULATED)
-  FetchContent_Populate(openabf)
-  add_subdirectory(${openabf_SOURCE_DIR} ${openabf_BINARY_DIR} EXCLUDE_FROM_ALL)
-endif()
+FetchContent_MakeAvailable()
 ```
 
 This downloads the OpenABF source code and adds it to your CMake project as a 
@@ -128,7 +125,7 @@ path. As OpenABF depends upon the Eigen library, you will also need to add the
 Eigen headers to your include path:
 
 ```shell
-g++ -I /path/to/eigen/ -std=c++14 -DNDEBUG -O3 main.cpp -o main
+g++ -I /path/to/eigen/ -std=c++17 -DNDEBUG -O3 main.cpp -o main
 ```
 
 **Note:** For best performance, compile your application with the `-DNDEBUG -03`
@@ -140,8 +137,8 @@ For many legacy reasons, the Microsoft Visual C++ compiler (MSVC) is not
 automatically conformant with the C++ standard in all cases. This may lead to 
 the following issues when compiling against OpenABF.
 
-**Note:** As this project only supports C++14 and up, you should always compile 
-with at least `/std:c++14` or `/std:c++17`.
+**Note:** As this project only supports C++17 and up, you should always compile 
+with at least `/std:c++17`.
 
 #### Undeclared identifier errors
 
@@ -164,18 +161,6 @@ alternative operators and should be included before including OpenABF. This
 was Microsoft's previous recommendation for enabling alternative operator 
 support. It may have fewer side effects in existing code bases than 
 the `/permissive-` flag.
-
-#### Static assert: C++ standard >= C++14 not detected
-
-A few places in OpenABF use the `__cplusplus` macro to check the current C++ 
-standard library version. When this macro does not indicate at least C++14, we 
-raise a static assert: `C++ standard >= C++14 not detected`. By default, MSVC 
-defines this macro as `199711L`, which results in an assertion error. To fix 
-this issue, compile with the `/Zc:__cplusplus` flag. This flag was added in 
-Visual Studio 2017 version 15.7. It **is not** enabled by the`/permissive-` flag 
-and must be added separately. 
-[See the flag documentation](https://learn.microsoft.com/en-us/cpp/build/reference/zc-cplusplus) 
-for more information.
 
 ## Contributors
 OpenABF is glad to welcome contributors of all skill sets. If you have found a 

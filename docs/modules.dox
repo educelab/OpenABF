@@ -12,3 +12,13 @@
  * @namespace OpenABF::traits
  * @brief Traits for meshes and algorithms
  */
+
+/**
+ * @namespace OpenABF::io_formats
+ * @brief Mesh IO support for various file formats
+ */
+
+/**
+ * @namespace OpenABF::io_utils
+ * @brief Mesh IO utility functions
+ */

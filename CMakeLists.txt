@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
-project(OpenABF VERSION 1.1.1)
+cmake_minimum_required(VERSION 3.15..3.30 FATAL_ERROR)
+project(OpenABF VERSION 2.0.0)
 
 # Setup project directories
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR}/bin)
@@ -26,6 +26,9 @@ if(OPENABF_MULTIHEADER)
         include/OpenABF/AngleBasedLSCM.hpp
         include/OpenABF/Math.hpp
         include/OpenABF/Vec.hpp
+        include/OpenABF/MeshIO.hpp
+        include/OpenABF/MeshIOUtils.hpp
+        include/OpenABF/MeshIOFormats.hpp
     )
     set(OPENABF_LINK_DIR ${PROJECT_SOURCE_DIR}/include/)
     message(STATUS "Using multi-header OpenABF library: ${OPENABF_LINK_DIR}")
@@ -42,7 +45,7 @@ target_include_directories(OpenABF
         $<BUILD_INTERFACE:${OPENABF_LINK_DIR}>
         $<INSTALL_INTERFACE:include>
 )
-target_compile_features(OpenABF INTERFACE cxx_std_14)
+target_compile_features(OpenABF INTERFACE cxx_std_17)
 set_target_properties(OpenABF
     PROPERTIES
         PUBLIC_HEADER "${public_hdrs}"

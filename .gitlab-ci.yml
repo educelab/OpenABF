@@ -13,6 +13,8 @@
   variables:
     EXTRA_CMAKE_FLAGS: ""
   before_script:
+    - apt update
+    - apt install -y libeigen3-dev
     - export CMAKE_CMD="cmake -GNinja $EXTRA_CMAKE_FLAGS .."
   script:
     - *build_script
@@ -24,27 +26,23 @@
     - *test_script
 
 ### Tests ###
-test:cpp14:debian:10:
+test:debian:12:
   extends: .build_and_test
   needs: []
-  image: volcart/vcbuilder-debian:10_v1.static
+  image:
+    name: ghcr.io/educelab/ci-docker:base.12.1
+    entrypoint: [""]
   variables:
     EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON"
-  tags:
-    - docker
 
-test:cpp14:debian:11:
-  extends: test:cpp14:debian:10
-  image: ghcr.io/educelab/ci-docker:11_v2.static
-
-test:cpp17:debian:10:
-  extends: test:cpp14:debian:10
+examples:debian:12:
+  extends: .build
+  needs: []
+  image:
+    name: ghcr.io/educelab/ci-docker:base.12.1
+    entrypoint: [""]
   variables:
-    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON -DCMAKE_CXX_STANDARD=17"
-
-test:cpp17:debian:11:
-  extends: test:cpp17:debian:10
-  image: ghcr.io/educelab/ci-docker:11_v2.static
+    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_EXAMPLES=ON"
 
 single_header_updated:
   needs: []
@@ -53,31 +51,11 @@ single_header_updated:
     - python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .
     - changed=$(git diff --stat)
     - if [[ "${changed}" != '' ]]; then echo "Files changed:" ${changed}; exit 1; fi
-  tags:
-    - docker
-
-examples:debian:10:
-  extends: .build
-  needs: []
-  image: volcart/vcbuilder-debian:10_v1.static
-  variables:
-    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_EXAMPLES=ON"
-  tags:
-    - docker
-
-examples:debian:11:
-  extends: .build
-  needs: []
-  image: ghcr.io/educelab/ci-docker:11_v2.static
-  variables:
-    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_EXAMPLES=ON"
-  tags:
-    - docker
 
 ### Docs ###
 pages:
   needs: []
-  image: debian:bookworm
+  image: debian:bookworm-backports
   before_script:
     - apt-get update
     - apt-get install -y build-essential doxygen graphviz texlive ghostscript cmake libeigen3-dev
@@ -90,7 +68,5 @@ pages:
   artifacts:
     paths:
       - public
-  tags:
-    - docker
   only:
     - develop
