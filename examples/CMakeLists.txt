@@ -1,4 +1,3 @@
-# Pyramid flattening app
 add_executable(openabf_example_basic_flattening src/BasicFlattening.cpp)
 target_link_libraries(openabf_example_basic_flattening OpenABF::OpenABF)
 
@@ -10,3 +9,6 @@ target_link_libraries(openabf_example_flatten OpenABF::OpenABF)
 
 add_executable(openabf_example_clone src/CloneMesh.cpp)
 target_link_libraries(openabf_example_clone OpenABF::OpenABF)
+
+add_executable(openabf_example_alternative_solvers src/AlternativeSolvers.cpp)
+target_link_libraries(openabf_example_alternative_solvers OpenABF::OpenABF)

@@ -2,7 +2,9 @@
 
 #include <cmath>
 #include <map>
+#include <type_traits>
 
+#include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
 
 #include "OpenABF/Exceptions.hpp"
@@ -11,6 +13,66 @@
 
 namespace OpenABF
 {
+
+namespace detail
+{
+/** Check if type is an instance of a template type: False */
+template <class T, template <class...> class U>
+constexpr bool is_instance_of_v = std::false_type{};
+
+/** Check if type is an instance of a template type: True */
+template <template <class...> class U, class... Vs>
+constexpr bool is_instance_of_v<U<Vs...>, U> = std::true_type{};
+
+/** Solve least squares using A'Ab  */
+template <
+    class SparseMatrix,
+    class DenseMatrix,
+    class Solver,
+    std::enable_if_t<
+        !is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
+        bool> = false>
+auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
+{
+    // Setup AtA and solver
+    SparseMatrix AtA = A.transpose() * A;
+    AtA.makeCompressed();
+    Solver solver;
+    solver.compute(AtA);
+    if (solver.info() != Eigen::ComputationInfo::Success) {
+        throw SolverException("AB-LSCM: Failed to solve AtA");
+    }
+
+    // Setup Atb
+    SparseMatrix Atb = A.transpose() * b;
+
+    // Solve AtAx = AtAb
+    DenseMatrix x = solver.solve(Atb);
+
+    return x;
+}
+
+/** Solve least squares with LeastSquaresConjugateGradient */
+template <
+    class SparseMatrix,
+    class DenseMatrix,
+    class Solver,
+    std::enable_if_t<
+        is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
+        bool> = true>
+auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
+{
+    // Solve
+    Solver solver(A);
+    DenseMatrix x = solver.solve(b);
+    if (solver.info() != Eigen::ComputationInfo::Success) {
+        throw SolverException("AB-LSCM: Failed to solve for b");
+    }
+
+    return x;
+}
+
+}  // namespace detail
 
 /**
  * @brief Compute parameterized mesh using Angle-based LSCM
@@ -222,20 +284,9 @@ public:
         // Calculate rhs from free and fixed matrices
         SparseMatrix b = bFree * bFixed * -1;
 
-        // Setup AtA and solver
-        SparseMatrix AtA = A.transpose() * A;
-        AtA.makeCompressed();
-        Solver solver;
-        solver.compute(AtA);
-        if (solver.info() != Eigen::ComputationInfo::Success) {
-            throw SolverException(solver.lastErrorMessage());
-        }
-
-        // Setup Atb
-        SparseMatrix Atb = A.transpose() * b;
-
-        // Solve AtAx = AtAb
-        DenseMatrix x = solver.solve(Atb);
+        // Solve for x
+        auto x =
+            detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(A, b);
 
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices
