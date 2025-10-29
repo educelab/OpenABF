@@ -11,7 +11,10 @@ include(FetchContent)
 include(CMakeDependentOption)
 
 # Find dependencies
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 5 QUIET CONFIG)
+if(NOT Eigen3_FOUND)
+    find_package(Eigen3 3.3 REQUIRED CONFIG)
+endif()
 
 option(OPENABF_MULTIHEADER "Build the multi-header version of OpenABF" off)
 
