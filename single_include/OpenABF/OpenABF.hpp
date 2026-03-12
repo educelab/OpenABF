@@ -842,6 +842,7 @@ private:
             }
             return *this;
         }
+
     private:
         /** Pointer to beginning of face */
         EdgePtr head_;
@@ -2637,11 +2638,12 @@ public:
                     it.valueRef() = 1.F / it.value();
                 }
             }
-            auto Jstar = JLiJt.block(faceCnt,0,2*vIntCnt,faceCnt);
-            auto JstarT = JLiJt.block(0,faceCnt,faceCnt, 2*vIntCnt);
-            auto Jstar2 = JLiJt.block(faceCnt,faceCnt,2*vIntCnt, 2*vIntCnt);
+            auto Jstar = JLiJt.block(faceCnt, 0, 2 * vIntCnt, faceCnt);
+            auto JstarT = JLiJt.block(0, faceCnt, faceCnt, 2 * vIntCnt);
+            auto Jstar2 =
+                JLiJt.block(faceCnt, faceCnt, 2 * vIntCnt, 2 * vIntCnt);
             auto bstar1 = bstar.block(0, 0, faceCnt, 1);
-            auto bstar2 = bstar.block(faceCnt, 0, 2*vIntCnt, 1);
+            auto bstar2 = bstar.block(faceCnt, 0, 2 * vIntCnt, 1);
 
             // (J* Lam*^-1 J*^t - J**) delta_lambda_2 = J* Lam*^-1 b*_1 - b*_2
             SparseMatrix A = Jstar * LambdaStarInv * JstarT - Jstar2;

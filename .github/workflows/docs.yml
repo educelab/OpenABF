@@ -1,0 +1,25 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz texlive-latex-base texlive-fonts-recommended ghostscript cmake libeigen3-dev build-essential ninja-build
+
+      - name: Build Documentation
+        run: |
+          cmake -G Ninja -S . -B build_docs -DOPENABF_BUILD_DOCS=ON
+          cmake --build build_docs --target docs

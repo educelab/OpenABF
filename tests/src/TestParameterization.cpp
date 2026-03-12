@@ -14,9 +14,7 @@ TEST(Parameterization, AngledBasedLSCM)
     LSCM::Compute(mesh);
 
     const std::vector expected{
-        Vec3f{0, 0, 0},
-        Vec3f{2, 0, 0},
-        Vec3f{1, 1.0392305, 0},
+        Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.0392305, 0},
         Vec3f{1, 0.34641013, 0}};
     for (auto v = 0; v < mesh->num_vertices(); ++v) {
         const auto& vv = mesh->vertex(v);
@@ -37,9 +35,7 @@ TEST(Parameterizations, ABF)
     LSCM::Compute(mesh);
 
     const std::vector expected{
-        Vec3f{0, 0, 0},
-        Vec3f{2, 0, 0},
-        Vec3f{1, 1.7320509, 0},
+        Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.7320509, 0},
         Vec3f{1, 0.5773503, 0}};
     for (auto v = 0; v < mesh->num_vertices(); ++v) {
         const auto& vv = mesh->vertex(v);
@@ -60,9 +56,7 @@ TEST(Parameterizations, ABFPlusPlus)
     LSCM::Compute(mesh);
 
     const std::vector expected{
-        Vec3f{0, 0, 0},
-        Vec3f{2, 0, 0},
-        Vec3f{1, 1.7320509, 0},
+        Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.7320509, 0},
         Vec3f{1, 0.5773503, 0}};
     for (auto v = 0; v < mesh->num_vertices(); ++v) {
         const auto& vv = mesh->vertex(v);
