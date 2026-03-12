@@ -26,12 +26,8 @@ constexpr bool is_instance_of_v<U<Vs...>, U> = std::true_type{};
 
 /** Solve least squares using A'Ab  */
 template <
-    class SparseMatrix,
-    class DenseMatrix,
-    class Solver,
-    std::enable_if_t<
-        !is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
-        bool> = false>
+    class SparseMatrix, class DenseMatrix, class Solver,
+    std::enable_if_t<!is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = false>
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Setup AtA and solver
@@ -54,12 +50,8 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 
 /** Solve least squares with LeastSquaresConjugateGradient */
 template <
-    class SparseMatrix,
-    class DenseMatrix,
-    class Solver,
-    std::enable_if_t<
-        is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
-        bool> = true>
+    class SparseMatrix, class DenseMatrix, class Solver,
+    std::enable_if_t<is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = true>
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Solve
@@ -98,12 +90,9 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <
-    typename T,
-    class MeshType = HalfEdgeMesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = HalfEdgeMesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class AngleBasedLSCM
 {
 public:
@@ -285,8 +274,7 @@ public:
         SparseMatrix b = bFree * bFixed * -1;
 
         // Solve for x
-        auto x =
-            detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(A, b);
+        auto x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(A, b);
 
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices

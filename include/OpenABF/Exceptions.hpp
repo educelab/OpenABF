@@ -13,9 +13,7 @@ public:
     /** @brief Constructor with message */
     explicit SolverException(const char* msg) : std::runtime_error(msg) {}
     /** @brief Constructor with message */
-    explicit SolverException(const std::string& msg) : std::runtime_error(msg)
-    {
-    }
+    explicit SolverException(const std::string& msg) : std::runtime_error(msg) {}
 };
 
 /** @brief Solver exception */

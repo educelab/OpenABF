@@ -23,10 +23,9 @@ int main()
     using Vec3f = OpenABF::Vec3f;
 
     // Pre-define vertices list
-    const std::vector vertices = {
-        Vec3f{0.f, 0.f, 0.f}, Vec3f{2.f, 0.f, 0.f},
-        Vec3f{1.f, std::sqrt(3.f), 0.f},
-        Vec3f{1.f, std::sqrt(3.f) / 3.f, std::sqrt(6.f) * 2.f / 3.f}};
+    const std::vector vertices = {Vec3f{0.f, 0.f, 0.f}, Vec3f{2.f, 0.f, 0.f},
+                                  Vec3f{1.f, std::sqrt(3.f), 0.f},
+                                  Vec3f{1.f, std::sqrt(3.f) / 3.f, std::sqrt(6.f) * 2.f / 3.f}};
 
     // Create the 4 pyramid vertices
     auto mesh = ABF::Mesh::New();
@@ -47,8 +46,7 @@ int main()
 
     // Print flattened positions
     for (const auto& v : mesh->vertices()) {
-        std::cout << v->idx << ": " << vertices[v->idx] << " -> " << v->pos
-                  << std::endl;
+        std::cout << v->idx << ": " << vertices[v->idx] << " -> " << v->pos << std::endl;
     }
 
     // Write the flattened mesh

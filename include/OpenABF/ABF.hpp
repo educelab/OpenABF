@@ -51,12 +51,8 @@ namespace detail::ABF
 
 /** @brief A HalfEdgeMesh with the %ABF traits */
 template <typename T>
-using Mesh = HalfEdgeMesh<
-    T,
-    3,
-    traits::ABFVertexTraits<T>,
-    traits::ABFEdgeTraits<T>,
-    traits::ABFFaceTraits<T>>;
+using Mesh = HalfEdgeMesh<T, 3, traits::ABFVertexTraits<T>, traits::ABFEdgeTraits<T>,
+                          traits::ABFFaceTraits<T>>;
 
 /** @brief Initialize the %ABF angles and weights from the edge alpha values */
 template <typename T, class MeshPtr>
@@ -66,8 +62,7 @@ void InitializeAnglesAndWeights(MeshPtr& m)
     static constexpr auto MinAngle = PI<T> / T(180);
     static constexpr auto MaxAngle = PI<T> - MinAngle;
     for (auto& e : m->edges()) {
-        e->alpha = e->beta = e->phi =
-            std::min(std::max(e->alpha, MinAngle), MaxAngle);
+        e->alpha = e->beta = e->phi = std::min(std::max(e->alpha, MinAngle), MaxAngle);
         e->alpha_sin = std::sin(e->alpha);
         e->alpha_cos = std::cos(e->alpha);
         e->weight = T(1) / (e->phi * e->phi);
@@ -76,9 +71,8 @@ void InitializeAnglesAndWeights(MeshPtr& m)
     // Update weights for interior vertices
     for (auto& v : m->vertices_interior()) {
         auto wheel = v->wheel();
-        auto angle_sum = std::accumulate(
-            wheel.begin(), wheel.end(), T(0),
-            [](auto a, auto b) { return a + b->beta; });
+        auto angle_sum = std::accumulate(wheel.begin(), wheel.end(), T(0),
+                                         [](auto a, auto b) { return a + b->beta; });
         for (auto& e : wheel) {
             e->phi *= 2 * PI<T> / angle_sum;
             e->weight = T(1) / (e->phi * e->phi);
@@ -87,10 +81,7 @@ void InitializeAnglesAndWeights(MeshPtr& m)
 }
 
 /** @brief Compute ∇CTri w.r.t LambdaTri == CTri */
-template <
-    typename T,
-    class FacePtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class FacePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto TriGrad(const FacePtr& f) -> T
 {
     T g = -PI<T>;
@@ -101,10 +92,7 @@ auto TriGrad(const FacePtr& f) -> T
 }
 
 /** @brief Compute ∇CPlan w.r.t LambdaPlan == CPlan */
-template <
-    typename T,
-    class VertPtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto PlanGrad(const VertPtr& v) -> T
 {
     auto edges = v->wheel();
@@ -116,10 +104,7 @@ auto PlanGrad(const VertPtr& v) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t LambdaLen == CLen */
-template <
-    typename T,
-    class VertPtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto LenGrad(const VertPtr& vertex) -> T
 {
     T p1{1};
@@ -132,11 +117,8 @@ auto LenGrad(const VertPtr& vertex) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t edge->alpha */
-template <
-    typename T,
-    class VertPtr,
-    class EdgePtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class VertPtr, class EdgePtr,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 {
     T p1{1};
@@ -162,10 +144,7 @@ auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t an edge's alpha */
-template <
-    typename T,
-    class EdgePtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class EdgePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto AlphaGrad(const EdgePtr& edge) -> T
 {
     // δE/δα
@@ -191,10 +170,7 @@ auto AlphaGrad(const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t all parameters */
-template <
-    typename T,
-    class MeshPtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto Gradient(const MeshPtr& mesh) -> T
 {
     T g{0};
@@ -247,12 +223,9 @@ auto Gradient(const MeshPtr& mesh) -> T
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <
-    typename T,
-    class MeshType = detail::ABF::Mesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class ABF
 {
 public:
@@ -277,10 +250,7 @@ public:
     [[nodiscard]] auto iterations() const -> std::size_t { return iters_; }
 
     /** @copydoc ABF::Compute */
-    void compute(typename Mesh::Pointer& mesh)
-    {
-        Compute(mesh, iters_, grad_, maxIters_);
-    }
+    void compute(typename Mesh::Pointer& mesh) { Compute(mesh, iters_, grad_, maxIters_); }
 
     /**
      * @brief Compute parameterized interior angles
@@ -289,11 +259,8 @@ public:
      * to find a solution.
      * @throws MeshException If mesh gradient cannot be calculated.
      */
-    static void Compute(
-        typename Mesh::Pointer& mesh,
-        std::size_t& iters,
-        T& gradient,
-        const std::size_t maxIters = 10)
+    static void Compute(typename Mesh::Pointer& mesh, std::size_t& iters, T& gradient,
+                        const std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
 

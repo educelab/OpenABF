@@ -15,8 +15,7 @@ auto ReadMesh(const std::filesystem::path& path)
     // Open the file
     std::ifstream file(path, std::ios::in);
     if (not file.is_open()) {
-        throw std::runtime_error(
-            "Cannot open file for reading: " + path.string());
+        throw std::runtime_error("Cannot open file for reading: " + path.string());
     }
 
     // Read the mesh
@@ -26,8 +25,7 @@ auto ReadMesh(const std::filesystem::path& path)
     } else if (io_formats::is_file_type<io_formats::PLY>(path)) {
         io_formats::PLY::Read(file, *result);
     } else {
-        throw std::runtime_error(
-            "Unsupported file type: " + path.extension().string());
+        throw std::runtime_error("Unsupported file type: " + path.extension().string());
     }
 
     return result;
@@ -40,8 +38,7 @@ void WriteMesh(const std::filesystem::path& path, const MeshPtr& mesh)
     // Open the file
     std::ofstream file(path, std::ios::out);
     if (not file.is_open()) {
-        throw std::runtime_error(
-            "Cannot open file for writing: " + path.string());
+        throw std::runtime_error("Cannot open file for writing: " + path.string());
     }
 
     // Write the mesh
@@ -50,8 +47,7 @@ void WriteMesh(const std::filesystem::path& path, const MeshPtr& mesh)
     } else if (io_formats::is_file_type<io_formats::PLY>(path)) {
         io_formats::PLY::Write(file, *mesh);
     } else {
-        throw std::runtime_error(
-            "Unsupported file type: " + path.extension().string());
+        throw std::runtime_error("Unsupported file type: " + path.extension().string());
     }
 
     // Close file

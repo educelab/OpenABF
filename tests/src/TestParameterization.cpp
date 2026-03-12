@@ -13,9 +13,8 @@ TEST(Parameterization, AngledBasedLSCM)
     auto mesh = ConstructPyramid<LSCM::Mesh>();
     LSCM::Compute(mesh);
 
-    const std::vector expected{
-        Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.0392305, 0},
-        Vec3f{1, 0.34641013, 0}};
+    const std::vector expected{Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.0392305, 0},
+                               Vec3f{1, 0.34641013, 0}};
     for (auto v = 0; v < mesh->num_vertices(); ++v) {
         const auto& vv = mesh->vertex(v);
         const auto& ve = expected[v];
@@ -34,9 +33,8 @@ TEST(Parameterizations, ABF)
     ABF::Compute(mesh);
     LSCM::Compute(mesh);
 
-    const std::vector expected{
-        Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.7320509, 0},
-        Vec3f{1, 0.5773503, 0}};
+    const std::vector expected{Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.7320509, 0},
+                               Vec3f{1, 0.5773503, 0}};
     for (auto v = 0; v < mesh->num_vertices(); ++v) {
         const auto& vv = mesh->vertex(v);
         const auto& ve = expected[v];
@@ -55,9 +53,8 @@ TEST(Parameterizations, ABFPlusPlus)
     ABF::Compute(mesh);
     LSCM::Compute(mesh);
 
-    const std::vector expected{
-        Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.7320509, 0},
-        Vec3f{1, 0.5773503, 0}};
+    const std::vector expected{Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.7320509, 0},
+                               Vec3f{1, 0.5773503, 0}};
     for (auto v = 0; v < mesh->num_vertices(); ++v) {
         const auto& vv = mesh->vertex(v);
         const auto& ve = expected[v];
