@@ -1,5 +1,14 @@
+@PACKAGE_INIT@
+
 include(CMakeFindDependencyMacro)
 
-find_package(Eigen3 QUIET REQUIRED CONFIG)
+# Attempt to find Eigen3 version 5 quietly
+find_package(Eigen3 5 QUIET CONFIG)
+
+# If version 5 is not found, fall back to version 3.3 using find_dependency
+# find_dependency will automatically forward REQUIRED or QUIET from find_package(OpenABF)
+if(NOT Eigen3_FOUND)
+    find_dependency(Eigen3 3.3 CONFIG)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/OpenABFTargets.cmake")

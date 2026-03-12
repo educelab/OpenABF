@@ -10,12 +10,12 @@ install(
     EXPORT OpenABFTargets
     FILE OpenABFTargets.cmake
     NAMESPACE OpenABF::
-    DESTINATION lib/cmake/OpenABF
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OpenABF
 )
 
 install(
     FILES
         "${CMAKE_CURRENT_BINARY_DIR}/OpenABFConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/OpenABFConfigVersion.cmake"
-    DESTINATION lib/cmake/OpenABF
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OpenABF
 )
