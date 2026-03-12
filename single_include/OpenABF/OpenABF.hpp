@@ -35,9 +35,7 @@ public:
     /** @brief Constructor with message */
     explicit SolverException(const char* msg) : std::runtime_error(msg) {}
     /** @brief Constructor with message */
-    explicit SolverException(const std::string& msg) : std::runtime_error(msg)
-    {
-    }
+    explicit SolverException(const std::string& msg) : std::runtime_error(msg) {}
 };
 
 /** @brief Solver exception */
@@ -75,8 +73,7 @@ template <typename T1, typename T2>
 auto dot(const T1& a, const T2& b)
 {
     using Ret = decltype(*std::begin(a));
-    return std::inner_product(
-        std::begin(a), std::end(a), std::begin(b), Ret(0));
+    return std::inner_product(std::begin(a), std::end(a), std::begin(b), Ret(0));
 }
 /** @brief Vector cross product */
 template <typename T1, typename T2>
@@ -103,20 +100,18 @@ auto norm(const Vector& v, Norm norm = Norm::L2)
     using Ret = decltype(*std::begin(v));
     switch (norm) {
         case Norm::L1: {
-            return std::accumulate(
-                std::begin(v), std::end(v), Ret(0),
-                [](auto a, auto b) { return a + std::abs(b); });
+            return std::accumulate(std::begin(v), std::end(v), Ret(0),
+                                   [](auto a, auto b) { return a + std::abs(b); });
         }
         case Norm::L2: {
-            auto sum = std::accumulate(
-                std::begin(v), std::end(v), Ret(0),
-                [](auto a, auto b) { return a + (b * b); });
+            auto sum = std::accumulate(std::begin(v), std::end(v), Ret(0),
+                                       [](auto a, auto b) { return a + (b * b); });
             return std::sqrt(sum);
         }
         case Norm::LInf: {
-            return std::abs(*std::max_element(
-                std::begin(v), std::end(v),
-                [](auto a, auto b) { return std::abs(a) < std::abs(b); }));
+            return std::abs(*std::max_element(std::begin(v), std::end(v), [](auto a, auto b) {
+                return std::abs(a) < std::abs(b);
+            }));
         }
     }
     throw std::invalid_argument("Invalid norm option");
@@ -137,20 +132,16 @@ auto interior_angle(const Vector1& a, const Vector2& b)
 }
 
 /** @brief Convert degrees to radians */
-template <
-    typename T = float,
-    typename T2,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T = float, typename T2,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_radians(T2 deg) -> T
 {
     return deg * PI<T> / T(180);
 }
 
 /** @brief Convert radians to degrees */
-template <
-    typename T = float,
-    typename T2,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T = float, typename T2,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_degrees(T2 rad) -> T
 {
     return rad * T(180) / PI<T>;
@@ -177,10 +168,7 @@ namespace OpenABF
  * @tparam T Element type
  * @tparam Dims Number of elements
  */
-template <
-    typename T,
-    std::size_t Dims,
-    std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+template <typename T, std::size_t Dims, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
 class Vec
 {
     /** Underlying element storage */
@@ -367,9 +355,7 @@ public:
     }
 
     /** @brief Multiplication assignment operator */
-    template <
-        typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
     Vec& operator*=(const T2& b)
     {
         for (auto& v : val_) {
@@ -387,9 +373,7 @@ public:
     }
 
     /** @brief Division assignment operator */
-    template <
-        typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
     Vec& operator/=(const T2& b)
     {
         for (auto& v : val_) {
@@ -541,8 +525,7 @@ void ComputeFaceAngles(FacePtr& face)
         auto ac = e->next->next->vertex->pos - e->vertex->pos;
         e->alpha = interior_angle(ab, ac);
         if (std::isnan(e->alpha) or std::isinf(e->alpha)) {
-            auto msg = "Interior angle for edge " + std::to_string(e->idx) +
-                       " is nan/inf";
+            auto msg = "Interior angle for edge " + std::to_string(e->idx) + " is nan/inf";
             throw MeshException(msg);
         }
     }
@@ -673,15 +656,12 @@ auto FindEdgePath(const MeshPtr& mesh, std::size_t from, std::size_t to)
 
     // Build a queue
     struct Compare {
-        auto operator()(
-            const typename Node::Ptr& p, const typename Node::Ptr& q) const
-            -> bool
+        auto operator()(const typename Node::Ptr& p, const typename Node::Ptr& q) const -> bool
         {
             return p->dist > q->dist;
         }
     };
-    using Queue = std::priority_queue<
-        typename Node::Ptr, std::vector<typename Node::Ptr>, Compare>;
+    using Queue = std::priority_queue<typename Node::Ptr, std::vector<typename Node::Ptr>, Compare>;
     Queue queue;
     queue.push(nodes[from]);
 
@@ -745,12 +725,9 @@ auto FindEdgePath(const MeshPtr& mesh, std::size_t from, std::size_t to)
  * @tparam EdgeTraits Additional traits for edges
  * @tparam FaceTraits Additional traits for face
  */
-template <
-    typename T,
-    std::size_t Dim = 3,
-    typename VertexTraits = traits::DefaultVertexTraits<T>,
-    typename EdgeTraits = traits::DefaultEdgeTraits<T>,
-    typename FaceTraits = traits::DefaultFaceTraits<T>>
+template <typename T, std::size_t Dim = 3, typename VertexTraits = traits::DefaultVertexTraits<T>,
+          typename EdgeTraits = traits::DefaultEdgeTraits<T>,
+          typename FaceTraits = traits::DefaultFaceTraits<T>>
 class HalfEdgeMesh
 {
 public:
@@ -786,11 +763,9 @@ private:
         /** Value type */
         using value_type = EdgePtr;
         /** Pointer type */
-        using pointer =
-            std::conditional_t<Const, value_type const*, value_type*>;
+        using pointer = std::conditional_t<Const, value_type const*, value_type*>;
         /** Reference type */
-        using reference =
-            std::conditional_t<Const, value_type const&, value_type&>;
+        using reference = std::conditional_t<Const, value_type const&, value_type&>;
         /** Iterator category */
         using iterator_category = std::input_iterator_tag;
 
@@ -822,10 +797,7 @@ private:
             return current_ == other.current_;
         }
         /** Inequality operator */
-        auto operator!=(const FaceIterator& other) const -> bool
-        {
-            return !(*this == other);
-        }
+        auto operator!=(const FaceIterator& other) const -> bool { return !(*this == other); }
         /** Increment operator */
         auto operator++() -> FaceIterator&
         {
@@ -914,16 +886,10 @@ public:
         }
 
         /** @brief Returns if vertex is interior to mesh */
-        [[nodiscard]] auto is_interior() const -> bool
-        {
-            return not is_boundary();
-        }
+        [[nodiscard]] auto is_interior() const -> bool { return not is_boundary(); }
 
         /** @brief Returns if vertex is unreferenced */
-        [[nodiscard]] auto is_unreferenced() const -> bool
-        {
-            return edge == nullptr;
-        }
+        [[nodiscard]] auto is_unreferenced() const -> bool { return edge == nullptr; }
 
         /** @brief Returns if vertex is manifold */
         [[nodiscard]] auto is_manifold() const -> bool
@@ -967,16 +933,10 @@ public:
         }
 
         /** @brief Returns if edge is on mesh boundary */
-        [[nodiscard]] auto is_boundary() const -> bool
-        {
-            return face == nullptr;
-        }
+        [[nodiscard]] auto is_boundary() const -> bool { return face == nullptr; }
 
         /** @brief Edge length */
-        auto magnitude() -> T
-        {
-            return (pair->vertex->pos - vertex->pos).magnitude();
-        }
+        auto magnitude() -> T { return (pair->vertex->pos - vertex->pos).magnitude(); }
 
         /** @brief This edge's adjacent half-edge */
         EdgePtr pair;
@@ -1038,9 +998,7 @@ public:
         auto area() const -> T
         {
             // Get the edge lengths
-            std::array<T, 3> l{
-                head->magnitude(), head->next->magnitude(),
-                head->prev->magnitude()};
+            std::array<T, 3> l{head->magnitude(), head->next->magnitude(), head->prev->magnitude()};
 
             // Sort the side lengths so that a >= b >= c
             std::sort(l.begin(), l.end(), std::greater<T>());
@@ -1049,17 +1007,14 @@ public:
             const auto& a = l[0];
             const auto& b = l[1];
             const auto& c = l[2];
-            auto p =
-                (a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c));
+            auto p = (a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c));
             return 0.25 * std::sqrt(p);
         }
 
         /** @brief Face barycenter (center-of-mass) */
         auto barycenter() const -> Vec<T, 3>
         {
-            return (head->vertex->pos + head->next->vertex->pos +
-                    head->prev->vertex->pos) /
-                   T(3);
+            return (head->vertex->pos + head->next->vertex->pos + head->prev->vertex->pos) / T(3);
         }
 
         /** @brief Unit face normal */
@@ -1187,8 +1142,7 @@ public:
      * @copydoc insert_vertices(const VectorOfVectors&)
      */
     template <typename ValType>
-    auto insert_vertices(
-        std::initializer_list<std::initializer_list<ValType>> v)
+    auto insert_vertices(std::initializer_list<std::initializer_list<ValType>> v)
         -> std::vector<std::size_t>
     {
         auto it = std::begin(v);
@@ -1285,31 +1239,29 @@ public:
         for (const auto& [_, edge] : edges_) {
             if (edge->is_boundary()) {
                 // Get incoming boundary edges to the start point
-                auto inBoundary = detail::erase_if(
-                    incoming_edges(edge->vertex->idx),
-                    [](const auto& e) { return not e->is_boundary(); });
+                auto inBoundary =
+                    detail::erase_if(incoming_edges(edge->vertex->idx),
+                                     [](const auto& e) { return not e->is_boundary(); });
                 if (inBoundary.size() == 0 or inBoundary.size() > 1) {
-                    const std::array<std::size_t, 2> idx{
-                        edge->vertex->idx, edge->pair->vertex->idx};
-                    throw MeshException(
-                        "Cannot update mesh boundary along edge " +
-                        detail::vec_to_string(idx) +
-                        " due to non-manifold surface and/or inconsistent "
-                        "winding order");
+                    const std::array<std::size_t, 2> idx{edge->vertex->idx,
+                                                         edge->pair->vertex->idx};
+                    throw MeshException("Cannot update mesh boundary along edge " +
+                                        detail::vec_to_string(idx) +
+                                        " due to non-manifold surface and/or inconsistent "
+                                        "winding order");
                 }
 
                 // Get outgoing boundary edges to the end point
-                auto outBoundary = detail::erase_if(
-                    outgoing_edges(edge->pair->vertex->idx),
-                    [](const auto& e) { return not e->is_boundary(); });
+                auto outBoundary =
+                    detail::erase_if(outgoing_edges(edge->pair->vertex->idx),
+                                     [](const auto& e) { return not e->is_boundary(); });
                 if (outBoundary.size() == 0 or outBoundary.size() > 1) {
-                    const std::array<std::size_t, 2> idx{
-                        edge->vertex->idx, edge->pair->vertex->idx};
-                    throw MeshException(
-                        "Cannot update mesh boundary along edge " +
-                        detail::vec_to_string(idx) +
-                        " due to non-manifold surface and/or inconsistent "
-                        "winding order");
+                    const std::array<std::size_t, 2> idx{edge->vertex->idx,
+                                                         edge->pair->vertex->idx};
+                    throw MeshException("Cannot update mesh boundary along edge " +
+                                        detail::vec_to_string(idx) +
+                                        " due to non-manifold surface and/or inconsistent "
+                                        "winding order");
                 }
 
                 edge->prev = inBoundary[0];
@@ -1503,9 +1455,8 @@ public:
     auto vertices_interior() const -> std::vector<VertPtr>
     {
         std::vector<VertPtr> ret;
-        std::copy_if(
-            verts_.begin(), verts_.end(), std::back_inserter(ret),
-            [](auto x) { return not x->is_boundary(); });
+        std::copy_if(verts_.begin(), verts_.end(), std::back_inserter(ret),
+                     [](auto x) { return not x->is_boundary(); });
         return ret;
     }
 
@@ -1513,25 +1464,20 @@ public:
     auto vertices_boundary() const -> std::vector<VertPtr>
     {
         std::vector<VertPtr> ret;
-        std::copy_if(
-            verts_.begin(), verts_.end(), std::back_inserter(ret),
-            [](auto x) { return x->is_boundary(); });
+        std::copy_if(verts_.begin(), verts_.end(), std::back_inserter(ret),
+                     [](auto x) { return x->is_boundary(); });
         return ret;
     }
 
     /** @brief Get the number of vertices */
-    [[nodiscard]] auto num_vertices() const -> std::size_t
-    {
-        return verts_.size();
-    }
+    [[nodiscard]] auto num_vertices() const -> std::size_t { return verts_.size(); }
 
     /** @brief Get the number of interior vertices */
     [[nodiscard]] auto num_vertices_interior() const -> std::size_t
     {
-        return std::accumulate(
-            verts_.begin(), verts_.end(), std::size_t{0}, [](auto a, auto b) {
-                return a + static_cast<std::size_t>(not b->is_boundary());
-            });
+        return std::accumulate(verts_.begin(), verts_.end(), std::size_t{0}, [](auto a, auto b) {
+            return a + static_cast<std::size_t>(not b->is_boundary());
+        });
     }
 
     /** @brief Get the number of edges */
@@ -1547,10 +1493,7 @@ public:
     }
 
     /** @brief Get the number of faces */
-    [[nodiscard]] auto num_faces() const -> std::size_t
-    {
-        return faces_.size();
-    }
+    [[nodiscard]] auto num_faces() const -> std::size_t { return faces_.size(); }
 
     /**
      * @brief Split an edge in order to introduce a new boundary
@@ -1591,12 +1534,10 @@ public:
             auto newIdx = insert_vertex(oldStart->pos);
             newStart = verts_.at(newIdx);
 
-            auto in = detail::erase_if(
-                incoming_edges(oldStart->idx),
-                [](auto e) { return not e->is_boundary(); });
-            auto out = detail::erase_if(
-                outgoing_edges(oldStart->idx),
-                [](auto e) { return not e->is_boundary(); });
+            auto in = detail::erase_if(incoming_edges(oldStart->idx),
+                                       [](auto e) { return not e->is_boundary(); });
+            auto out = detail::erase_if(outgoing_edges(oldStart->idx),
+                                        [](auto e) { return not e->is_boundary(); });
             if (in.size() == 0 or out.size() == 0) {
                 throw MeshException("No incoming/outgoing edges");
             }
@@ -1616,12 +1557,10 @@ public:
             auto newIdx = insert_vertex(oldEnd->pos);
             newEnd = verts_.at(newIdx);
 
-            auto in = detail::erase_if(incoming_edges(oldEnd->idx), [](auto e) {
-                return not e->is_boundary();
-            });
-            auto out = detail::erase_if(
-                outgoing_edges(oldEnd->idx),
-                [](auto e) { return not e->is_boundary(); });
+            auto in = detail::erase_if(incoming_edges(oldEnd->idx),
+                                       [](auto e) { return not e->is_boundary(); });
+            auto out = detail::erase_if(outgoing_edges(oldEnd->idx),
+                                        [](auto e) { return not e->is_boundary(); });
             if (in.size() == 0 or out.size() == 0) {
                 throw MeshException("No incoming/outgoing edges");
             }
@@ -1748,9 +1687,8 @@ public:
         const auto range = edges_.equal_range(idx);
         std::vector<EdgePtr> ret;
         ret.reserve(std::distance(range.first, range.second));
-        std::transform(
-            range.first, range.second, std::back_inserter(ret),
-            [](auto it) { return it.second; });
+        std::transform(range.first, range.second, std::back_inserter(ret),
+                       [](auto it) { return it.second; });
         return ret;
     }
 
@@ -1760,9 +1698,8 @@ public:
         auto outEdges = outgoing_edges(idx);
         std::vector<EdgePtr> ret;
         ret.reserve(outEdges.size());
-        std::transform(
-            outEdges.begin(), outEdges.end(), std::back_inserter(ret),
-            [](auto e) { return e->pair; });
+        std::transform(outEdges.begin(), outEdges.end(), std::back_inserter(ret),
+                       [](auto e) { return e->pair; });
         return ret;
     }
 
@@ -1774,8 +1711,7 @@ private:
      * @param face Pre-existing Face (only used when cloning)
      */
     template <class Vector>
-    auto insert_face_(const Vector& vector, FacePtr face = nullptr)
-        -> std::size_t
+    auto insert_face_(const Vector& vector, FacePtr face = nullptr) -> std::size_t
     {
         // Make a new face structure
         if (not face) {
@@ -1789,8 +1725,7 @@ private:
         std::vector<IDPair> endPts;
         for (std::size_t i = 0; i < std::size(vector); ++i) {
             auto nextIdx = i == std::size(vector) - 1 ? 0 : i + 1;
-            endPts.emplace_back(
-                std::begin(vector)[i], std::begin(vector)[nextIdx]);
+            endPts.emplace_back(std::begin(vector)[i], std::begin(vector)[nextIdx]);
         }
 
         // Create a new edge for every edge pair
@@ -1861,8 +1796,7 @@ private:
                         const auto msg =
                             "Attempted to add non-manifold face "
                             "along edge with vids=[" +
-                            std::to_string(startIdx) + ", " +
-                            std::to_string(endIdx) + "]";
+                            std::to_string(startIdx) + ", " + std::to_string(endIdx) + "]";
                         throw MeshException(msg);
                     }
                     e = pair;
@@ -1895,8 +1829,7 @@ private:
         // Sanity check: edge lengths
         for (const auto& e : *face) {
             if (norm(e->next->vertex->pos - e->vertex->pos) == 0.0) {
-                auto msg = "Zero-length edge (" +
-                           std::to_string(e->vertex->idx) + ", " +
+                auto msg = "Zero-length edge (" + std::to_string(e->vertex->idx) + ", " +
                            std::to_string(e->next->vertex->idx) + ")";
                 throw MeshException(msg);
             }
@@ -2024,12 +1957,8 @@ namespace detail::ABF
 
 /** @brief A HalfEdgeMesh with the %ABF traits */
 template <typename T>
-using Mesh = HalfEdgeMesh<
-    T,
-    3,
-    traits::ABFVertexTraits<T>,
-    traits::ABFEdgeTraits<T>,
-    traits::ABFFaceTraits<T>>;
+using Mesh = HalfEdgeMesh<T, 3, traits::ABFVertexTraits<T>, traits::ABFEdgeTraits<T>,
+                          traits::ABFFaceTraits<T>>;
 
 /** @brief Initialize the %ABF angles and weights from the edge alpha values */
 template <typename T, class MeshPtr>
@@ -2039,8 +1968,7 @@ void InitializeAnglesAndWeights(MeshPtr& m)
     static constexpr auto MinAngle = PI<T> / T(180);
     static constexpr auto MaxAngle = PI<T> - MinAngle;
     for (auto& e : m->edges()) {
-        e->alpha = e->beta = e->phi =
-            std::min(std::max(e->alpha, MinAngle), MaxAngle);
+        e->alpha = e->beta = e->phi = std::min(std::max(e->alpha, MinAngle), MaxAngle);
         e->alpha_sin = std::sin(e->alpha);
         e->alpha_cos = std::cos(e->alpha);
         e->weight = T(1) / (e->phi * e->phi);
@@ -2049,9 +1977,8 @@ void InitializeAnglesAndWeights(MeshPtr& m)
     // Update weights for interior vertices
     for (auto& v : m->vertices_interior()) {
         auto wheel = v->wheel();
-        auto angle_sum = std::accumulate(
-            wheel.begin(), wheel.end(), T(0),
-            [](auto a, auto b) { return a + b->beta; });
+        auto angle_sum = std::accumulate(wheel.begin(), wheel.end(), T(0),
+                                         [](auto a, auto b) { return a + b->beta; });
         for (auto& e : wheel) {
             e->phi *= 2 * PI<T> / angle_sum;
             e->weight = T(1) / (e->phi * e->phi);
@@ -2060,10 +1987,7 @@ void InitializeAnglesAndWeights(MeshPtr& m)
 }
 
 /** @brief Compute ∇CTri w.r.t LambdaTri == CTri */
-template <
-    typename T,
-    class FacePtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class FacePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto TriGrad(const FacePtr& f) -> T
 {
     T g = -PI<T>;
@@ -2074,10 +1998,7 @@ auto TriGrad(const FacePtr& f) -> T
 }
 
 /** @brief Compute ∇CPlan w.r.t LambdaPlan == CPlan */
-template <
-    typename T,
-    class VertPtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto PlanGrad(const VertPtr& v) -> T
 {
     auto edges = v->wheel();
@@ -2089,10 +2010,7 @@ auto PlanGrad(const VertPtr& v) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t LambdaLen == CLen */
-template <
-    typename T,
-    class VertPtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto LenGrad(const VertPtr& vertex) -> T
 {
     T p1{1};
@@ -2105,11 +2023,8 @@ auto LenGrad(const VertPtr& vertex) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t edge->alpha */
-template <
-    typename T,
-    class VertPtr,
-    class EdgePtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class VertPtr, class EdgePtr,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 {
     T p1{1};
@@ -2135,10 +2050,7 @@ auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t an edge's alpha */
-template <
-    typename T,
-    class EdgePtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class EdgePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto AlphaGrad(const EdgePtr& edge) -> T
 {
     // δE/δα
@@ -2164,10 +2076,7 @@ auto AlphaGrad(const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t all parameters */
-template <
-    typename T,
-    class MeshPtr,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto Gradient(const MeshPtr& mesh) -> T
 {
     T g{0};
@@ -2220,12 +2129,9 @@ auto Gradient(const MeshPtr& mesh) -> T
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <
-    typename T,
-    class MeshType = detail::ABF::Mesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class ABF
 {
 public:
@@ -2250,10 +2156,7 @@ public:
     [[nodiscard]] auto iterations() const -> std::size_t { return iters_; }
 
     /** @copydoc ABF::Compute */
-    void compute(typename Mesh::Pointer& mesh)
-    {
-        Compute(mesh, iters_, grad_, maxIters_);
-    }
+    void compute(typename Mesh::Pointer& mesh) { Compute(mesh, iters_, grad_, maxIters_); }
 
     /**
      * @brief Compute parameterized interior angles
@@ -2262,11 +2165,8 @@ public:
      * to find a solution.
      * @throws MeshException If mesh gradient cannot be calculated.
      */
-    static void Compute(
-        typename Mesh::Pointer& mesh,
-        std::size_t& iters,
-        T& gradient,
-        const std::size_t maxIters = 10)
+    static void Compute(typename Mesh::Pointer& mesh, std::size_t& iters, T& gradient,
+                        const std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
 
@@ -2476,12 +2376,9 @@ namespace OpenABF
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <
-    typename T,
-    class MeshType = detail::ABF::Mesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class ABFPlusPlus
 {
 public:
@@ -2506,10 +2403,7 @@ public:
     [[nodiscard]] auto iterations() const -> std::size_t { return iters_; }
 
     /** @copydoc ABFPlusPlus::Compute */
-    void compute(typename Mesh::Pointer& mesh)
-    {
-        Compute(mesh, iters_, grad_, maxIters_);
-    }
+    void compute(typename Mesh::Pointer& mesh) { Compute(mesh, iters_, grad_, maxIters_); }
 
     /**
      * @brief Compute parameterized interior angles
@@ -2518,11 +2412,8 @@ public:
      * to find a solution.
      * @throws MeshException If mesh gradient cannot be calculated.
      */
-    static void Compute(
-        typename Mesh::Pointer& mesh,
-        std::size_t& iters,
-        T& gradient,
-        const std::size_t maxIters = 10)
+    static void Compute(typename Mesh::Pointer& mesh, std::size_t& iters, T& gradient,
+                        const std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
 
@@ -2633,15 +2524,13 @@ public:
 
             SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
             for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
-                for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k);
-                     it; ++it) {
+                for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k); it; ++it) {
                     it.valueRef() = 1.F / it.value();
                 }
             }
             auto Jstar = JLiJt.block(faceCnt, 0, 2 * vIntCnt, faceCnt);
             auto JstarT = JLiJt.block(0, faceCnt, faceCnt, 2 * vIntCnt);
-            auto Jstar2 =
-                JLiJt.block(faceCnt, faceCnt, 2 * vIntCnt, 2 * vIntCnt);
+            auto Jstar2 = JLiJt.block(faceCnt, faceCnt, 2 * vIntCnt, 2 * vIntCnt);
             auto bstar1 = bstar.block(0, 0, faceCnt, 1);
             auto bstar2 = bstar.block(faceCnt, 0, 2 * vIntCnt, 1);
 
@@ -2660,17 +2549,14 @@ public:
             }
 
             // Compute Eq. 17 -> delta_lambda_1
-            auto deltaLambda1 =
-                LambdaStarInv * (bstar1 - JstarT * deltaLambda2);
+            auto deltaLambda1 = LambdaStarInv * (bstar1 - JstarT * deltaLambda2);
 
             // Construct deltaLambda
-            DenseVector deltaLambda(
-                deltaLambda1.rows() + deltaLambda2.rows(), 1);
+            DenseVector deltaLambda(deltaLambda1.rows() + deltaLambda2.rows(), 1);
             deltaLambda << DenseVector(deltaLambda1), DenseVector(deltaLambda2);
 
             // Compute Eq. 10 -> delta_alpha
-            DenseVector deltaAlpha =
-                LambdaInv * (b1 - J.transpose() * deltaLambda);
+            DenseVector deltaAlpha = LambdaInv * (b1 - J.transpose() * deltaLambda);
 
             // lambda += delta_lambda
             for (auto& f : mesh->faces()) {
@@ -2750,12 +2636,8 @@ constexpr bool is_instance_of_v<U<Vs...>, U> = std::true_type{};
 
 /** Solve least squares using A'Ab  */
 template <
-    class SparseMatrix,
-    class DenseMatrix,
-    class Solver,
-    std::enable_if_t<
-        !is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
-        bool> = false>
+    class SparseMatrix, class DenseMatrix, class Solver,
+    std::enable_if_t<!is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = false>
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Setup AtA and solver
@@ -2778,12 +2660,8 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 
 /** Solve least squares with LeastSquaresConjugateGradient */
 template <
-    class SparseMatrix,
-    class DenseMatrix,
-    class Solver,
-    std::enable_if_t<
-        is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
-        bool> = true>
+    class SparseMatrix, class DenseMatrix, class Solver,
+    std::enable_if_t<is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = true>
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Solve
@@ -2822,12 +2700,9 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <
-    typename T,
-    class MeshType = HalfEdgeMesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = HalfEdgeMesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class AngleBasedLSCM
 {
 public:
@@ -3009,8 +2884,7 @@ public:
         SparseMatrix b = bFree * bFixed * -1;
 
         // Solve for x
-        auto x =
-            detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(A, b);
+        auto x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(A, b);
 
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices
@@ -3057,8 +2931,7 @@ namespace OpenABF::io_utils
 {
 
 /** @brief Compare two string_views, ignoring case */
-static auto icase_compare(const std::string_view a, const std::string_view b)
-    -> bool
+static auto icase_compare(const std::string_view a, const std::string_view b) -> bool
 {
     // not the same length
     if (a.length() != b.length()) {
@@ -3080,9 +2953,8 @@ static auto icase_compare(const std::string_view a, const std::string_view b)
 static auto trim_left(std::string_view s) -> std::string_view
 {
     const auto& loc = std::locale();
-    const auto* start = std::find_if_not(
-        std::begin(s), std::end(s),
-        [&loc](auto ch) -> bool { return std::isspace(ch, loc); });
+    const auto* start = std::find_if_not(std::begin(s), std::end(s),
+                                         [&loc](auto ch) -> bool { return std::isspace(ch, loc); });
     s.remove_prefix(std::distance(std::begin(s), start));
     return s;
 }
@@ -3091,10 +2963,9 @@ static auto trim_left(std::string_view s) -> std::string_view
 static auto trim_right(std::string_view s) -> std::string_view
 {
     const auto& loc = std::locale();
-    const auto* start =
-        std::find_if_not(s.rbegin(), s.rend(), [&loc](auto ch) -> bool {
-            return std::isspace(ch, loc);
-        }).base();
+    const auto* start = std::find_if_not(s.rbegin(), s.rend(), [&loc](auto ch) -> bool {
+                            return std::isspace(ch, loc);
+                        }).base();
     s.remove_suffix(std::distance(start, std::end(s)));
     return s;
 }
@@ -3118,8 +2989,7 @@ static auto trim(std::string_view s) -> std::string_view
  * ```
  */
 template <typename... Ds>
-static auto split(std::string_view s, const Ds&... ds)
-    -> std::vector<std::string_view>
+static auto split(std::string_view s, const Ds&... ds) -> std::vector<std::string_view>
 {
     constexpr std::string_view DEFAULT_DELIM{" "};
 
@@ -3132,9 +3002,7 @@ static auto split(std::string_view s, const Ds&... ds)
     }
 
     // Get a list of all delimiter start pos and sizes
-    std::vector<
-        std::pair<std::string_view::size_type, std::string_view::size_type>>
-        delimPos;
+    std::vector<std::pair<std::string_view::size_type, std::string_view::size_type>> delimPos;
     for (const auto& delim : delimiters) {
         auto b = s.find(delim, 0);
         while (b != std::string_view::npos) {
@@ -3144,12 +3012,10 @@ static auto split(std::string_view s, const Ds&... ds)
     }
 
     // Sort the delimiter start positions by first and largest
-    std::sort(
-        delimPos.begin(), delimPos.end(),
-        [](const auto& l, const auto& r) { return l.second > r.second; });
-    std::sort(
-        delimPos.begin(), delimPos.end(),
-        [](const auto& l, const auto& r) { return l.first < r.first; });
+    std::sort(delimPos.begin(), delimPos.end(),
+              [](const auto& l, const auto& r) { return l.second > r.second; });
+    std::sort(delimPos.begin(), delimPos.end(),
+              [](const auto& l, const auto& r) { return l.first < r.first; });
 
     // Split string
     std::vector<std::string_view> tokens;
@@ -3291,10 +3157,7 @@ static auto is_file_type(const std::filesystem::path& path)
  */
 struct OBJ {
     /** @brief List of recognized file format extensions */
-    static auto Extensions() -> std::vector<std::string_view>
-    {
-        return {"obj"};
-    }
+    static auto Extensions() -> std::vector<std::string_view> { return {"obj"}; }
 
     /** Read the file stream into the provided object */
     template <typename MeshType>
@@ -3322,9 +3185,8 @@ struct OBJ {
             // Handle vertices
             if (parts[0] == "v") {
                 std::vector<T> v;
-                std::transform(
-                    parts.begin() + 1, parts.end(), std::back_inserter(v),
-                    to_numeric<T>);
+                std::transform(parts.begin() + 1, parts.end(), std::back_inserter(v),
+                               to_numeric<T>);
                 mesh.insert_vertex(v);
             }
 
@@ -3333,9 +3195,7 @@ struct OBJ {
                 std::vector<std::size_t> indices;
                 std::transform(
                     parts.begin() + 1, parts.end(), std::back_inserter(indices),
-                    [](const auto& p) {
-                        return to_numeric<std::size_t>(split(p, "/")[0]) - 1;
-                    });
+                    [](const auto& p) { return to_numeric<std::size_t>(split(p, "/")[0]) - 1; });
                 mesh.insert_face(indices);
             }
         }
@@ -3358,8 +3218,7 @@ struct OBJ {
             for (const auto& a : v->pos) {
                 auto res = std::to_chars(buf, buf + bufSize, a);
                 if (res.ec != std::errc()) {
-                    throw std::runtime_error(
-                        std::make_error_code(res.ec).message());
+                    throw std::runtime_error(std::make_error_code(res.ec).message());
                 }
                 os << ' ' << std::string_view(buf, res.ptr - buf);
             }
@@ -3370,8 +3229,7 @@ struct OBJ {
             for (const auto& a : v->normal()) {
                 auto res = std::to_chars(buf, buf + bufSize, a);
                 if (res.ec != std::errc()) {
-                    throw std::runtime_error(
-                        std::make_error_code(res.ec).message());
+                    throw std::runtime_error(std::make_error_code(res.ec).message());
                 }
                 os << ' ' << std::string_view(buf, res.ptr - buf);
             }
@@ -3383,11 +3241,9 @@ struct OBJ {
             const auto f = mesh.face(i);
             os << "f";
             for (const auto& e : *f) {
-                auto res =
-                    std::to_chars(buf, buf + bufSize, e->vertex->idx + 1);
+                auto res = std::to_chars(buf, buf + bufSize, e->vertex->idx + 1);
                 if (res.ec != std::errc()) {
-                    throw std::runtime_error(
-                        std::make_error_code(res.ec).message());
+                    throw std::runtime_error(std::make_error_code(res.ec).message());
                 }
                 // write vertex and normal IDs
                 const auto id = std::string_view(buf, res.ptr - buf);
@@ -3419,10 +3275,7 @@ struct OBJ {
  */
 struct PLY {
     /** @brief List of recognized file format extensions */
-    static auto Extensions() -> std::vector<std::string_view>
-    {
-        return {"ply"};
-    }
+    static auto Extensions() -> std::vector<std::string_view> { return {"ply"}; }
 
     /** Read the file stream into the provided object */
     template <typename MeshType>
@@ -3445,8 +3298,7 @@ struct PLY {
             throw std::runtime_error("File header missing format declaration");
         }
         if (fmtParts[1] != "ascii") {
-            const auto fmt =
-                std::string(fmtParts[1]) + " " + std::string(fmtParts[2]);
+            const auto fmt = std::string(fmtParts[1]) + " " + std::string(fmtParts[2]);
             throw std::runtime_error("Unsupported ply format: " + fmt);
         }
 
@@ -3487,22 +3339,19 @@ struct PLY {
             // Handle elements
             if (parts[0] == "element") {
                 elements.push_back(
-                    {.label = std::string(parts[1]),
-                     .count = to_numeric<std::uint32_t>(parts[2])});
+                    {.label = std::string(parts[1]), .count = to_numeric<std::uint32_t>(parts[2])});
             }
 
             // Handle properties for the most recent element
             else if (parts[0] == "property") {
                 if (parts[1] == "list") {
-                    elements.back().properties.push_back(
-                        {.is_list = true,
-                         .list_count_type = std::string(parts[2]),
-                         .label = std::string(parts[4]),
-                         .type = std::string(parts[3])});
+                    elements.back().properties.push_back({.is_list = true,
+                                                          .list_count_type = std::string(parts[2]),
+                                                          .label = std::string(parts[4]),
+                                                          .type = std::string(parts[3])});
                 } else {
                     elements.back().properties.push_back(
-                        {.label = std::string(parts[2]),
-                         .type = std::string(parts[1])});
+                        {.label = std::string(parts[2]), .type = std::string(parts[1])});
                 }
             }
 
@@ -3515,9 +3364,8 @@ struct PLY {
         // Set up vertex map: v[n] -> property[m]
         // Probably unnecessary
         std::array<std::size_t, 3> vmap{};
-        auto v_elem = std::find_if(
-            elements.begin(), elements.end(),
-            [](const auto& e) { return e.label == "vertex"; });
+        auto v_elem = std::find_if(elements.begin(), elements.end(),
+                                   [](const auto& e) { return e.label == "vertex"; });
         if (v_elem == elements.end()) {
             throw std::runtime_error("Did not find vertex element");
         }
@@ -3541,10 +3389,8 @@ struct PLY {
                     std::getline(is, line);
                     const auto line_view = trim(line);
                     const auto parts = split(line_view);
-                    mesh.insert_vertex(
-                        to_numeric<T>(parts[vmap[0]]),
-                        to_numeric<T>(parts[vmap[1]]),
-                        to_numeric<T>(parts[vmap[2]]));
+                    mesh.insert_vertex(to_numeric<T>(parts[vmap[0]]), to_numeric<T>(parts[vmap[1]]),
+                                       to_numeric<T>(parts[vmap[2]]));
                 }
 
                 // parse face line
@@ -3553,14 +3399,12 @@ struct PLY {
                     const auto line_view = trim(line);
                     const auto parts = split(line_view);
                     if (parts[0] != "3") {
-                        throw std::runtime_error(
-                            "Unsupported number of vertices in face: " +
-                            std::string(parts[0]));
+                        throw std::runtime_error("Unsupported number of vertices in face: " +
+                                                 std::string(parts[0]));
                     }
-                    mesh.insert_face(
-                        to_numeric<std::size_t>(parts[1]),
-                        to_numeric<std::size_t>(parts[2]),
-                        to_numeric<std::size_t>(parts[3]));
+                    mesh.insert_face(to_numeric<std::size_t>(parts[1]),
+                                     to_numeric<std::size_t>(parts[2]),
+                                     to_numeric<std::size_t>(parts[3]));
                 }
 
                 // ignore unrecognized element
@@ -3643,8 +3487,7 @@ auto ReadMesh(const std::filesystem::path& path)
     // Open the file
     std::ifstream file(path, std::ios::in);
     if (not file.is_open()) {
-        throw std::runtime_error(
-            "Cannot open file for reading: " + path.string());
+        throw std::runtime_error("Cannot open file for reading: " + path.string());
     }
 
     // Read the mesh
@@ -3654,8 +3497,7 @@ auto ReadMesh(const std::filesystem::path& path)
     } else if (io_formats::is_file_type<io_formats::PLY>(path)) {
         io_formats::PLY::Read(file, *result);
     } else {
-        throw std::runtime_error(
-            "Unsupported file type: " + path.extension().string());
+        throw std::runtime_error("Unsupported file type: " + path.extension().string());
     }
 
     return result;
@@ -3668,8 +3510,7 @@ void WriteMesh(const std::filesystem::path& path, const MeshPtr& mesh)
     // Open the file
     std::ofstream file(path, std::ios::out);
     if (not file.is_open()) {
-        throw std::runtime_error(
-            "Cannot open file for writing: " + path.string());
+        throw std::runtime_error("Cannot open file for writing: " + path.string());
     }
 
     // Write the mesh
@@ -3678,8 +3519,7 @@ void WriteMesh(const std::filesystem::path& path, const MeshPtr& mesh)
     } else if (io_formats::is_file_type<io_formats::PLY>(path)) {
         io_formats::PLY::Write(file, *mesh);
     } else {
-        throw std::runtime_error(
-            "Unsupported file type: " + path.extension().string());
+        throw std::runtime_error("Unsupported file type: " + path.extension().string());
     }
 
     // Close file

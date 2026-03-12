@@ -16,10 +16,7 @@ namespace OpenABF
  * @tparam T Element type
  * @tparam Dims Number of elements
  */
-template <
-    typename T,
-    std::size_t Dims,
-    std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+template <typename T, std::size_t Dims, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
 class Vec
 {
     /** Underlying element storage */
@@ -206,9 +203,7 @@ public:
     }
 
     /** @brief Multiplication assignment operator */
-    template <
-        typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
     Vec& operator*=(const T2& b)
     {
         for (auto& v : val_) {
@@ -226,9 +221,7 @@ public:
     }
 
     /** @brief Division assignment operator */
-    template <
-        typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
     Vec& operator/=(const T2& b)
     {
         for (auto& v : val_) {

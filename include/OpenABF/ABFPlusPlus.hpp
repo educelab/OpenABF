@@ -35,12 +35,9 @@ namespace OpenABF
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <
-    typename T,
-    class MeshType = detail::ABF::Mesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class ABFPlusPlus
 {
 public:
@@ -65,10 +62,7 @@ public:
     [[nodiscard]] auto iterations() const -> std::size_t { return iters_; }
 
     /** @copydoc ABFPlusPlus::Compute */
-    void compute(typename Mesh::Pointer& mesh)
-    {
-        Compute(mesh, iters_, grad_, maxIters_);
-    }
+    void compute(typename Mesh::Pointer& mesh) { Compute(mesh, iters_, grad_, maxIters_); }
 
     /**
      * @brief Compute parameterized interior angles
@@ -77,11 +71,8 @@ public:
      * to find a solution.
      * @throws MeshException If mesh gradient cannot be calculated.
      */
-    static void Compute(
-        typename Mesh::Pointer& mesh,
-        std::size_t& iters,
-        T& gradient,
-        const std::size_t maxIters = 10)
+    static void Compute(typename Mesh::Pointer& mesh, std::size_t& iters, T& gradient,
+                        const std::size_t maxIters = 10)
     {
         using namespace detail::ABF;
 
@@ -192,15 +183,13 @@ public:
 
             SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
             for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
-                for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k);
-                     it; ++it) {
+                for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k); it; ++it) {
                     it.valueRef() = 1.F / it.value();
                 }
             }
             auto Jstar = JLiJt.block(faceCnt, 0, 2 * vIntCnt, faceCnt);
             auto JstarT = JLiJt.block(0, faceCnt, faceCnt, 2 * vIntCnt);
-            auto Jstar2 =
-                JLiJt.block(faceCnt, faceCnt, 2 * vIntCnt, 2 * vIntCnt);
+            auto Jstar2 = JLiJt.block(faceCnt, faceCnt, 2 * vIntCnt, 2 * vIntCnt);
             auto bstar1 = bstar.block(0, 0, faceCnt, 1);
             auto bstar2 = bstar.block(faceCnt, 0, 2 * vIntCnt, 1);
 
@@ -219,17 +208,14 @@ public:
             }
 
             // Compute Eq. 17 -> delta_lambda_1
-            auto deltaLambda1 =
-                LambdaStarInv * (bstar1 - JstarT * deltaLambda2);
+            auto deltaLambda1 = LambdaStarInv * (bstar1 - JstarT * deltaLambda2);
 
             // Construct deltaLambda
-            DenseVector deltaLambda(
-                deltaLambda1.rows() + deltaLambda2.rows(), 1);
+            DenseVector deltaLambda(deltaLambda1.rows() + deltaLambda2.rows(), 1);
             deltaLambda << DenseVector(deltaLambda1), DenseVector(deltaLambda2);
 
             // Compute Eq. 10 -> delta_alpha
-            DenseVector deltaAlpha =
-                LambdaInv * (b1 - J.transpose() * deltaLambda);
+            DenseVector deltaAlpha = LambdaInv * (b1 - J.transpose() * deltaLambda);
 
             // lambda += delta_lambda
             for (auto& f : mesh->faces()) {

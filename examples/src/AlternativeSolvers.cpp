@@ -19,17 +19,15 @@ auto main() -> int
     using Mesh = OpenABF::detail::ABF::Mesh<float>;
     using Vec3f = OpenABF::Vec3f;
     // Define the solvers and methods
-    using ABFSolver =
-        Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
+    using ABFSolver = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
     using ABF = OpenABF::ABFPlusPlus<float, Mesh, ABFSolver>;
     using LSCMSolver = Eigen::LeastSquaresConjugateGradient<Mtx>;
     using LSCM = OpenABF::AngleBasedLSCM<float, ABF::Mesh, LSCMSolver>;
 
     // Pre-define vertices list
-    const std::vector vertices = {
-        Vec3f{0.f, 0.f, 0.f}, Vec3f{2.f, 0.f, 0.f},
-        Vec3f{1.f, std::sqrt(3.f), 0.f},
-        Vec3f{1.f, std::sqrt(3.f) / 3.f, std::sqrt(6.f) * 2.f / 3.f}};
+    const std::vector vertices = {Vec3f{0.f, 0.f, 0.f}, Vec3f{2.f, 0.f, 0.f},
+                                  Vec3f{1.f, std::sqrt(3.f), 0.f},
+                                  Vec3f{1.f, std::sqrt(3.f) / 3.f, std::sqrt(6.f) * 2.f / 3.f}};
 
     // Create the 4 pyramid vertices
     auto mesh = ABF::Mesh::New();
@@ -50,8 +48,7 @@ auto main() -> int
 
     // Print flattened positions
     for (const auto& v : mesh->vertices()) {
-        std::cout << v->idx << ": " << vertices[v->idx] << " -> " << v->pos
-                  << std::endl;
+        std::cout << v->idx << ": " << vertices[v->idx] << " -> " << v->pos << std::endl;
     }
 
     // Write the flattened mesh

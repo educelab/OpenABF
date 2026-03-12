@@ -24,12 +24,17 @@ variables:
 
 format-check:
   stage: lint
-  image: debian:bookworm
+  image: ubuntu:24.04
   allow_failure: true
   before_script:
-    - apt-get update -y && apt-get install -y clang-format
+    - apt-get update -y && apt-get install -y clang-format git
   script:
-    - find include/ examples/ tests/ -name "*.hpp" -o -name "*.cpp" | xargs clang-format --dry-run -Werror
+    - |
+      find include/ examples/ tests/ -name "*.hpp" -o -name "*.cpp" | xargs clang-format -i
+      git diff --exit-code || {
+        echo "Formatting check failed! See differences above."
+        exit 1
+      }
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "develop"

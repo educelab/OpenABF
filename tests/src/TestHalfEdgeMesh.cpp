@@ -215,14 +215,7 @@ TEST(HalfEdgeMesh, TwoStageSplit)
     EXPECT_EQ(mesh->num_connected_components(), 0);
 
     const auto fids = mesh->insert_faces(
-        {{0, 3, 1},
-         {1, 3, 4},
-         {1, 4, 2},
-         {2, 4, 5},
-         {3, 6, 4},
-         {4, 6, 7},
-         {4, 7, 5},
-         {5, 7, 8}});
+        {{0, 3, 1}, {1, 3, 4}, {1, 4, 2}, {2, 4, 5}, {3, 6, 4}, {4, 6, 7}, {4, 7, 5}, {5, 7, 8}});
     EXPECT_EQ(mesh->num_connected_components(), 1);
 
     // Insert one seam
@@ -250,14 +243,7 @@ TEST(HalfEdgeMesh, FindPath)
     });
 
     const auto fids = mesh->insert_faces(
-        {{0, 3, 1},
-         {1, 3, 4},
-         {1, 4, 2},
-         {2, 4, 5},
-         {3, 6, 4},
-         {4, 6, 7},
-         {4, 7, 8},
-         {5, 4, 8}});
+        {{0, 3, 1}, {1, 3, 4}, {1, 4, 2}, {2, 4, 5}, {3, 6, 4}, {4, 6, 7}, {4, 7, 8}, {5, 4, 8}});
 
     const auto path = FindEdgePath(mesh, 1, 8);
     std::vector<std::size_t> indices;

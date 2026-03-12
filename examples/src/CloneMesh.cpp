@@ -15,10 +15,9 @@ int main()
     using Vec3f = OpenABF::Vec3f;
 
     // Pre-define vertices list
-    const std::vector vertices = {
-        Vec3f{0.f, 0.f, 0.f}, Vec3f{2.f, 0.f, 0.f},
-        Vec3f{1.f, std::sqrt(3.f), 0.f},
-        Vec3f{1.f, std::sqrt(3.f) / 3.f, std::sqrt(6.f) * 2.f / 3.f}};
+    const std::vector vertices = {Vec3f{0.f, 0.f, 0.f}, Vec3f{2.f, 0.f, 0.f},
+                                  Vec3f{1.f, std::sqrt(3.f), 0.f},
+                                  Vec3f{1.f, std::sqrt(3.f) / 3.f, std::sqrt(6.f) * 2.f / 3.f}};
 
     // Create the 4 pyramid vertices
     const auto original = ABF::Mesh::New();
