@@ -1,0 +1,52 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [ develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} (Multiheader=${{ matrix.multiheader }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        multiheader: [ON, OFF]
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libeigen3-dev cmake ninja-build build-essential ${{ matrix.compiler }}
+
+      - name: Configure CMake
+        run: |
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
+            -DOPENABF_MULTIHEADER=${{ matrix.multiheader }} \
+            -DOPENABF_BUILD_TESTS=ON \
+            -DOPENABF_BUILD_EXAMPLES=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: |
+          cd build
+          ctest --output-on-failure

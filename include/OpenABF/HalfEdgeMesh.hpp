@@ -383,6 +383,7 @@ private:
             }
             return *this;
         }
+
     private:
         /** Pointer to beginning of face */
         EdgePtr head_;

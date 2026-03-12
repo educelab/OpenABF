@@ -1,8 +1,81 @@
+#include <cmath>
+#include <sstream>
 #include <gtest/gtest.h>
 
 #include "OpenABF/OpenABF.hpp"
 
 using namespace OpenABF;
+
+TEST(Vec, Constructor)
+{
+    Vec3f a;
+    EXPECT_EQ(a[0], 0.f);
+    EXPECT_EQ(a[1], 0.f);
+    EXPECT_EQ(a[2], 0.f);
+
+    Vec3f b(1, 2, 3);
+    Vec3f c(b);
+    EXPECT_EQ(c, b);
+}
+
+TEST(Vec, Accessors)
+{
+    Vec3f a(1, 2, 3);
+    EXPECT_EQ(a.at(0), 1.f);
+    EXPECT_EQ(a.at(1), 2.f);
+    EXPECT_EQ(a.at(2), 3.f);
+    EXPECT_THROW(a.at(3), std::out_of_range);
+
+    EXPECT_EQ(a.front(), 1.f);
+    EXPECT_EQ(a.back(), 3.f);
+    EXPECT_NE(a.data(), nullptr);
+}
+
+TEST(Vec, Modifiers)
+{
+    Vec3f a;
+    a.fill(5.f);
+    EXPECT_EQ(a, Vec3f(5, 5, 5));
+
+    Vec3f b(1, 2, 3);
+    a.swap(b);
+    EXPECT_EQ(a, Vec3f(1, 2, 3));
+    EXPECT_EQ(b, Vec3f(5, 5, 5));
+}
+
+TEST(Vec, Comparison)
+{
+    Vec3f a(1, 2, 3);
+    Vec3f b(1, 2, 4);
+    EXPECT_TRUE(a != b);
+    EXPECT_FALSE(a == b);
+}
+
+TEST(Vec, Assignment)
+{
+    Vec3f a(1, 2, 3);
+    Vec3f b;
+    b = a;
+    EXPECT_EQ(b, a);
+
+    Vec3f c;
+    c = {4.f, 5.f, 6.f};
+    EXPECT_EQ(c, Vec3f(4, 5, 6));
+}
+
+TEST(Vec, Ostream)
+{
+    Vec3f a(1, 2, 3);
+    std::stringstream ss;
+    ss << a;
+    EXPECT_EQ(ss.str(), "[1, 2, 3]");
+}
+
+TEST(Vec, Vec3d)
+{
+    Vec3d a(1.0, 2.0, 3.0);
+    EXPECT_EQ(a.magnitude(), std::sqrt(14.0));
+}
 
 TEST(Vec, OperatorPlus)
 {
