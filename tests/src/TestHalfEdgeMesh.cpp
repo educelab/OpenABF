@@ -255,6 +255,26 @@ TEST(HalfEdgeMesh, FindPath)
     EXPECT_EQ(indices, expected);
 }
 
+TEST(HalfEdgeMesh, FindPath_Disconnected)
+{
+    // Build two disconnected triangles (separate connected components)
+    const auto mesh = MeshType::New();
+    // CC1: vertices 0-2
+    mesh->insert_vertex(0, 0, 0);
+    mesh->insert_vertex(1, 0, 0);
+    mesh->insert_vertex(0, 1, 0);
+    mesh->insert_face(0, 2, 1);
+    // CC2: vertices 3-5
+    mesh->insert_vertex(5, 0, 0);
+    mesh->insert_vertex(6, 0, 0);
+    mesh->insert_vertex(5, 1, 0);
+    mesh->insert_face(3, 5, 4);
+
+    // Path between vertices in different CCs should be empty
+    const auto path = FindEdgePath(mesh, 0, 3);
+    EXPECT_TRUE(path.empty());
+}
+
 TEST(HalfEdgeMesh, Clone)
 {
     const auto mesh = ConstructPyramid<MeshType>();

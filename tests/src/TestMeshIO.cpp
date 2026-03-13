@@ -36,6 +36,46 @@ TEST(MeshIO, PLY_ReadWrite)
     EXPECT_EQ(mesh->num_faces(), mesh2->num_faces());
 }
 
+TEST(MeshIO, OBJ_RoundTrip)
+{
+    auto mesh = ConstructPyramid<MeshType>();
+
+    std::ostringstream oss;
+    io_formats::OBJ::Write(oss, *mesh);
+
+    auto mesh2 = MeshType::New();
+    std::istringstream iss(oss.str());
+    io_formats::OBJ::Read(iss, *mesh2);
+
+    ASSERT_EQ(mesh->num_vertices(), mesh2->num_vertices());
+    ASSERT_EQ(mesh->num_faces(), mesh2->num_faces());
+    for (std::size_t v = 0; v < mesh->num_vertices(); ++v) {
+        for (int i = 0; i < 3; ++i) {
+            EXPECT_FLOAT_EQ(mesh->vertex(v)->pos[i], mesh2->vertex(v)->pos[i]);
+        }
+    }
+}
+
+TEST(MeshIO, PLY_RoundTrip)
+{
+    auto mesh = ConstructPyramid<MeshType>();
+
+    std::ostringstream oss;
+    io_formats::PLY::Write(oss, *mesh);
+
+    auto mesh2 = MeshType::New();
+    std::istringstream iss(oss.str());
+    io_formats::PLY::Read(iss, *mesh2);
+
+    ASSERT_EQ(mesh->num_vertices(), mesh2->num_vertices());
+    ASSERT_EQ(mesh->num_faces(), mesh2->num_faces());
+    for (std::size_t v = 0; v < mesh->num_vertices(); ++v) {
+        for (int i = 0; i < 3; ++i) {
+            EXPECT_FLOAT_EQ(mesh->vertex(v)->pos[i], mesh2->vertex(v)->pos[i]);
+        }
+    }
+}
+
 TEST(MeshIO, ReadWriteFile)
 {
     auto mesh = ConstructPyramid<MeshType>();

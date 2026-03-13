@@ -148,3 +148,23 @@ TEST(Vec, UnitVector)
     EXPECT_EQ(a.unit(), Vec3f(1, 0, 0));
     EXPECT_EQ(a, Vec3f(2, 0, 0));
 }
+
+TEST(Vec, ReverseIteration)
+{
+    Vec3f v{1.f, 2.f, 3.f};
+
+    // rbegin/rend
+    std::vector<float> result;
+    for (auto it = v.rbegin(); it != v.rend(); ++it) {
+        result.push_back(*it);
+    }
+    EXPECT_EQ(result, (std::vector<float>{3.f, 2.f, 1.f}));
+
+    // crbegin/crend on a const Vec3f
+    const Vec3f cv{1.f, 2.f, 3.f};
+    std::vector<float> cresult;
+    for (auto it = cv.crbegin(); it != cv.crend(); ++it) {
+        cresult.push_back(*it);
+    }
+    EXPECT_EQ(cresult, (std::vector<float>{3.f, 2.f, 1.f}));
+}
