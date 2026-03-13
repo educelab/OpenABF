@@ -1,0 +1,37 @@
+{
+  "status": "complete",
+  "project_type": "brownfield",
+  "current_section": null,
+  "current_question": null,
+  "completed_sections": ["product", "guidelines", "tech_stack", "workflow", "styleguides"],
+  "answers": {
+    "project_name": "OpenABF",
+    "description": "A header-only C++ library implementing angle-based flattening algorithms for mesh parameterization.",
+    "problem_statement": "Developers lack a lightweight, easy-to-integrate C++ implementation of ABF++ and related mesh parameterization algorithms.",
+    "target_users": "C++ developers, computational geometry researchers, game developers",
+    "key_goals": "Zero-to-low dependency header-only integration; multiple algorithms (ABF, ABF++, LSCM); multi-chart flattening and packing; high numerical accuracy; production-efficient implementations.",
+    "voice_tone": "Concise and direct",
+    "design_principles": "Simplicity over features, Performance first, Developer experience focused",
+    "languages": "C++17, Python 3.x (scripts)",
+    "frontend": "None",
+    "backend": "None",
+    "database": "None",
+    "distribution": "CMake FetchContent / manual copy, Package managers (vcpkg, Conan, apt)",
+    "tdd_strictness": "Strict",
+    "commit_strategy": "Conventional Commits",
+    "code_review": "Required for non-trivial changes",
+    "verification": "After each phase completion",
+    "styleguides": "C++ (incorporating .clang-format)"
+  },
+  "files_created": [
+    "conductor/index.md",
+    "conductor/product.md",
+    "conductor/product-guidelines.md",
+    "conductor/tech-stack.md",
+    "conductor/workflow.md",
+    "conductor/tracks.md",
+    "conductor/code_styleguides/cpp.md"
+  ],
+  "started_at": "2026-03-13T00:00:00Z",
+  "last_updated": "2026-03-13T00:00:00Z"
+}
