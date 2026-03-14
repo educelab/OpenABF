@@ -19,12 +19,12 @@
   "related_identifiers": [
     {
       "scheme": "url",
-      "identifier": "https://gitlab.com/educelab/OpenABF/",
+      "identifier": "https://github.com/educelab/OpenABF/",
       "relation": "isSupplementTo"
     },
     {
       "scheme": "url",
-      "identifier": "https://github.com/educelab/OpenABF/",
+      "identifier": "https://gitlab.com/educelab/OpenABF/",
       "relation": "isSupplementTo"
     }
   ]
