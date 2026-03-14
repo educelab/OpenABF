@@ -107,24 +107,24 @@ public:
     constexpr const_iterator cend() const noexcept { return val_.cend(); }
 
     /** @brief Get an iterator to the first element of the reverse vector */
-    constexpr iterator rbegin() noexcept { return val_.rbegin(); }
-    /** @brief Get an iterator to the first element of the vector */
-    constexpr const_iterator rbegin() const noexcept { return val_.rbegin(); }
-    /** @brief Get an iterator to the first element of the vector */
-    constexpr const_iterator crbegin() const noexcept { return val_.crbegin(); }
+    constexpr reverse_iterator rbegin() noexcept { return val_.rbegin(); }
+    /** @brief Get an iterator to the first element of the reverse vector */
+    constexpr const_reverse_iterator rbegin() const noexcept { return val_.rbegin(); }
+    /** @brief Get an iterator to the first element of the reverse vector */
+    constexpr const_reverse_iterator crbegin() const noexcept { return val_.crbegin(); }
 
     /**
      * @brief Get an iterator to one past the last element in the reverse vector
      */
-    constexpr iterator rend() noexcept { return val_.rend(); }
+    constexpr reverse_iterator rend() noexcept { return val_.rend(); }
     /**
      * @brief Get an iterator to one past the last element in the reverse vector
      */
-    constexpr const_iterator rend() const noexcept { return val_.rend(); }
+    constexpr const_reverse_iterator rend() const noexcept { return val_.rend(); }
     /**
      * @brief Get an iterator to one past the last element in the reverse vector
      */
-    constexpr const_iterator crend() const noexcept { return val_.crend(); }
+    constexpr const_reverse_iterator crend() const noexcept { return val_.crend(); }
 
     /** @brief Return whether the vector is empty (uninitialized) */
     constexpr bool empty() const noexcept { return val_.empty(); }

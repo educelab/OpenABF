@@ -395,11 +395,11 @@ public:
             for (auto& f : mesh->faces()) {
                 f->lambda_tri += delta(idx++, 0);
             }
+            auto base = edgeCnt + faceCnt;
             for (auto& v : mesh->vertices_interior()) {
                 auto intIdx = vIdx2vIntIdx.at(v->idx);
-                v->lambda_plan += delta(idx + intIdx, 0);
-                v->lambda_len += delta(idx + vIntCnt + intIdx, 0);
-                idx++;
+                v->lambda_plan += delta(base + intIdx, 0);
+                v->lambda_len += delta(base + vIntCnt + intIdx, 0);
             }
 
             // Recalculate gradient for next iteration
