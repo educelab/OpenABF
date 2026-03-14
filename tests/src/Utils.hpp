@@ -31,8 +31,7 @@ auto ConstructGrid(std::size_t rows, std::size_t cols) -> typename MeshType::Poi
     auto mesh = MeshType::New();
     for (std::size_t r = 0; r < rows; ++r) {
         for (std::size_t c = 0; c < cols; ++c) {
-            mesh->insert_vertex(
-                static_cast<float>(c), static_cast<float>(r), 0.f);
+            mesh->insert_vertex(static_cast<float>(c), static_cast<float>(r), 0.f);
         }
     }
     for (std::size_t r = 0; r < rows - 1; ++r) {
