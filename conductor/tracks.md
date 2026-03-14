@@ -2,9 +2,9 @@
 
 | Status | Track ID | Title | GitHub | Created | Updated |
 | ------ | -------- | ----- | ------ | ------- | ------- |
-| open | B1 | ABF lambda update index wrong for 2+ interior vertices | [#6](https://github.com/educelab/OpenABF/issues/6) | 2026-03-13 | 2026-03-13 |
+| closed | B1 | ABF lambda update index wrong for 2+ interior vertices | [#6](https://github.com/educelab/OpenABF/issues/6) | 2026-03-13 | 2026-03-13 |
 | open | B2 | ABFPlusPlus LambdaStarInv inversion uses hardcoded `1.F` | [#7](https://github.com/educelab/OpenABF/issues/7) | 2026-03-13 | 2026-03-13 |
-| open | B3 | Vec reverse iterators have wrong return type | [#8](https://github.com/educelab/OpenABF/issues/8) | 2026-03-13 | 2026-03-13 |
+| closed | B3 | Vec reverse iterators have wrong return type | [#8](https://github.com/educelab/OpenABF/issues/8) | 2026-03-13 | 2026-03-13 |
 | open | B4 | Vec binary `*`/`/` inconsistent with `*=`/`/=` | [#9](https://github.com/educelab/OpenABF/issues/9) | 2026-03-13 | 2026-03-13 |
 | open | B5 | `is_file_type` accesses `ext[0]` without bounds check | [#10](https://github.com/educelab/OpenABF/issues/10) | 2026-03-13 | 2026-03-13 |
 | open | B6 | PLY reader vmap silently uninitialized if x/y/z absent | [#11](https://github.com/educelab/OpenABF/issues/11) | 2026-03-13 | 2026-03-13 |
@@ -22,10 +22,10 @@
 | open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-03-13 |
 | open | F3 | Multi-component extraction and parameterization pipeline | [#19](https://github.com/educelab/OpenABF/issues/19) | 2026-03-13 | 2026-03-13 |
 | open | F4 | Double-precision test coverage | [#20](https://github.com/educelab/OpenABF/issues/20) | 2026-03-13 | 2026-03-13 |
-| open | T1 | ABF/ABFPlusPlus tests need multi-interior-vertex mesh | [#21](https://github.com/educelab/OpenABF/issues/21) | 2026-03-13 | 2026-03-13 |
-| open | T2 | No test for FindEdgePath on disconnected mesh | [#22](https://github.com/educelab/OpenABF/issues/22) | 2026-03-13 | 2026-03-13 |
-| open | T3 | No round-trip IO test for OBJ and PLY | [#23](https://github.com/educelab/OpenABF/issues/23) | 2026-03-13 | 2026-03-13 |
-| open | T4 | No test for Vec reverse iterators | [#24](https://github.com/educelab/OpenABF/issues/24) | 2026-03-13 | 2026-03-13 |
+| closed | T1 | ABF/ABFPlusPlus tests need multi-interior-vertex mesh | [#21](https://github.com/educelab/OpenABF/issues/21) | 2026-03-13 | 2026-03-13 |
+| closed | T2 | No test for FindEdgePath on disconnected mesh | [#22](https://github.com/educelab/OpenABF/issues/22) | 2026-03-13 | 2026-03-13 |
+| closed | T3 | No round-trip IO test for OBJ and PLY | [#23](https://github.com/educelab/OpenABF/issues/23) | 2026-03-13 | 2026-03-13 |
+| closed | T4 | No test for Vec reverse iterators | [#24](https://github.com/educelab/OpenABF/issues/24) | 2026-03-13 | 2026-03-13 |
 | open | M1 | `Face::barycenter()` hardcodes `Vec<T, 3>` | [#25](https://github.com/educelab/OpenABF/issues/25) | 2026-03-13 | 2026-03-13 |
 | open | M2 | `Edge::magnitude()` is non-const | [#26](https://github.com/educelab/OpenABF/issues/26) | 2026-03-13 | 2026-03-13 |
 | open | M3 | `detail::erase_if` is dead code | [#27](https://github.com/educelab/OpenABF/issues/27) | 2026-03-13 | 2026-03-13 |
