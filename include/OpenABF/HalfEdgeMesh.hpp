@@ -493,7 +493,7 @@ public:
         [[nodiscard]] auto is_boundary() const -> bool { return face == nullptr; }
 
         /** @brief Edge length */
-        auto magnitude() -> T { return (pair->vertex->pos - vertex->pos).magnitude(); }
+        auto magnitude() const -> T { return (pair->vertex->pos - vertex->pos).magnitude(); }
 
         /** @brief This edge's adjacent half-edge */
         EdgePtr pair;
@@ -569,7 +569,7 @@ public:
         }
 
         /** @brief Face barycenter (center-of-mass) */
-        auto barycenter() const -> Vec<T, 3>
+        auto barycenter() const -> Vec<T, Dim>
         {
             return (head->vertex->pos + head->next->vertex->pos + head->prev->vertex->pos) / T(3);
         }
