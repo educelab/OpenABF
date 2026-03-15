@@ -213,8 +213,8 @@ public:
     }
 
     /** @brief Multiplication operator */
-    template <class Vector>
-    friend Vec operator*(Vec lhs, const Vector& rhs)
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend Vec operator*(Vec lhs, const T2& rhs)
     {
         lhs *= rhs;
         return lhs;
@@ -231,8 +231,8 @@ public:
     }
 
     /** @brief Division operator */
-    template <class Vector>
-    friend Vec operator/(Vec lhs, const Vector& rhs)
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend Vec operator/(Vec lhs, const T2& rhs)
     {
         lhs /= rhs;
         return lhs;

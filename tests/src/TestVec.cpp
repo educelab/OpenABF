@@ -117,6 +117,12 @@ TEST(Vec, OperatorDivide)
     EXPECT_EQ(a, Vec3f(1, 1, 1));
 }
 
+TEST(Vec, ScalarMultiplyDivide)
+{
+    EXPECT_EQ(Vec3f(2.f, 4.f, 6.f) * 2.f, Vec3f(4.f, 8.f, 12.f));
+    EXPECT_EQ(Vec3f(4.f, 8.f, 12.f) / 2.f, Vec3f(2.f, 4.f, 6.f));
+}
+
 TEST(Vec, DotProduct)
 {
     EXPECT_EQ(Vec3f(1, 0, 0).dot(Vec3f(0, 1, 0)), 0);
