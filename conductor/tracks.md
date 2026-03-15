@@ -3,12 +3,12 @@
 | Status | Track ID | Title | GitHub | Created | Updated |
 | ------ | -------- | ----- | ------ | ------- | ------- |
 | closed | B1 | ABF lambda update index wrong for 2+ interior vertices | [#6](https://github.com/educelab/OpenABF/issues/6) | 2026-03-13 | 2026-03-13 |
-| open | B2 | ABFPlusPlus LambdaStarInv inversion uses hardcoded `1.F` | [#7](https://github.com/educelab/OpenABF/issues/7) | 2026-03-13 | 2026-03-13 |
+| closed | B2 | ABFPlusPlus LambdaStarInv inversion uses hardcoded `1.F` | [#7](https://github.com/educelab/OpenABF/issues/7) | 2026-03-13 | 2026-03-15 |
 | closed | B3 | Vec reverse iterators have wrong return type | [#8](https://github.com/educelab/OpenABF/issues/8) | 2026-03-13 | 2026-03-13 |
-| open | B4 | Vec binary `*`/`/` inconsistent with `*=`/`/=` | [#9](https://github.com/educelab/OpenABF/issues/9) | 2026-03-13 | 2026-03-13 |
-| open | B5 | `is_file_type` accesses `ext[0]` without bounds check | [#10](https://github.com/educelab/OpenABF/issues/10) | 2026-03-13 | 2026-03-13 |
-| open | B6 | PLY reader vmap silently uninitialized if x/y/z absent | [#11](https://github.com/educelab/OpenABF/issues/11) | 2026-03-13 | 2026-03-13 |
-| open | B7 | PlanGrad allocates and discards wheel vector | [#12](https://github.com/educelab/OpenABF/issues/12) | 2026-03-13 | 2026-03-13 |
+| closed | B4 | Vec binary `*`/`/` inconsistent with `*=`/`/=` | [#9](https://github.com/educelab/OpenABF/issues/9) | 2026-03-13 | 2026-03-15 |
+| closed | B5 | `is_file_type` accesses `ext[0]` without bounds check | [#10](https://github.com/educelab/OpenABF/issues/10) | 2026-03-13 | 2026-03-15 |
+| closed | B6 | PLY reader vmap silently uninitialized if x/y/z absent | [#11](https://github.com/educelab/OpenABF/issues/11) | 2026-03-13 | 2026-03-15 |
+| closed | B7 | PlanGrad allocates and discards wheel vector | [#12](https://github.com/educelab/OpenABF/issues/12) | 2026-03-13 | 2026-03-15 |
 | open | P1 | Mesh iteration methods return `std::vector` by value | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-13 |
 | open | P2 | `std::map` for interior-vertex index lookup in solver | [#13](https://github.com/educelab/OpenABF/issues/13) | 2026-03-13 | 2026-03-13 |
 | open | P3 | `InitializeAnglesAndWeights` calls wheel() redundantly | [#14](https://github.com/educelab/OpenABF/issues/14) | 2026-03-13 | 2026-03-13 |
