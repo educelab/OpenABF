@@ -19,6 +19,9 @@ template <typename PluginType>
 static auto is_file_type(const std::filesystem::path& path)
 {
     auto ext = path.extension().string();
+    if (ext.empty()) {
+        return false;
+    }
     if (ext[0] == '.') {
         ext = ext.substr(1);
     }
@@ -254,6 +257,7 @@ struct PLY {
         // Set up vertex map: v[n] -> property[m]
         // Probably unnecessary
         std::array<std::size_t, 3> vmap{};
+        std::array<bool, 3> vmapFound{false, false, false};
         auto v_elem = std::find_if(elements.begin(), elements.end(),
                                    [](const auto& e) { return e.label == "vertex"; });
         if (v_elem == elements.end()) {
@@ -262,11 +266,17 @@ struct PLY {
         for (auto i = 0; i < v_elem->properties.size(); ++i) {
             if (const auto& prop = v_elem->properties[i]; prop.label == "x") {
                 vmap[0] = i;
+                vmapFound[0] = true;
             } else if (prop.label == "y") {
                 vmap[1] = i;
+                vmapFound[1] = true;
             } else if (prop.label == "z") {
                 vmap[2] = i;
+                vmapFound[2] = true;
             }
+        }
+        if (!vmapFound[0] || !vmapFound[1] || !vmapFound[2]) {
+            throw std::runtime_error("PLY vertex element missing required x/y/z properties");
         }
 
         // Iterate the lines of the body

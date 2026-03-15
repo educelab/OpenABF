@@ -98,3 +98,28 @@ TEST(MeshIO, UnsupportedFileType)
     EXPECT_THROW(WriteMesh("test.unknown", mesh), std::runtime_error);
     EXPECT_THROW(ReadMesh<MeshType>("test.unknown"), std::runtime_error);
 }
+
+TEST(MeshIO, IsFileTypeNoExtension)
+{
+    EXPECT_FALSE(io_formats::is_file_type<io_formats::OBJ>("mesh"));
+    EXPECT_FALSE(io_formats::is_file_type<io_formats::PLY>("mesh"));
+}
+
+TEST(MeshIO, PLY_MissingVertexProperty)
+{
+    // PLY header with x and y but missing z property
+    std::string ply_data =
+        "ply\n"
+        "format ascii 1.0\n"
+        "element vertex 1\n"
+        "property float x\n"
+        "property float y\n"
+        "element face 0\n"
+        "property list uchar int vertex_indices\n"
+        "end_header\n"
+        "1.0 2.0\n";
+
+    std::istringstream iss(ply_data);
+    auto mesh = MeshType::New();
+    EXPECT_THROW(io_formats::PLY::Read(iss, *mesh), std::runtime_error);
+}
