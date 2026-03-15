@@ -2001,7 +2001,6 @@ auto TriGrad(const FacePtr& f) -> T
 template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto PlanGrad(const VertPtr& v) -> T
 {
-    auto edges = v->wheel();
     T g = -2 * PI<T>;
     for (const auto& e : v->wheel()) {
         g += e->alpha;
@@ -2525,7 +2524,7 @@ public:
             SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
             for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
                 for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k); it; ++it) {
-                    it.valueRef() = 1.F / it.value();
+                    it.valueRef() = T(1) / it.value();
                 }
             }
             auto Jstar = JLiJt.block(faceCnt, 0, 2 * vIntCnt, faceCnt);
