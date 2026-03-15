@@ -420,11 +420,9 @@ using Vec3f = Vec<float, 3>;
 /** @brief 3D, 64-bit float vector */
 using Vec3d = Vec<double, 3>;
 
-}  // namespace OpenABF
-
 /** Debug: Print a vector to a std::ostream */
 template <typename T, std::size_t Dims>
-std::ostream& operator<<(std::ostream& os, const OpenABF::Vec<T, Dims>& vec)
+std::ostream& operator<<(std::ostream& os, const Vec<T, Dims>& vec)
 {
     os << "[";
     std::size_t i{0};
@@ -437,6 +435,8 @@ std::ostream& operator<<(std::ostream& os, const OpenABF::Vec<T, Dims>& vec)
     os << "]";
     return os;
 }
+
+}  // namespace OpenABF
 
 
 // #include "OpenABF/HalfEdgeMesh.hpp"
