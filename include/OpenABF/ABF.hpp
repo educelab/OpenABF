@@ -95,7 +95,6 @@ auto TriGrad(const FacePtr& f) -> T
 template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 auto PlanGrad(const VertPtr& v) -> T
 {
-    auto edges = v->wheel();
     T g = -2 * PI<T>;
     for (const auto& e : v->wheel()) {
         g += e->alpha;
