@@ -77,8 +77,7 @@ TEST(Parameterizations, ABFPlusPlus_Double)
     LSCM::Compute(mesh);
 
     using Vec3d = Vec<double, 3>;
-    const std::vector expected{Vec3d{0, 0, 0}, Vec3d{2, 0, 0},
-                               Vec3d{1, 1.7320508075688772, 0},
+    const std::vector expected{Vec3d{0, 0, 0}, Vec3d{2, 0, 0}, Vec3d{1, 1.7320508075688772, 0},
                                Vec3d{1, 0.5773502691896258, 0}};
     for (auto v = 0; v < mesh->num_vertices(); ++v) {
         const auto& vv = mesh->vertex(v);
