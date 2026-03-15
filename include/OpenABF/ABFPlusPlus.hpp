@@ -184,7 +184,7 @@ public:
             SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
             for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
                 for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k); it; ++it) {
-                    it.valueRef() = 1.F / it.value();
+                    it.valueRef() = T(1) / it.value();
                 }
             }
             auto Jstar = JLiJt.block(faceCnt, 0, 2 * vIntCnt, faceCnt);
