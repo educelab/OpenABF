@@ -19,7 +19,7 @@
 | closed | A5 | No configurable pinned edge selection for LSCM | [#2](https://github.com/educelab/OpenABF/issues/2) | 2026-03-13 | 2026-03-16 |
 | open | A7 | Multi-pin UV constraints for LSCM | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-03-16 | 2026-03-16 |
 | closed | A6 | AngleBasedLSCM A/B matrix construction hard to follow | [#3](https://github.com/educelab/OpenABF/issues/3) | 2026-03-13 | 2026-03-16 |
-| open | F1 | HLSCM (Hierarchical LSCM) | [#5](https://github.com/educelab/OpenABF/issues/5) | 2026-03-13 | 2026-03-16 |
+| closed | F1 | HLSCM (Hierarchical LSCM) | [#5](https://github.com/educelab/OpenABF/issues/5) | 2026-03-13 | 2026-03-16 |
 | open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-03-13 |
 | open | F3 | Multi-component extraction and parameterization pipeline | [#19](https://github.com/educelab/OpenABF/issues/19) | 2026-03-13 | 2026-03-13 |
 | closed | F4 | Double-precision test coverage | [#20](https://github.com/educelab/OpenABF/issues/20) | 2026-03-13 | 2026-03-16 |
