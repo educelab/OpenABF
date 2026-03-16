@@ -9,11 +9,11 @@
 | closed | B5 | `is_file_type` accesses `ext[0]` without bounds check | [#10](https://github.com/educelab/OpenABF/issues/10) | 2026-03-13 | 2026-03-15 |
 | closed | B6 | PLY reader vmap silently uninitialized if x/y/z absent | [#11](https://github.com/educelab/OpenABF/issues/11) | 2026-03-13 | 2026-03-15 |
 | closed | B7 | PlanGrad allocates and discards wheel vector | [#12](https://github.com/educelab/OpenABF/issues/12) | 2026-03-13 | 2026-03-15 |
-| open | P1 | Mesh iteration methods return `std::vector` by value | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-13 |
+| closed | P1 | Mesh iteration methods return `std::vector` by value | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-16 |
 | open | P2 | `std::map` for interior-vertex index lookup in solver | [#13](https://github.com/educelab/OpenABF/issues/13) | 2026-03-13 | 2026-03-13 |
-| open | P3 | `InitializeAnglesAndWeights` calls wheel() redundantly | [#14](https://github.com/educelab/OpenABF/issues/14) | 2026-03-13 | 2026-03-13 |
+| closed | P3 | `InitializeAnglesAndWeights` calls wheel() redundantly | [#14](https://github.com/educelab/OpenABF/issues/14) | 2026-03-13 | 2026-03-16 |
 | open | A1 | Convergence tolerance hardcoded in ABF and ABFPlusPlus | [#15](https://github.com/educelab/OpenABF/issues/15) | 2026-03-13 | 2026-03-13 |
-| open | A2 | FacePtr range iteration requires `*face` dereference | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-13 |
+| closed | A2 | FacePtr range iteration requires `*face` dereference | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-16 |
 | open | A3 | `insert_face` boundary update behavior undocumented | [#16](https://github.com/educelab/OpenABF/issues/16) | 2026-03-13 | 2026-03-13 |
 | open | A4 | `gradient()` missing `[[nodiscard]]` | [#17](https://github.com/educelab/OpenABF/issues/17) | 2026-03-13 | 2026-03-13 |
 | open | A5 | No configurable pinned edge selection for LSCM | [#2](https://github.com/educelab/OpenABF/issues/2) | 2026-03-13 | 2026-03-13 |

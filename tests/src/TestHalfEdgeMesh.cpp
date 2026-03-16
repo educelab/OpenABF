@@ -275,6 +275,168 @@ TEST(HalfEdgeMesh, FindPath_Disconnected)
     EXPECT_TRUE(path.empty());
 }
 
+TEST(HalfEdgeMesh, IterateVertices)
+{
+    const auto mesh = ConstructPyramid<MeshType>();
+    std::size_t count{0};
+    for (const auto& v : mesh->vertices()) {
+        EXPECT_EQ(v, mesh->vertex(v->idx));
+        ++count;
+    }
+    EXPECT_EQ(count, mesh->num_vertices());
+}
+
+TEST(HalfEdgeMesh, IterateFaces)
+{
+    const auto mesh = ConstructPyramid<MeshType>();
+    std::size_t count{0};
+    for (const auto& f : mesh->faces()) {
+        EXPECT_EQ(f, mesh->face(f->idx));
+        ++count;
+    }
+    EXPECT_EQ(count, mesh->num_faces());
+}
+
+TEST(HalfEdgeMesh, IterateEdges)
+{
+    const auto mesh = ConstructPyramid<MeshType>();
+    // Collect via mesh->edges()
+    std::vector<std::size_t> edgeIdxs;
+    for (const auto& e : mesh->edges()) {
+        edgeIdxs.push_back(e->idxI.value());
+    }
+    // Collect via face-by-face iteration
+    std::vector<std::size_t> expected;
+    for (const auto& f : mesh->faces()) {
+        for (const auto& e : *f) {
+            expected.push_back(e->idxI.value());
+        }
+    }
+    EXPECT_EQ(edgeIdxs, expected);
+}
+
+TEST(HalfEdgeMesh, IterateInteriorBoundaryPartition)
+{
+    const auto mesh = ConstructPyramid<MeshType>();
+    std::size_t intCount{0}, bndCount{0};
+    for (const auto& v : mesh->vertices_interior()) {
+        EXPECT_TRUE(v->is_interior());
+        ++intCount;
+    }
+    for (const auto& v : mesh->vertices_boundary()) {
+        EXPECT_TRUE(v->is_boundary());
+        ++bndCount;
+    }
+    EXPECT_EQ(intCount + bndCount, mesh->num_vertices());
+    EXPECT_EQ(intCount, mesh->num_vertices_interior());
+}
+
+TEST(HalfEdgeMesh, IterateWheel)
+{
+    // Pyramid apex (vertex 3) is interior — wheel should yield all its face edges
+    const auto mesh = ConstructPyramid<MeshType>();
+    const auto apex = mesh->vertex(3);
+    EXPECT_TRUE(apex->is_interior());
+
+    std::vector<std::size_t> wheelIdxs;
+    for (const auto& e : apex->wheel()) {
+        wheelIdxs.push_back(e->idxI.value());
+    }
+    EXPECT_EQ(wheelIdxs.size(), 3u);  // pyramid apex touches 3 faces
+    // All edges must belong to this vertex
+    for (const auto& e : apex->wheel()) {
+        EXPECT_EQ(e->vertex, apex);
+    }
+}
+
+TEST(HalfEdgeMesh, FaceEdges)
+{
+    const auto mesh = ConstructPyramid<MeshType>();
+    for (const auto& f : mesh->faces()) {
+        // face->edges() and *face should yield the same edge sequence
+        std::vector<std::size_t> viaEdges, viaStar;
+        for (const auto& e : f->edges()) {
+            viaEdges.push_back(e->idx);
+        }
+        for (const auto& e : *f) {
+            viaStar.push_back(e->idx);
+        }
+        EXPECT_EQ(viaEdges, viaStar);
+    }
+}
+
+TEST(HalfEdgeMesh, IterateEdgesCount)
+{
+    // edges() must yield exactly 3 * num_faces() half-edges
+    const auto mesh = ConstructPyramid<MeshType>();
+    std::size_t count{0};
+    for (const auto& e : mesh->edges()) {
+        (void)e;
+        ++count;
+    }
+    EXPECT_EQ(count, 3 * mesh->num_faces());
+}
+
+TEST(HalfEdgeMesh, IterateWheelBoundaryVertex)
+{
+    // Boundary vertices still participate in faces — wheel must work and terminate
+    const auto mesh = ConstructPyramid<MeshType>();
+    const auto v = mesh->vertex(0);
+    EXPECT_TRUE(v->is_boundary());
+
+    std::size_t count{0};
+    for (const auto& e : v->wheel()) {
+        EXPECT_EQ(e->vertex, v);
+        ++count;
+    }
+    EXPECT_EQ(count, 2u);  // vertex 0 is in exactly 2 faces in the pyramid
+}
+
+TEST(HalfEdgeMesh, IterateWheelReIterable)
+{
+    // Iterating a Range twice must yield identical results
+    const auto mesh = ConstructPyramid<MeshType>();
+    const auto apex = mesh->vertex(3);
+
+    auto wheel = apex->wheel();
+    std::vector<std::size_t> first, second;
+    for (const auto& e : wheel) {
+        first.push_back(e->idxI.value());
+    }
+    for (const auto& e : wheel) {
+        second.push_back(e->idxI.value());
+    }
+    EXPECT_EQ(first, second);
+    EXPECT_EQ(first.size(), 3u);
+}
+
+TEST(HalfEdgeMesh, IterateNoInteriorVertices)
+{
+    // A single triangle has no interior vertices
+    const auto mesh = MeshType::New();
+    mesh->insert_vertex(0, 0, 0);
+    mesh->insert_vertex(1, 0, 0);
+    mesh->insert_vertex(0, 1, 0);
+    mesh->insert_face(0, 1, 2);
+
+    EXPECT_TRUE(mesh->vertices_interior().empty());
+    EXPECT_EQ(mesh->num_vertices_interior(), 0u);
+    EXPECT_FALSE(mesh->vertices_boundary().empty());
+}
+
+TEST(HalfEdgeMesh, RangeFrontEmpty)
+{
+    // Range::front() and Range::empty() must behave correctly
+    const auto mesh = ConstructPyramid<MeshType>();
+
+    EXPECT_FALSE(mesh->edges().empty());
+    EXPECT_NE(mesh->edges().front(), nullptr);
+    EXPECT_FALSE(mesh->vertices_boundary().empty());
+    EXPECT_NE(mesh->vertices_boundary().front(), nullptr);
+    EXPECT_FALSE(mesh->vertices_interior().empty());
+    EXPECT_NE(mesh->vertices_interior().front(), nullptr);
+}
+
 TEST(HalfEdgeMesh, Clone)
 {
     const auto mesh = ConstructPyramid<MeshType>();
