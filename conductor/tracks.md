@@ -12,7 +12,7 @@
 | closed | P1 | Mesh iteration methods return `std::vector` by value | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-16 |
 | closed | P2 | `std::map` for interior-vertex index lookup in solver | [#13](https://github.com/educelab/OpenABF/issues/13) | 2026-03-13 | 2026-03-16 |
 | closed | P3 | `InitializeAnglesAndWeights` calls wheel() redundantly | [#14](https://github.com/educelab/OpenABF/issues/14) | 2026-03-13 | 2026-03-16 |
-| open | A1 | Convergence tolerance hardcoded in ABF and ABFPlusPlus | [#15](https://github.com/educelab/OpenABF/issues/15) | 2026-03-13 | 2026-03-13 |
+| closed | A1 | Convergence tolerance hardcoded in ABF and ABFPlusPlus | [#15](https://github.com/educelab/OpenABF/issues/15) | 2026-03-13 | 2026-03-16 |
 | closed | A2 | FacePtr range iteration requires `*face` dereference | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-16 |
 | closed | A3 | `insert_face` boundary update behavior undocumented | [#16](https://github.com/educelab/OpenABF/issues/16) | 2026-03-13 | 2026-03-16 |
 | closed | A4 | `gradient()` missing `[[nodiscard]]` | [#17](https://github.com/educelab/OpenABF/issues/17) | 2026-03-13 | 2026-03-16 |
@@ -21,7 +21,7 @@
 | open | F1 | HLSCM (Hierarchical LSCM) | [#5](https://github.com/educelab/OpenABF/issues/5) | 2026-03-13 | 2026-03-13 |
 | open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-03-13 |
 | open | F3 | Multi-component extraction and parameterization pipeline | [#19](https://github.com/educelab/OpenABF/issues/19) | 2026-03-13 | 2026-03-13 |
-| open | F4 | Double-precision test coverage | [#20](https://github.com/educelab/OpenABF/issues/20) | 2026-03-13 | 2026-03-13 |
+| closed | F4 | Double-precision test coverage | [#20](https://github.com/educelab/OpenABF/issues/20) | 2026-03-13 | 2026-03-16 |
 | closed | T1 | ABF/ABFPlusPlus tests need multi-interior-vertex mesh | [#21](https://github.com/educelab/OpenABF/issues/21) | 2026-03-13 | 2026-03-13 |
 | closed | T2 | No test for FindEdgePath on disconnected mesh | [#22](https://github.com/educelab/OpenABF/issues/22) | 2026-03-13 | 2026-03-13 |
 | closed | T3 | No round-trip IO test for OBJ and PLY | [#23](https://github.com/educelab/OpenABF/issues/23) | 2026-03-13 | 2026-03-13 |
