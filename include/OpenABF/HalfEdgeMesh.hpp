@@ -62,6 +62,73 @@ auto filter(ForwardContainer v, UnaryPred p)
     v.erase(end, std::end(v));
     return v;
 }
+
+/**
+ * @brief Lightweight non-owning range adapter holding begin/end iterators
+ *
+ * Supports range-based for loops, empty(), and front(). Used as the return
+ * type for lazy mesh iteration methods.
+ */
+template <typename Iter>
+struct Range {
+    Iter first_;
+    Iter last_;
+    auto begin() const -> Iter { return first_; }
+    auto end() const -> Iter { return last_; }
+    auto empty() const -> bool { return first_ == last_; }
+    auto front() const -> decltype(*first_) { return *first_; }
+};
+
+/**
+ * @brief Input iterator that skips elements not matching a predicate
+ *
+ * Wraps a base iterator and advances automatically past elements for which
+ * pred(*it) is false.
+ */
+template <typename Iter, typename Pred>
+class FilteringIterator
+{
+public:
+    using difference_type = std::ptrdiff_t;
+    using value_type = typename std::iterator_traits<Iter>::value_type;
+    using pointer = typename std::iterator_traits<Iter>::pointer;
+    using reference = typename std::iterator_traits<Iter>::reference;
+    using iterator_category = std::input_iterator_tag;
+
+    FilteringIterator() = default;
+    FilteringIterator(Iter current, Iter end, Pred pred) : current_{current}, end_{end}, pred_{pred}
+    {
+        advance_to_next();
+    }
+
+    auto operator*() const -> reference { return *current_; }
+    auto operator->() const -> pointer { return &*current_; }
+
+    auto operator++() -> FilteringIterator&
+    {
+        ++current_;
+        advance_to_next();
+        return *this;
+    }
+
+    auto operator==(const FilteringIterator& other) const -> bool
+    {
+        return current_ == other.current_;
+    }
+    auto operator!=(const FilteringIterator& other) const -> bool { return !(*this == other); }
+
+private:
+    void advance_to_next()
+    {
+        while (current_ != end_ && !pred_(*current_)) {
+            ++current_;
+        }
+    }
+
+    Iter current_{};
+    Iter end_{};
+    Pred pred_{};
+};
 }  // namespace detail
 
 /**
@@ -379,6 +446,175 @@ private:
         EdgePtr current_;
     };
 
+    /**
+     * @brief Iterator for the edges of a vertex's wheel
+     *
+     * Walks the half-edge linked-list around a vertex (`edge->pair->next`),
+     * yielding only non-boundary edges. Multi-pass safe: constructing a new
+     * WheelIterator from the same vertex edge always starts at the beginning.
+     *
+     * @tparam Const If true, is a const iterator
+     */
+    template <bool Const = false>
+    class WheelIterator
+    {
+    public:
+        /** Difference type */
+        using difference_type = std::ptrdiff_t;
+        /** Value type */
+        using value_type = EdgePtr;
+        /** Pointer type */
+        using pointer = std::conditional_t<Const, value_type const*, value_type*>;
+        /** Reference type */
+        using reference = std::conditional_t<Const, value_type const&, value_type&>;
+        /** Iterator category */
+        using iterator_category = std::input_iterator_tag;
+
+        /** Default constructor == End iterator (current_ == nullptr) */
+        WheelIterator() = default;
+        /** Construct from the vertex's stored edge */
+        explicit WheelIterator(const EdgePtr& head) : head_{head}, current_{head}
+        {
+            advance_to_non_boundary();
+        }
+
+        /** Dereference */
+        template <bool C = Const>
+        auto operator*() const -> std::enable_if_t<C, reference>
+        {
+            return current_;
+        }
+        template <bool C = Const>
+        auto operator*() -> std::enable_if_t<!C, reference>
+        {
+            return current_;
+        }
+
+        /** Equality */
+        auto operator==(const WheelIterator& other) const -> bool
+        {
+            return current_ == other.current_;
+        }
+        /** Inequality */
+        auto operator!=(const WheelIterator& other) const -> bool { return !(*this == other); }
+
+        /** Increment */
+        auto operator++() -> WheelIterator&
+        {
+            if (!current_) {
+                return *this;
+            }
+            current_ = current_->pair->next;
+            if (current_ == head_) {
+                current_ = nullptr;
+                return *this;
+            }
+            advance_to_non_boundary();
+            return *this;
+        }
+
+    private:
+        void advance_to_non_boundary()
+        {
+            while (current_ && current_->is_boundary()) {
+                current_ = current_->pair->next;
+                if (current_ == head_) {
+                    current_ = nullptr;
+                    break;
+                }
+            }
+        }
+
+        EdgePtr head_{};
+        EdgePtr current_{};
+    };
+
+    /**
+     * @brief Iterator that lazily flattens all face edges across all faces
+     *
+     * Provides a single flat sequence over all face (non-boundary) edges in
+     * the mesh without allocating a vector. Internally advances through
+     * `faces_` and uses `FaceIterator` within each face.
+     *
+     * @tparam Const If true, is a const iterator
+     */
+    template <bool Const = false>
+    class EdgesIterator
+    {
+    public:
+        /** Difference type */
+        using difference_type = std::ptrdiff_t;
+        /** Value type */
+        using value_type = EdgePtr;
+        /** Pointer type */
+        using pointer = std::conditional_t<Const, value_type const*, value_type*>;
+        /** Reference type */
+        using reference = std::conditional_t<Const, value_type const&, value_type&>;
+        /** Iterator category */
+        using iterator_category = std::input_iterator_tag;
+
+        using FaceVecIter = typename std::vector<FacePtr>::const_iterator;
+
+        /** Construct at position (begin or end depending on faceIt == faceEnd) */
+        EdgesIterator(FaceVecIter faceIt, FaceVecIter faceEnd) : faceIt_{faceIt}, faceEnd_{faceEnd}
+        {
+            if (faceIt_ != faceEnd_) {
+                edgeIt_ = FaceIterator<true>{(*faceIt_)->head, (*faceIt_)->head};
+                advance_if_face_exhausted();
+            }
+        }
+
+        /** Dereference */
+        template <bool C = Const>
+        auto operator*() const -> std::enable_if_t<C, reference>
+        {
+            return *edgeIt_;
+        }
+        template <bool C = Const>
+        auto operator*() -> std::enable_if_t<!C, reference>
+        {
+            return *edgeIt_;
+        }
+
+        /** Equality */
+        auto operator==(const EdgesIterator& other) const -> bool
+        {
+            // Both exhausted (at end)
+            if (faceIt_ == faceEnd_ && other.faceIt_ == other.faceEnd_) {
+                return true;
+            }
+            if (faceIt_ != other.faceIt_) {
+                return false;
+            }
+            return edgeIt_ == other.edgeIt_;
+        }
+        /** Inequality */
+        auto operator!=(const EdgesIterator& other) const -> bool { return !(*this == other); }
+
+        /** Increment */
+        auto operator++() -> EdgesIterator&
+        {
+            ++edgeIt_;
+            advance_if_face_exhausted();
+            return *this;
+        }
+
+    private:
+        void advance_if_face_exhausted()
+        {
+            while (edgeIt_ == FaceIterator<true>() && faceIt_ != faceEnd_) {
+                ++faceIt_;
+                if (faceIt_ != faceEnd_) {
+                    edgeIt_ = FaceIterator<true>{(*faceIt_)->head, (*faceIt_)->head};
+                }
+            }
+        }
+
+        FaceVecIter faceIt_{};
+        FaceVecIter faceEnd_{};
+        FaceIterator<true> edgeIt_{};
+    };
+
 public:
     /** @brief %Vertex type */
     struct Vertex : VertexTraits {
@@ -406,17 +642,10 @@ public:
          *
          * @throws MeshException If vertex is a boundary vertex.
          */
-        auto wheel() const -> std::vector<EdgePtr>
+        auto wheel() const
         {
-            std::vector<EdgePtr> ret;
-            auto e = edge;
-            do {
-                if (not e->is_boundary()) {
-                    ret.emplace_back(e);
-                }
-                e = e->pair->next;
-            } while (e != edge);
-            return ret;
+            using Iter = WheelIterator<true>;
+            return detail::Range<Iter>{Iter{edge}, Iter{}};
         }
 
         /** @brief Unit vertex normal */
@@ -550,6 +779,12 @@ public:
         const_iterator cbegin() const { return const_iterator{head, head}; }
         /** @brief Returns the const end iterator */
         const_iterator cend() const { return const_iterator(); }
+        /** @brief Returns an iterable range over the edges of the face (resolves A2) */
+        auto edges() const
+        {
+            using Iter = const_iterator;
+            return detail::Range<Iter>{Iter{head, head}, Iter{}};
+        }
 
         /** @brief Area of the face */
         auto area() const -> T
@@ -830,21 +1065,17 @@ public:
     }
 
     /** @brief Get the list of vertices in insertion order */
-    auto vertices() const -> std::vector<VertPtr> { return verts_; }
+    auto vertices() const -> const std::vector<VertPtr>& { return verts_; }
 
     /** @brief Get a vertex by index */
     auto vertex(std::size_t idx) const -> VertPtr { return verts_.at(idx); }
 
-    /** @brief Get the list of face edges in insertion order */
-    auto edges() const -> std::vector<EdgePtr>
+    /** @brief Get a lazy range over all face edges in insertion order */
+    auto edges() const
     {
-        std::vector<EdgePtr> edges;
-        for (const auto& f : faces_) {
-            for (const auto& e : *f) {
-                edges.emplace_back(e);
-            }
-        }
-        return edges;
+        using Iter = EdgesIterator<true>;
+        return detail::Range<Iter>{Iter{faces_.cbegin(), faces_.cend()},
+                                   Iter{faces_.cend(), faces_.cend()}};
     }
 
     /** @brief Find an existing edge with the provided end points */
@@ -916,7 +1147,7 @@ public:
     }
 
     /** @brief Get the list of faces in insertion order */
-    auto faces() const -> std::vector<FacePtr> { return faces_; }
+    auto faces() const -> const std::vector<FacePtr>& { return faces_; }
 
     /** @brief Get a face by index */
     auto face(std::size_t idx) const -> FacePtr { return faces_.at(idx); }
@@ -1009,21 +1240,23 @@ public:
     }
 
     /** @brief Get the list of interior vertices in insertion order */
-    auto vertices_interior() const -> std::vector<VertPtr>
+    auto vertices_interior() const
     {
-        std::vector<VertPtr> ret;
-        std::copy_if(verts_.begin(), verts_.end(), std::back_inserter(ret),
-                     [](auto x) { return not x->is_boundary(); });
-        return ret;
+        auto pred = [](const VertPtr& v) { return not v->is_boundary(); };
+        using BaseIter = typename std::vector<VertPtr>::const_iterator;
+        using Iter = detail::FilteringIterator<BaseIter, decltype(pred)>;
+        return detail::Range<Iter>{Iter{verts_.cbegin(), verts_.cend(), pred},
+                                   Iter{verts_.cend(), verts_.cend(), pred}};
     }
 
-    /** @brief Get the list of boundary vertices in insertion order */
-    auto vertices_boundary() const -> std::vector<VertPtr>
+    /** @brief Get a lazy range over boundary vertices in insertion order */
+    auto vertices_boundary() const
     {
-        std::vector<VertPtr> ret;
-        std::copy_if(verts_.begin(), verts_.end(), std::back_inserter(ret),
-                     [](auto x) { return x->is_boundary(); });
-        return ret;
+        auto pred = [](const VertPtr& v) { return v->is_boundary(); };
+        using BaseIter = typename std::vector<VertPtr>::const_iterator;
+        using Iter = detail::FilteringIterator<BaseIter, decltype(pred)>;
+        return detail::Range<Iter>{Iter{verts_.cbegin(), verts_.cend(), pred},
+                                   Iter{verts_.cend(), verts_.cend(), pred}};
     }
 
     /** @brief Get the number of vertices */

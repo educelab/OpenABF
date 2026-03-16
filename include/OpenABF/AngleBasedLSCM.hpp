@@ -117,7 +117,7 @@ public:
 
         // Pinned vertex selection
         // Get the end points of a boundary edge
-        auto p0 = mesh->vertices_boundary()[0];
+        auto p0 = mesh->vertices_boundary().front();
         auto e = p0->edge;
         do {
             if (e->pair->is_boundary()) {
