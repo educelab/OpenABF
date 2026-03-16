@@ -454,6 +454,67 @@ TEST(HLSCM, WavySurface)
     }
 }
 
+TEST(HLSCM, InstanceAPILevelRatio)
+{
+    // Verify setLevelRatio/setMinCoarseVertices produce valid results
+    using HLSCM = HierarchicalLSCM<float>;
+
+    auto mesh = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+    HLSCM hlscm;
+    hlscm.setLevelRatio(4);
+    hlscm.setMinCoarseVertices(50);
+    hlscm.compute(mesh);
+
+    for (std::size_t v = 0; v < mesh->num_vertices(); ++v) {
+        const auto& pos = mesh->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v;
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v;
+        EXPECT_FLOAT_EQ(pos[2], 0.f);
+    }
+}
+
+TEST(HLSCM, MultiLevelHierarchy)
+{
+    // Verify that a sufficiently large mesh actually triggers multi-level hierarchy
+    // by checking that HLSCM produces different results from single-level LSCM
+    // when using ABF-optimized angles (the finest-level angle preservation matters)
+    using ABFType = ABFPlusPlus<float>;
+    using HLSCM = HierarchicalLSCM<float, ABFType::Mesh>;
+    using LSCM = AngleBasedLSCM<float, ABFType::Mesh>;
+
+    auto mesh_lscm = ConstructWavySurface<ABFType::Mesh>(20, 20);
+    ABFType::Compute(mesh_lscm);
+    LSCM::Compute(mesh_lscm);
+
+    auto mesh_hlscm = ConstructWavySurface<ABFType::Mesh>(20, 20);
+    ABFType::Compute(mesh_hlscm);
+    HLSCM::Compute(mesh_hlscm);
+
+    // Both should produce valid UVs
+    for (std::size_t v = 0; v < mesh_hlscm->num_vertices(); ++v) {
+        const auto& pos = mesh_hlscm->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v;
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v;
+        EXPECT_FLOAT_EQ(pos[2], 0.f);
+    }
+
+    // With a multi-level hierarchy, the cascadic solve path differs from
+    // single-level LSCM, so results will differ slightly (both are valid)
+    bool anyDifference = false;
+    for (std::size_t v = 0; v < mesh_lscm->num_vertices(); ++v) {
+        for (int i = 0; i < 2; ++i) {
+            if (std::abs(mesh_hlscm->vertex(v)->pos[i] - mesh_lscm->vertex(v)->pos[i]) > 1e-4f) {
+                anyDifference = true;
+                break;
+            }
+        }
+        if (anyDifference)
+            break;
+    }
+    EXPECT_TRUE(anyDifference) << "HLSCM and LSCM produced identical results — "
+                                  "multi-level hierarchy may not have been triggered";
+}
+
 TEST(HLSCM, PerformanceComparison)
 {
     // Compare HLSCM vs AngleBasedLSCM (with same LSCG solver) on a large mesh.

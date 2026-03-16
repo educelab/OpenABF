@@ -3554,6 +3554,12 @@ public:
         // Merge quadrics
         quadrics_[vKeep] += quadrics_[vRemove];
 
+        // Compact dead face indices from vKeep's adjacency list
+        auto& vkFaces = vertFaces_[vKeep];
+        vkFaces.erase(std::remove_if(vkFaces.begin(), vkFaces.end(),
+                                     [this](std::size_t fi) { return !faceAlive_[fi]; }),
+                      vkFaces.end());
+
         return record;
     }
 
@@ -3622,9 +3628,10 @@ public:
         return level;
     }
 
-    /** Get all edges as directed pairs (v0 < v1 to avoid duplicates) */
-    [[nodiscard]] auto allEdges() const -> std::vector<std::pair<std::size_t, std::size_t>>
+    /** Rebuild the edge list from alive faces and return it */
+    auto rebuildAndGetEdges() -> const std::vector<std::pair<std::size_t, std::size_t>>&
     {
+        buildEdges_();
         return edges_;
     }
 
@@ -3762,7 +3769,7 @@ auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std
         using CostEdge = std::pair<T, std::pair<std::size_t, std::size_t>>;
         std::priority_queue<CostEdge, std::vector<CostEdge>, std::greater<CostEdge>> pq;
 
-        auto edges = dmesh.allEdges();
+        const auto& edges = dmesh.rebuildAndGetEdges();
         for (auto& [a, b] : edges) {
             // Try collapsing the collapsible vertex towards the other
             if (dmesh.isCollapsible(a)) {
@@ -4009,33 +4016,43 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
 
     // Solve
     DenseMatrix x;
-    if (initialGuess && !initialGuess->empty()) {
-        // Build initial guess vector from prolongated UVs
-        DenseMatrix x0(2 * numFree, 1);
-        for (const auto& v : levelMesh->vertices()) {
-            if (v == p0 || v == p1) {
-                continue;
+    if constexpr (detail::is_instance_of_v<SolverType, Eigen::LeastSquaresConjugateGradient>) {
+        if (initialGuess && !initialGuess->empty()) {
+            // Build initial guess vector from prolongated UVs
+            DenseMatrix x0(2 * numFree, 1);
+            for (const auto& v : levelMesh->vertices()) {
+                if (v == p0 || v == p1) {
+                    continue;
+                }
+                auto freeIdx = freeIdxTable.at(v->idx);
+                auto origIdx = level.localToOriginal[v->idx];
+                auto guessIt = initialGuess->find(origIdx);
+                if (guessIt != initialGuess->end()) {
+                    x0(2 * freeIdx, 0) = guessIt->second[0];
+                    x0(2 * freeIdx + 1, 0) = guessIt->second[1];
+                } else {
+                    x0(2 * freeIdx, 0) = T(0);
+                    x0(2 * freeIdx + 1, 0) = T(0);
+                }
             }
-            auto freeIdx = freeIdxTable.at(v->idx);
-            auto origIdx = level.localToOriginal[v->idx];
-            auto guessIt = initialGuess->find(origIdx);
-            if (guessIt != initialGuess->end()) {
-                x0(2 * freeIdx, 0) = guessIt->second[0];
-                x0(2 * freeIdx + 1, 0) = guessIt->second[1];
-            } else {
-                x0(2 * freeIdx, 0) = T(0);
-                x0(2 * freeIdx + 1, 0) = T(0);
-            }
-        }
 
-        // Use solveWithGuess for iterative solvers
-        DenseMatrix bDense = b;
-        SolverType solver(A);
-        x = solver.solveWithGuess(bDense, x0);
-        if (solver.info() != Eigen::ComputationInfo::Success) {
-            throw SolverException("HLSCM: iterative solve failed at hierarchy level");
+            // Use solveWithGuess for iterative solvers
+            DenseMatrix bDense = b;
+            SolverType solver(A);
+            x = solver.solveWithGuess(bDense, x0);
+            if (solver.info() != Eigen::ComputationInfo::Success) {
+                throw SolverException("HLSCM: iterative solve failed at hierarchy level");
+            }
+        } else {
+            SolverType solver(A);
+            DenseMatrix bDense = b;
+            x = solver.solve(bDense);
+            if (solver.info() != Eigen::ComputationInfo::Success) {
+                throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
+            }
         }
     } else {
+        // Direct solver: no initial guess support; ignore initialGuess
         x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, SolverType>(A, b);
     }
 
@@ -4102,20 +4119,7 @@ public:
             p0 = pinnedVertices_->first;
             p1 = pinnedVertices_->second;
         } else {
-            // Auto-select pins (same logic as Compute())
-            auto v0 = mesh->vertices_boundary().front();
-            auto e = v0->edge;
-            do {
-                if (e->pair->is_boundary()) {
-                    break;
-                }
-                e = e->pair->next;
-            } while (e != v0->edge);
-            if (e == v0->edge && !e->pair->is_boundary()) {
-                throw MeshException("Pinned vertex not on boundary");
-            }
-            p0 = v0->idx;
-            p1 = e->next->vertex->idx;
+            AutoSelectPins(mesh, p0, p1);
         }
         ComputeImpl(mesh, p0, p1, levelRatio_, minCoarseVertices_);
     }
@@ -4127,20 +4131,9 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh)
     {
-        // Pin selection: first boundary vertex + boundary-edge neighbor
-        auto p0 = mesh->vertices_boundary().front();
-        auto e = p0->edge;
-        do {
-            if (e->pair->is_boundary()) {
-                break;
-            }
-            e = e->pair->next;
-        } while (e != p0->edge);
-        if (e == p0->edge && !e->pair->is_boundary()) {
-            throw MeshException("Pinned vertex not on boundary");
-        }
-        auto p1 = e->next->vertex;
-        ComputeImpl(mesh, p0->idx, p1->idx);
+        std::size_t p0, p1;
+        AutoSelectPins(mesh, p0, p1);
+        ComputeImpl(mesh, p0, p1);
     }
 
     /**
@@ -4152,6 +4145,47 @@ public:
     }
 
 private:
+    /** Select two pinned boundary vertices (same logic as AngleBasedLSCM) */
+    static void AutoSelectPins(const typename Mesh::Pointer& mesh, std::size_t& p0, std::size_t& p1)
+    {
+        auto v0 = mesh->vertices_boundary().front();
+        auto e = v0->edge;
+        do {
+            if (e->pair->is_boundary()) {
+                break;
+            }
+            e = e->pair->next;
+        } while (e != v0->edge);
+        if (e == v0->edge && !e->pair->is_boundary()) {
+            throw MeshException("Pinned vertex not on boundary");
+        }
+        p0 = v0->idx;
+        p1 = e->next->vertex->idx;
+    }
+
+    /**
+     * @brief Copy edge angles from the original mesh to a level mesh
+     *
+     * At the finest hierarchy level (k=0), the level mesh has the same
+     * face/edge structure as the original mesh. If ABF was run beforehand,
+     * we must use the ABF-optimized angles rather than recomputing from
+     * geometry. Coarser levels always use geometry angles.
+     */
+    static void CopyAnglesFromOriginal(const typename Mesh::Pointer& original,
+                                       const typename HalfEdgeMesh<T>::Pointer& levelMesh)
+    {
+        for (const auto& f : levelMesh->faces()) {
+            auto origFace = original->face(f->idx);
+            auto le = f->head;
+            auto oe = origFace->head;
+            for (int j = 0; j < 3; ++j) {
+                le->alpha = oe->alpha;
+                le = le->next;
+                oe = oe->next;
+            }
+        }
+    }
+
     static void ComputeImpl(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx,
                             std::size_t levelRatio = 10, std::size_t minCoarseVerts = 100)
     {
@@ -4178,9 +4212,16 @@ private:
             // Prolongate UVs from level k+1 to level k
             uvs = detail::hlscm::prolongateUVs<T>(uvs, collapsesByLevel[k]);
 
-            // Build level mesh and compute angles from 3D geometry
+            // Build level mesh
             auto levelMesh = detail::hlscm::buildLevelMesh<T>(levels[k]);
-            ComputeMeshAngles(levelMesh);
+
+            if (k == 0) {
+                // Finest level: use original mesh angles (may be ABF-optimized)
+                CopyAnglesFromOriginal(mesh, levelMesh);
+            } else {
+                // Coarser levels: compute angles from 3D geometry
+                ComputeMeshAngles(levelMesh);
+            }
 
             // Solve with initial guess
             uvs = detail::hlscm::solveLSCMLevel<T, Solver>(levelMesh, levels[k], pin0Idx, pin1Idx,
