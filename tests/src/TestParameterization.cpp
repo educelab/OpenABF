@@ -562,6 +562,63 @@ TEST(HLSCM, ABFPlusPlusAnglePreservation)
                                   "angles may not be preserved at finest hierarchy level";
 }
 
+TEST(HLSCM, ABFReducesConformalDistortion)
+{
+    // ABF-optimized angles should always reduce conformal distortion in LSCM,
+    // including HLSCM.  Measure angle error between the input 3D mesh and the
+    // flattened 2D parameterization: for each edge, compare the original 3D
+    // interior angle with the corresponding 2D angle.  ABF++ → HLSCM should
+    // have lower total angle error than geometry-only HLSCM.
+    using ABFType = ABFPlusPlus<float>;
+    using HLSCM_ABF = HierarchicalLSCM<float, ABFType::Mesh>;
+    using HLSCM_Geo = HierarchicalLSCM<float>;
+
+    constexpr std::size_t N = 20;
+
+    // Helper: compute per-edge 3D angles and return them indexed by edge idx
+    auto save3DAngles = [](const auto& mesh) {
+        std::vector<float> angles(mesh->num_edges());
+        for (const auto& f : mesh->faces()) {
+            for (auto& e : *f) {
+                angles[e->idx] = e->alpha;
+            }
+        }
+        return angles;
+    };
+
+    // Helper: compute total angle distortion (sum of squared angle errors)
+    auto angleDistortion = [](const auto& mesh, const std::vector<float>& origAngles) {
+        double totalErr = 0.0;
+        for (const auto& f : mesh->faces()) {
+            for (auto& e : *f) {
+                auto ab = e->next->vertex->pos - e->vertex->pos;
+                auto ac = e->next->next->vertex->pos - e->vertex->pos;
+                auto uvAngle = OpenABF::interior_angle(ab, ac);
+                double diff = static_cast<double>(uvAngle) - origAngles[e->idx];
+                totalErr += diff * diff;
+            }
+        }
+        return totalErr;
+    };
+
+    // ABF++ → HLSCM path
+    auto mesh_abf = ConstructWavySurface<ABFType::Mesh>(N, N);
+    ABFType::Compute(mesh_abf);
+    auto angles_abf = save3DAngles(mesh_abf);
+    HLSCM_ABF::Compute(mesh_abf);
+    auto distortion_abf = angleDistortion(mesh_abf, angles_abf);
+
+    // Geometry-only HLSCM path
+    auto mesh_geo = ConstructWavySurface<HLSCM_Geo::Mesh>(N, N);
+    auto angles_geo = save3DAngles(mesh_geo);
+    HLSCM_Geo::Compute(mesh_geo);
+    auto distortion_geo = angleDistortion(mesh_geo, angles_geo);
+
+    EXPECT_LT(distortion_abf, distortion_geo)
+        << "ABF++ did not reduce conformal distortion in HLSCM: "
+        << "ABF=" << distortion_abf << " vs Geo=" << distortion_geo;
+}
+
 TEST(HLSCM, PerformanceComparison)
 {
     // Compare HLSCM vs AngleBasedLSCM (with same LSCG solver) on a large mesh.
