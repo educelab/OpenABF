@@ -16,7 +16,7 @@
 | closed | A2 | FacePtr range iteration requires `*face` dereference | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-16 |
 | closed | A3 | `insert_face` boundary update behavior undocumented | [#16](https://github.com/educelab/OpenABF/issues/16) | 2026-03-13 | 2026-03-16 |
 | closed | A4 | `gradient()` missing `[[nodiscard]]` | [#17](https://github.com/educelab/OpenABF/issues/17) | 2026-03-13 | 2026-03-16 |
-| open | A5 | No configurable pinned edge selection for LSCM | [#2](https://github.com/educelab/OpenABF/issues/2) | 2026-03-13 | 2026-03-13 |
+| closed | A5 | No configurable pinned edge selection for LSCM | [#2](https://github.com/educelab/OpenABF/issues/2) | 2026-03-13 | 2026-03-16 |
 | open | A7 | Multi-pin UV constraints for LSCM | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-03-16 | 2026-03-16 |
 | closed | A6 | AngleBasedLSCM A/B matrix construction hard to follow | [#3](https://github.com/educelab/OpenABF/issues/3) | 2026-03-13 | 2026-03-16 |
 | open | F1 | HLSCM (Hierarchical LSCM) | [#5](https://github.com/educelab/OpenABF/issues/5) | 2026-03-13 | 2026-03-13 |
