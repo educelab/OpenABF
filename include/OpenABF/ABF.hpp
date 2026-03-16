@@ -237,6 +237,9 @@ public:
     /** @brief Set the maximum number of iterations */
     void setMaxIterations(const std::size_t it) { maxIters_ = it; }
 
+    /** @brief Set the gradient convergence threshold */
+    void setGradientThreshold(T t) { gradThreshold_ = t; }
+
     /**
      * @brief Get the mesh gradient
      *
@@ -252,7 +255,10 @@ public:
     [[nodiscard]] auto iterations() const -> std::size_t { return iters_; }
 
     /** @copydoc ABF::Compute */
-    void compute(typename Mesh::Pointer& mesh) { Compute(mesh, iters_, grad_, maxIters_); }
+    void compute(typename Mesh::Pointer& mesh)
+    {
+        Compute(mesh, iters_, grad_, maxIters_, gradThreshold_);
+    }
 
     /**
      * @brief Compute parameterized interior angles
@@ -262,7 +268,7 @@ public:
      * @throws MeshException If mesh gradient cannot be calculated.
      */
     static void Compute(typename Mesh::Pointer& mesh, std::size_t& iters, T& gradient,
-                        const std::size_t maxIters = 10)
+                        const std::size_t maxIters = 10, T gradThreshold = T(0.001))
     {
         using namespace detail::ABF;
 
@@ -287,7 +293,7 @@ public:
             }
         }
 
-        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
+        while (gradient > gradThreshold and gradDelta > gradThreshold and iters < maxIters) {
             if (std::isnan(gradient) or std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
@@ -431,6 +437,8 @@ protected:
     std::size_t iters_{0};
     /** Max iterations */
     std::size_t maxIters_{10};
+    /** Gradient convergence threshold */
+    T gradThreshold_{0.001};
 };
 
 }  // namespace OpenABF
