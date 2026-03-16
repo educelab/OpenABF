@@ -1,4 +1,6 @@
+#include <chrono>
 #include <cmath>
+#include <iostream>
 #include <gtest/gtest.h>
 
 #include "OpenABF/OpenABF.hpp"
@@ -443,6 +445,61 @@ TEST(HLSCM, WavySurface)
 
     // Check no triangle flips
     for (const auto& f : mesh->faces()) {
+        auto e = f->head;
+        const auto& p0 = e->vertex->pos;
+        const auto& p1 = e->next->vertex->pos;
+        const auto& p2 = e->next->next->vertex->pos;
+        auto area = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p2[0] - p0[0]) * (p1[1] - p0[1]);
+        EXPECT_GT(area, 0.f) << "face " << f->idx << " is flipped";
+    }
+}
+
+TEST(HLSCM, PerformanceComparison)
+{
+    // Compare HLSCM vs AngleBasedLSCM (with same LSCG solver) on a large mesh.
+    // Both use LeastSquaresConjugateGradient so the comparison isolates the
+    // benefit of the hierarchical initial guess.
+    using SolverType = Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>>;
+    using HLSCM = HierarchicalLSCM<float>;
+    using LSCM = AngleBasedLSCM<float, HalfEdgeMesh<float>, SolverType>;
+
+    constexpr std::size_t rows = 75;
+    constexpr std::size_t cols = 75;
+    // 5625 vertices, 10952 faces — large enough for meaningful hierarchy
+
+    // Time AngleBasedLSCM (with LSCG solver, no hierarchy)
+    auto mesh_lscm = ConstructWavySurface<LSCM::Mesh>(rows, cols);
+    auto t0 = std::chrono::steady_clock::now();
+    LSCM::Compute(mesh_lscm);
+    auto t1 = std::chrono::steady_clock::now();
+    auto lscm_us = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+
+    // Time HierarchicalLSCM
+    auto mesh_hlscm = ConstructWavySurface<HLSCM::Mesh>(rows, cols);
+    auto t2 = std::chrono::steady_clock::now();
+    HLSCM::Compute(mesh_hlscm);
+    auto t3 = std::chrono::steady_clock::now();
+    auto hlscm_us = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count();
+
+    std::cout << "\n  HLSCM Performance (" << rows << "x" << cols << " wavy surface, "
+              << mesh_hlscm->num_vertices() << " verts, " << mesh_hlscm->num_faces() << " faces):\n"
+              << "    LSCM (LSCG, no hierarchy): " << lscm_us / 1000.0 << " ms\n"
+              << "    HLSCM (hierarchical):      " << hlscm_us / 1000.0 << " ms\n"
+              << "    Speedup:                   "
+              << static_cast<double>(lscm_us) /
+                     static_cast<double>(std::max(hlscm_us, decltype(hlscm_us)(1)))
+              << "x\n";
+
+    // Verify HLSCM produced valid results
+    for (std::size_t v = 0; v < mesh_hlscm->num_vertices(); ++v) {
+        const auto& pos = mesh_hlscm->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v;
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v;
+        EXPECT_FLOAT_EQ(pos[2], 0.f) << "vertex " << v;
+    }
+
+    // Verify no triangle flips in HLSCM output
+    for (const auto& f : mesh_hlscm->faces()) {
         auto e = f->head;
         const auto& p0 = e->vertex->pos;
         const auto& p1 = e->next->vertex->pos;

@@ -3435,37 +3435,70 @@ public:
             return std::nullopt;
         }
 
-        // Check angular defect: ensure no face would flip after collapse
+        // Minimum angle threshold (radians) — reject collapses that would
+        // create triangles with any angle below this.  Paper uses ~10°.
+        constexpr T minAngle = PI<T> / T(18);  // 10°
+
+        // Validate all faces that will exist around vKeep after collapse:
+        // removeFaces (with vRemove→vKeep substitution) must not flip or
+        // degenerate, and ALL surviving faces incident to vKeep must
+        // maintain a minimum angle above the threshold.
+        //
+        // Collect the full set of post-collapse faces incident to vKeep.
+        std::vector<std::array<std::size_t, 3>> postFaces;
+        // Existing vKeep faces (excluding shared faces which will be removed)
+        std::unordered_set<std::size_t> sharedSet(sharedFaces.begin(), sharedFaces.end());
+        for (auto fi : vertFaces_[vKeep]) {
+            if (!faceAlive_[fi] || sharedSet.count(fi)) {
+                continue;
+            }
+            postFaces.push_back(faces_[fi]);
+        }
+        // removeFaces with vRemove→vKeep substitution
         for (auto fi : removeFaces) {
-            // This face contains vRemove but not vKeep.
-            // After collapse, vRemove is replaced by vKeep.
             std::array<std::size_t, 3> newTri = faces_[fi];
             for (auto& vi : newTri) {
                 if (vi == vRemove) {
                     vi = vKeep;
                 }
             }
-            // Check that the triangle normal doesn't flip
-            auto& p0 = positions_[newTri[0]];
-            auto& p1 = positions_[newTri[1]];
-            auto& p2 = positions_[newTri[2]];
-            auto e1 = p1 - p0;
-            auto e2 = p2 - p0;
-            auto newNormal = cross(e1, e2);
-            auto newArea = norm(newNormal);
-            if (newArea < std::numeric_limits<T>::epsilon() * T(100)) {
-                return std::nullopt;  // Degenerate triangle
-            }
+            postFaces.push_back(newTri);
 
-            // Check against old normal
+            // Also check for normal flip on the modified faces
             auto& op0 = positions_[faces_[fi][0]];
             auto& op1 = positions_[faces_[fi][1]];
             auto& op2 = positions_[faces_[fi][2]];
-            auto oe1 = op1 - op0;
-            auto oe2 = op2 - op0;
-            auto oldNormal = cross(oe1, oe2);
+            auto oldNormal = cross(op1 - op0, op2 - op0);
+            auto newNormal = cross(positions_[newTri[1]] - positions_[newTri[0]],
+                                   positions_[newTri[2]] - positions_[newTri[0]]);
             if (dot(oldNormal, newNormal) < T(0)) {
-                return std::nullopt;  // Normal flip
+                return std::nullopt;
+            }
+        }
+
+        // Check all post-collapse faces for minimum angle
+        for (auto& tri : postFaces) {
+            auto& p0 = positions_[tri[0]];
+            auto& p1 = positions_[tri[1]];
+            auto& p2 = positions_[tri[2]];
+            auto e01 = p1 - p0;
+            auto e02 = p2 - p0;
+            auto e12 = p2 - p1;
+            auto l01 = norm(e01);
+            auto l02 = norm(e02);
+            auto l12 = norm(e12);
+            if (l01 == T(0) || l02 == T(0) || l12 == T(0)) {
+                return std::nullopt;
+            }
+            // Clamp acos argument to [-1,1] for numerical safety
+            auto clampedAngle = [](T cosVal) -> T {
+                return std::acos(std::max(T(-1), std::min(T(1), cosVal)));
+            };
+            T a0 = clampedAngle(dot(e01, e02) / (l01 * l02));
+            T a1 = clampedAngle(dot(p0 - p1, e12) / (l01 * l12));
+            T a2 = PI<T> - a0 - a1;
+            if (a0 < minAngle || a1 < minAngle || a2 < minAngle) {
+                return std::nullopt;
             }
         }
 
