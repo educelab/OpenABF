@@ -575,9 +575,12 @@ TEST(HLSCM, ABFReducesConformalDistortion)
 
     constexpr std::size_t N = 20;
 
-    // Helper: compute per-edge 3D angles and return them indexed by edge idx
+    // Helper: save per-edge 3D angles keyed by edge idx.
+    // Note: num_edges() counts only face-adjacent half-edges, but edge idx
+    // values are assigned from the full half-edge pool (including boundary
+    // half-edges), so they are not contiguous.  Use a map to avoid OOB.
     auto save3DAngles = [](const auto& mesh) {
-        std::vector<float> angles(mesh->num_edges());
+        std::unordered_map<std::size_t, float> angles;
         for (const auto& f : mesh->faces()) {
             for (auto& e : *f) {
                 angles[e->idx] = e->alpha;
@@ -587,14 +590,15 @@ TEST(HLSCM, ABFReducesConformalDistortion)
     };
 
     // Helper: compute total angle distortion (sum of squared angle errors)
-    auto angleDistortion = [](const auto& mesh, const std::vector<float>& origAngles) {
+    auto angleDistortion = [](const auto& mesh,
+                              const std::unordered_map<std::size_t, float>& origAngles) {
         double totalErr = 0.0;
         for (const auto& f : mesh->faces()) {
             for (auto& e : *f) {
                 auto ab = e->next->vertex->pos - e->vertex->pos;
                 auto ac = e->next->next->vertex->pos - e->vertex->pos;
                 auto uvAngle = OpenABF::interior_angle(ab, ac);
-                double diff = static_cast<double>(uvAngle) - origAngles[e->idx];
+                double diff = static_cast<double>(uvAngle) - origAngles.at(e->idx);
                 totalErr += diff * diff;
             }
         }
