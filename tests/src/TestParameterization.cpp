@@ -230,3 +230,61 @@ TEST(Parameterizations, ABFPlusPlus_LooseThreshold)
 
     EXPECT_EQ(abf.iterations(), 0u);
 }
+
+TEST(Parameterization, AngleBasedLSCM_ExplicitPins)
+{
+    // Explicit pins matching the default selection must produce identical results
+    using LSCM = AngleBasedLSCM<float>;
+
+    auto mesh = ConstructPyramid<LSCM::Mesh>();
+    LSCM::Compute(mesh, 0, 1);
+
+    const std::vector expected{Vec3f{0, 0, 0}, Vec3f{2, 0, 0}, Vec3f{1, 1.0392305, 0},
+                               Vec3f{1, 0.34641013, 0}};
+    for (auto v = 0; v < mesh->num_vertices(); ++v) {
+        const auto& vv = mesh->vertex(v);
+        const auto& ve = expected[v];
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(vv->pos[i], ve[i]);
+        }
+    }
+}
+
+TEST(Parameterization, AngleBasedLSCM_ExplicitPins_Reversed)
+{
+    // Swapping the pin pair must change which vertex lands at the origin
+    using LSCM = AngleBasedLSCM<float>;
+
+    auto mesh = ConstructPyramid<LSCM::Mesh>();
+    LSCM::Compute(mesh, 1, 0);
+
+    // p0 = vertex 1 → placed at {0, 0, 0}
+    // p1 = vertex 0 → edge from v1 to v0 is {-1,0,0}; max axis is Y (value 0),
+    //   copysign(dist=2, 0) = +2  →  p1 placed at {0, 2, 0}
+    EXPECT_FLOAT_EQ(mesh->vertex(1)->pos[0], 0.f);
+    EXPECT_FLOAT_EQ(mesh->vertex(1)->pos[1], 0.f);
+    EXPECT_FLOAT_EQ(mesh->vertex(0)->pos[0], 0.f);
+    EXPECT_FLOAT_EQ(mesh->vertex(0)->pos[1], 2.f);
+}
+
+TEST(Parameterization, AngleBasedLSCM_SetPinnedVertices)
+{
+    // Instance API: setPinnedVertices selects the same pins as the static overload
+    using LSCM = AngleBasedLSCM<float>;
+
+    auto mesh_static = ConstructPyramid<LSCM::Mesh>();
+    LSCM::Compute(mesh_static, 0, 1);
+
+    auto mesh_instance = ConstructPyramid<LSCM::Mesh>();
+    LSCM lscm;
+    lscm.setPinnedVertices(0, 1);
+    lscm.compute(mesh_instance);
+
+    for (auto v = 0; v < mesh_static->num_vertices(); ++v) {
+        const auto& vs = mesh_static->vertex(v)->pos;
+        const auto& vi = mesh_instance->vertex(v)->pos;
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(vi[i], vs[i]);
+        }
+    }
+}

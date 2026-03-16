@@ -2,7 +2,9 @@
 
 #include <cmath>
 #include <map>
+#include <optional>
 #include <type_traits>
+#include <utility>
 
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
@@ -99,11 +101,27 @@ public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
 
-    /** @copydoc AngleBasedLSCM::Compute */
-    void compute(typename Mesh::Pointer& mesh) const { Compute(mesh); }
+    /** @brief Set the pinned vertex indices used by compute() */
+    void setPinnedVertices(std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        pinnedVertices_ = {pin0Idx, pin1Idx};
+    }
+
+    /** @copydoc AngleBasedLSCM::Compute() */
+    void compute(typename Mesh::Pointer& mesh) const
+    {
+        if (pinnedVertices_) {
+            Compute(mesh, pinnedVertices_->first, pinnedVertices_->second);
+        } else {
+            Compute(mesh);
+        }
+    }
 
     /**
-     * @brief Compute the parameterized mesh
+     * @brief Compute the parameterized mesh using automatic pin selection
+     *
+     * Selects the first boundary vertex and its boundary-edge neighbor as
+     * pinned vertices.
      *
      * @throws MeshException If pinned vertex is not on boundary.
      * @throws SolverException If matrix cannot be decomposed or if solver fails
@@ -111,12 +129,7 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh)
     {
-        using Triplet = Eigen::Triplet<T>;
-        using SparseMatrix = Eigen::SparseMatrix<T>;
-        using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-
-        // Pinned vertex selection
-        // Get the end points of a boundary edge
+        // Pinned vertex selection: first boundary vertex + boundary-edge neighbor
         auto p0 = mesh->vertices_boundary().front();
         auto e = p0->edge;
         do {
@@ -129,6 +142,35 @@ public:
             throw MeshException("Pinned vertex not on boundary");
         }
         auto p1 = e->next->vertex;
+        ComputeImpl(mesh, p0, p1);
+    }
+
+    /**
+     * @brief Compute the parameterized mesh with explicit pinned vertex indices
+     *
+     * @param pin0Idx Index of the first pinned vertex (placed at the UV origin)
+     * @param pin1Idx Index of the second pinned vertex (placed on the nearest axis)
+     * @throws SolverException If matrix cannot be decomposed or if solver fails
+     * to find a solution.
+     */
+    static void Compute(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        ComputeImpl(mesh, mesh->vertex(pin0Idx), mesh->vertex(pin1Idx));
+    }
+
+private:
+    /** Optional explicit pin pair set via setPinnedVertices() */
+    std::optional<std::pair<std::size_t, std::size_t>> pinnedVertices_;
+
+    /**
+     * @brief Core solver: place p0/p1 on the UV axes then solve for free vertices
+     */
+    static void ComputeImpl(typename Mesh::Pointer& mesh, const typename Mesh::VertPtr& p0,
+                            const typename Mesh::VertPtr& p1)
+    {
+        using Triplet = Eigen::Triplet<T>;
+        using SparseMatrix = Eigen::SparseMatrix<T>;
+        using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
         // Map selected edge to closest XY axis
         // Use sign to select direction
