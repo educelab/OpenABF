@@ -619,8 +619,8 @@ TEST(HLSCM, ABFReducesConformalDistortion)
     auto distortion_geo = angleDistortion(mesh_geo, angles_geo);
 
     EXPECT_LT(distortion_abf, distortion_geo)
-        << "ABF++ did not reduce conformal distortion in HLSCM: "
-        << "ABF=" << distortion_abf << " vs Geo=" << distortion_geo;
+        << "ABF++ did not reduce conformal distortion in HLSCM: " << "ABF=" << distortion_abf
+        << " vs Geo=" << distortion_geo;
 }
 
 TEST(HLSCM, PerformanceComparison)
