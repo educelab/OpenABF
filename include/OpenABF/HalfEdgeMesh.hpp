@@ -779,7 +779,7 @@ public:
         const_iterator cbegin() const { return const_iterator{head, head}; }
         /** @brief Returns the const end iterator */
         const_iterator cend() const { return const_iterator(); }
-        /** @brief Returns an iterable range over the edges of the face (resolves A2) */
+        /** @brief Returns an iterable range over the edges of the face */
         auto edges() const
         {
             using Iter = const_iterator;
