@@ -10,11 +10,14 @@ returns it — making it a *filtered copy* utility. This conflicts with the name
 function has 6 active call sites in `HalfEdgeMesh.hpp` (lines 800, 813, 1094,
 1096, 1117, 1119), all of which correctly capture the return value.
 
+## Accepted Approach
+Rename `detail::erase_if` → `detail::filter`. The library targets C++17, so
+`std::erase_if` (C++20) and `std::ranges::filter_view` are unavailable; keeping
+a named helper is appropriate. The rename makes the copy semantics self-evident.
+
 ## Acceptance Criteria
-- [ ] Either rename `detail::erase_if` to a name that reflects copy semantics
-  (e.g. `detail::filter` or `detail::filtered_copy`), or replace all 6 call
-  sites with inline `std::copy_if` / `std::ranges::filter_view` and remove the
-  helper
+- [ ] `detail::erase_if` renamed to `detail::filter` in `HalfEdgeMesh.hpp`
+- [ ] All 6 call sites updated
 - [ ] All tests pass
 - [ ] No change in behavior at any call site
 
