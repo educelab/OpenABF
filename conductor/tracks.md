@@ -14,7 +14,7 @@
 | closed | P3 | `InitializeAnglesAndWeights` calls wheel() redundantly | [#14](https://github.com/educelab/OpenABF/issues/14) | 2026-03-13 | 2026-03-16 |
 | open | A1 | Convergence tolerance hardcoded in ABF and ABFPlusPlus | [#15](https://github.com/educelab/OpenABF/issues/15) | 2026-03-13 | 2026-03-13 |
 | closed | A2 | FacePtr range iteration requires `*face` dereference | [#4](https://github.com/educelab/OpenABF/issues/4) | 2026-03-13 | 2026-03-16 |
-| open | A3 | `insert_face` boundary update behavior undocumented | [#16](https://github.com/educelab/OpenABF/issues/16) | 2026-03-13 | 2026-03-13 |
+| closed | A3 | `insert_face` boundary update behavior undocumented | [#16](https://github.com/educelab/OpenABF/issues/16) | 2026-03-13 | 2026-03-16 |
 | open | A4 | `gradient()` missing `[[nodiscard]]` | [#17](https://github.com/educelab/OpenABF/issues/17) | 2026-03-13 | 2026-03-13 |
 | open | A5 | No configurable pinned edge selection for LSCM | [#2](https://github.com/educelab/OpenABF/issues/2) | 2026-03-13 | 2026-03-13 |
 | open | A6 | AngleBasedLSCM A/B matrix construction hard to follow | [#3](https://github.com/educelab/OpenABF/issues/3) | 2026-03-13 | 2026-03-13 |
