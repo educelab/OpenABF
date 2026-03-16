@@ -176,6 +176,31 @@ public:
         // Are only solving for free vertices, so push pins in special matrix
         std::vector<Triplet> tripletsA;
         tripletsB.clear();
+
+        // Per-vertex contribution helper (Lévy et al. 2002, Eq. 10).
+        // Each vertex contributes a 2×2 conformal block [c, -s; s, c] at its
+        // column. Fixed pins (p0, p1) go into tripletsB; free vertices into
+        // tripletsA.
+        auto addContrib = [&](std::size_t row, const auto& e, T c, T s) {
+            if (e->vertex == p0) {
+                tripletsB.emplace_back(row, 0, c);
+                tripletsB.emplace_back(row, 1, -s);
+                tripletsB.emplace_back(row + 1, 0, s);
+                tripletsB.emplace_back(row + 1, 1, c);
+            } else if (e->vertex == p1) {
+                tripletsB.emplace_back(row, 2, c);
+                tripletsB.emplace_back(row, 3, -s);
+                tripletsB.emplace_back(row + 1, 2, s);
+                tripletsB.emplace_back(row + 1, 3, c);
+            } else {
+                auto freeIdx = freeIdxTable.at(e->vertex->idx);
+                tripletsA.emplace_back(row, 2 * freeIdx, c);
+                tripletsA.emplace_back(row, 2 * freeIdx + 1, -s);
+                tripletsA.emplace_back(row + 1, 2 * freeIdx, s);
+                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, c);
+            }
+        };
+
         for (const auto& f : mesh->faces()) {
             auto e0 = f->head;
             auto e1 = e0->next;
@@ -212,55 +237,11 @@ public:
             auto cosine = std::cos(e0->alpha) * ratio;
             auto sine = sin0 * ratio;
 
-            // If pin0 or pin1, put in fixedB matrix, else put in A
+            // Assemble per-vertex contributions for this face (Lévy et al. 2002, Eq. 10)
             auto row = 2 * f->idx;
-            if (e0->vertex == p0) {
-                tripletsB.emplace_back(row, 0, cosine - T(1));
-                tripletsB.emplace_back(row, 1, -sine);
-                tripletsB.emplace_back(row + 1, 0, sine);
-                tripletsB.emplace_back(row + 1, 1, cosine - T(1));
-            } else if (e0->vertex == p1) {
-                tripletsB.emplace_back(row, 2, cosine - T(1));
-                tripletsB.emplace_back(row, 3, -sine);
-                tripletsB.emplace_back(row + 1, 2, sine);
-                tripletsB.emplace_back(row + 1, 3, cosine - T(1));
-            } else {
-                auto freeIdx = freeIdxTable.at(e0->vertex->idx);
-                tripletsA.emplace_back(row, 2 * freeIdx, cosine - T(1));
-                tripletsA.emplace_back(row, 2 * freeIdx + 1, -sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx, sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, cosine - T(1));
-            }
-
-            if (e1->vertex == p0) {
-                tripletsB.emplace_back(row, 0, -cosine);
-                tripletsB.emplace_back(row, 1, sine);
-                tripletsB.emplace_back(row + 1, 0, -sine);
-                tripletsB.emplace_back(row + 1, 1, -cosine);
-            } else if (e1->vertex == p1) {
-                tripletsB.emplace_back(row, 2, -cosine);
-                tripletsB.emplace_back(row, 3, sine);
-                tripletsB.emplace_back(row + 1, 2, -sine);
-                tripletsB.emplace_back(row + 1, 3, -cosine);
-            } else {
-                auto freeIdx = freeIdxTable.at(e1->vertex->idx);
-                tripletsA.emplace_back(row, 2 * freeIdx, -cosine);
-                tripletsA.emplace_back(row, 2 * freeIdx + 1, sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx, -sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, -cosine);
-            }
-
-            if (e2->vertex == p0) {
-                tripletsB.emplace_back(row, 0, T(1));
-                tripletsB.emplace_back(row + 1, 1, T(1));
-            } else if (e2->vertex == p1) {
-                tripletsB.emplace_back(row, 2, T(1));
-                tripletsB.emplace_back(row + 1, 3, T(1));
-            } else {
-                auto freeIdx = freeIdxTable.at(e2->vertex->idx);
-                tripletsA.emplace_back(row, 2 * freeIdx, T(1));
-                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, T(1));
-            }
+            addContrib(row, e0, cosine - T(1), sine);
+            addContrib(row, e1, -cosine, -sine);
+            addContrib(row, e2, T(1), T(0));
         }
         SparseMatrix A(2 * numFaces, 2 * numFree);
         A.reserve(tripletsA.size());
