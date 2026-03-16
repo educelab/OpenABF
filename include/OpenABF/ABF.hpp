@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cassert>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 #include <Eigen/SparseLU>
 
@@ -239,7 +242,7 @@ public:
      *
      * **Note:** Result is only valid after running compute().
      */
-    auto gradient() const -> T { return grad_; }
+    [[nodiscard]] auto gradient() const -> T { return grad_; }
 
     /**
      * @brief Get the number of iterations of the last computation
@@ -273,6 +276,17 @@ public:
         }
         auto gradDelta = INF<T>;
         iters = 0;
+
+        // vertex idx -> interior vertex idx lookup (pre-built once, O(1) access)
+        auto vCnt = mesh->num_vertices();
+        std::vector<std::size_t> vIdx2vIntIdx(vCnt, std::numeric_limits<std::size_t>::max());
+        {
+            std::size_t newIdx{0};
+            for (const auto& v : mesh->vertices_interior()) {
+                vIdx2vIntIdx[v->idx] = newIdx++;
+            }
+        }
+
         while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
             if (std::isnan(gradient) or std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
@@ -283,7 +297,6 @@ public:
             using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
 
             // Helpful parameters
-            auto vCnt = mesh->num_vertices();
             auto vIntCnt = mesh->num_vertices_interior();
             auto edgeCnt = mesh->num_edges();
             auto faceCnt = mesh->num_faces();
@@ -312,13 +325,6 @@ public:
             SparseMatrix b(edgeCnt + faceCnt + 2 * vIntCnt, 1);
             b.reserve(triplets.size());
             b.setFromTriplets(triplets.begin(), triplets.end());
-
-            // vertex idx -> interior vertex idx permutation
-            std::map<std::size_t, std::size_t> vIdx2vIntIdx;
-            std::size_t newIdx{0};
-            for (const auto& v : mesh->vertices_interior()) {
-                vIdx2vIntIdx[v->idx] = newIdx++;
-            }
 
             ///// LHS /////
             // Lambda = diag(2/w)
@@ -396,7 +402,8 @@ public:
             }
             auto base = edgeCnt + faceCnt;
             for (auto& v : mesh->vertices_interior()) {
-                auto intIdx = vIdx2vIntIdx.at(v->idx);
+                auto intIdx = vIdx2vIntIdx[v->idx];
+                assert(intIdx != std::numeric_limits<std::size_t>::max());
                 v->lambda_plan += delta(base + intIdx, 0);
                 v->lambda_len += delta(base + vIntCnt + intIdx, 0);
             }
