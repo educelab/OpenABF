@@ -56,7 +56,7 @@ auto vec_to_string(const T& v) -> std::string
 
 /** Remove elements which meet the given predicate */
 template <class ForwardContainer, class UnaryPred>
-auto erase_if(ForwardContainer v, UnaryPred p)
+auto filter(ForwardContainer v, UnaryPred p)
 {
     auto end = std::remove_if(std::begin(v), std::end(v), p);
     v.erase(end, std::end(v));
@@ -797,8 +797,8 @@ public:
             if (edge->is_boundary()) {
                 // Get incoming boundary edges to the start point
                 auto inBoundary =
-                    detail::erase_if(incoming_edges(edge->vertex->idx),
-                                     [](const auto& e) { return not e->is_boundary(); });
+                    detail::filter(incoming_edges(edge->vertex->idx),
+                                   [](const auto& e) { return not e->is_boundary(); });
                 if (inBoundary.size() == 0 or inBoundary.size() > 1) {
                     const std::array<std::size_t, 2> idx{edge->vertex->idx,
                                                          edge->pair->vertex->idx};
@@ -810,8 +810,8 @@ public:
 
                 // Get outgoing boundary edges to the end point
                 auto outBoundary =
-                    detail::erase_if(outgoing_edges(edge->pair->vertex->idx),
-                                     [](const auto& e) { return not e->is_boundary(); });
+                    detail::filter(outgoing_edges(edge->pair->vertex->idx),
+                                   [](const auto& e) { return not e->is_boundary(); });
                 if (outBoundary.size() == 0 or outBoundary.size() > 1) {
                     const std::array<std::size_t, 2> idx{edge->vertex->idx,
                                                          edge->pair->vertex->idx};
@@ -1091,10 +1091,10 @@ public:
             auto newIdx = insert_vertex(oldStart->pos);
             newStart = verts_.at(newIdx);
 
-            auto in = detail::erase_if(incoming_edges(oldStart->idx),
-                                       [](auto e) { return not e->is_boundary(); });
-            auto out = detail::erase_if(outgoing_edges(oldStart->idx),
-                                        [](auto e) { return not e->is_boundary(); });
+            auto in = detail::filter(incoming_edges(oldStart->idx),
+                                     [](auto e) { return not e->is_boundary(); });
+            auto out = detail::filter(outgoing_edges(oldStart->idx),
+                                      [](auto e) { return not e->is_boundary(); });
             if (in.size() == 0 or out.size() == 0) {
                 throw MeshException("No incoming/outgoing edges");
             }
@@ -1114,10 +1114,10 @@ public:
             auto newIdx = insert_vertex(oldEnd->pos);
             newEnd = verts_.at(newIdx);
 
-            auto in = detail::erase_if(incoming_edges(oldEnd->idx),
-                                       [](auto e) { return not e->is_boundary(); });
-            auto out = detail::erase_if(outgoing_edges(oldEnd->idx),
-                                        [](auto e) { return not e->is_boundary(); });
+            auto in = detail::filter(incoming_edges(oldEnd->idx),
+                                     [](auto e) { return not e->is_boundary(); });
+            auto out = detail::filter(outgoing_edges(oldEnd->idx),
+                                      [](auto e) { return not e->is_boundary(); });
             if (in.size() == 0 or out.size() == 0) {
                 throw MeshException("No incoming/outgoing edges");
             }
