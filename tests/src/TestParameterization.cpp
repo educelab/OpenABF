@@ -515,6 +515,53 @@ TEST(HLSCM, MultiLevelHierarchy)
                                   "multi-level hierarchy may not have been triggered";
 }
 
+TEST(HLSCM, ABFPlusPlusAnglePreservation)
+{
+    // Verify that ABF++ → HLSCM uses the ABF-optimized angles at the finest
+    // hierarchy level by checking that the result differs from geometry-only
+    // HLSCM.  If angles were being discarded (recomputed from geometry), both
+    // would produce identical output.
+    using ABFType = ABFPlusPlus<float>;
+    using HLSCM_ABF = HierarchicalLSCM<float, ABFType::Mesh>;
+    using HLSCM_Geo = HierarchicalLSCM<float>;
+
+    constexpr std::size_t N = 20;
+
+    // HLSCM with ABF-optimized angles
+    auto mesh_abf = ConstructWavySurface<ABFType::Mesh>(N, N);
+    ABFType::Compute(mesh_abf);
+    HLSCM_ABF::Compute(mesh_abf);
+
+    // HLSCM with geometry-only angles (no ABF)
+    auto mesh_geo = ConstructWavySurface<HLSCM_Geo::Mesh>(N, N);
+    HLSCM_Geo::Compute(mesh_geo);
+
+    // Both must produce valid UVs
+    for (std::size_t v = 0; v < mesh_abf->num_vertices(); ++v) {
+        const auto& pos = mesh_abf->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v;
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v;
+        EXPECT_FLOAT_EQ(pos[2], 0.f);
+    }
+
+    // The ABF-optimized angles should produce a measurably different result
+    // from geometry angles, proving they are actually being used at the
+    // finest level.
+    bool anyDifference = false;
+    for (std::size_t v = 0; v < mesh_abf->num_vertices(); ++v) {
+        for (int i = 0; i < 2; ++i) {
+            if (std::abs(mesh_abf->vertex(v)->pos[i] - mesh_geo->vertex(v)->pos[i]) > 1e-6f) {
+                anyDifference = true;
+                break;
+            }
+        }
+        if (anyDifference)
+            break;
+    }
+    EXPECT_TRUE(anyDifference) << "ABF++ angles had no effect on HLSCM output — "
+                                  "angles may not be preserved at finest hierarchy level";
+}
+
 TEST(HLSCM, PerformanceComparison)
 {
     // Compare HLSCM vs AngleBasedLSCM (with same LSCG solver) on a large mesh.
