@@ -950,6 +950,10 @@ public:
      *
      * Accepts an iterable supporting range-based for loops.
      *
+     * @note This function does **not** update the mesh boundary connections.
+     * Call update_boundary() after all faces have been inserted, or use
+     * insert_faces() to insert faces and update the boundary in one step.
+     *
      * @param vector List of vertex indices
      * @throws std::out_of_range If one of the vertex indices is out of bounds.
      * @throws MeshException (1) If one of provided edges is already paired.
@@ -966,9 +970,11 @@ public:
     /**
      * @brief Insert a new face from an ordered list of Vertex indices
      *
-     * This function inserts a face but **does not** update the mesh's boundary
-     * connections. Make sure to call update_boundary() after all faces have
-     * been inserted or use insert_faces() to insert and update in one step.
+     * Accepts vertex indices as individual variadic arguments.
+     *
+     * @note This function does **not** update the mesh boundary connections.
+     * Call update_boundary() after all faces have been inserted, or use
+     * insert_faces() to insert faces and update the boundary in one step.
      *
      * @throws std::out_of_range If one of the vertex indices is out of bounds.
      * @throws MeshException If one of provided edges is already paired. This
