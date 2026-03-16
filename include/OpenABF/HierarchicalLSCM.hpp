@@ -70,9 +70,9 @@ struct CollapseRecord {
     std::size_t vRemoved;
     /** Index of the kept vertex (in the original/fine mesh) */
     std::size_t vKept;
-    /** Index of the third vertex of the containing triangle (for barycentric interp) */
-    std::size_t vThird;
-    /** Barycentric coordinates (w.r.t. vKept, vThird, vRemoved) of vRemoved */
+    /** Post-collapse triangle containing vRemoved (original vertex indices) */
+    std::array<std::size_t, 3> containingTri;
+    /** Barycentric coordinates of vRemoved in containingTri */
     std::array<T, 3> bary;
 };
 
@@ -269,30 +269,30 @@ public:
         }
 
         // Build collapse record with barycentric coordinates
-        // vRemoved's position in terms of the nearest surviving triangle
-        // For prolongation, we store bary coords of vRemove w.r.t. a
-        // triangle containing vKeep. We use one of the updated removeFaces.
+        // After collapse, face (vRemove, vA, vB) becomes (vKeep, vA, vB).
+        // Store bary coords of vRemoved's position in the post-collapse triangle.
         CollapseRecord<T> record;
         record.vRemoved = vRemove;
         record.vKept = vKeep;
 
         if (!removeFaces.empty()) {
-            // Use the first surviving face that will contain vKeep after collapse
+            // Use the first surviving face; its post-collapse vertices are
+            // (vKeep, vA, vB) where vA and vB are the non-vRemove vertices.
             auto fi = removeFaces[0];
-            std::size_t third = 0;
+            std::array<std::size_t, 3> postTri;
+            postTri[0] = vKeep;
+            std::size_t slot = 1;
             for (auto vi : faces_[fi]) {
-                if (vi != vRemove && vi != vKeep) {
-                    third = vi;
-                    break;
+                if (vi != vRemove) {
+                    postTri[slot++] = vi;
                 }
             }
-            record.vThird = third;
-            record.bary = computeBarycentric_(positions_[vRemove], positions_[vKeep],
-                                              positions_[third], positions_[vRemove]);
+            record.containingTri = postTri;
+            record.bary = computeBarycentric_(positions_[postTri[0]], positions_[postTri[1]],
+                                              positions_[postTri[2]], positions_[vRemove]);
         } else {
-            // Edge case: all faces are shared (degree-2 vertex) — shouldn't happen
-            // for interior vertex with 2 shared faces, but handle gracefully
-            record.vThird = vKeep;
+            // Edge case: all faces are shared — vertex collapses directly onto vKeep
+            record.containingTri = {vKeep, vKeep, vKeep};
             record.bary = {T(1), T(0), T(0)};
         }
 
@@ -597,6 +597,229 @@ auto buildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>:
     return mesh;
 }
 
+/**
+ * @brief Prolongate UV coordinates from a coarser level to a finer level
+ *
+ * Surviving vertices get their UVs directly; removed vertices get UVs
+ * via barycentric interpolation in their containing post-collapse triangle.
+ *
+ * @param coarseUVs UV coordinates indexed by original vertex index
+ * @param collapses Collapse records for this level transition (finest-to-coarsest order)
+ * @return UV map indexed by original vertex index (includes all finer-level vertices)
+ */
+template <typename T>
+auto prolongateUVs(const std::unordered_map<std::size_t, std::array<T, 2>>& coarseUVs,
+                   const std::vector<CollapseRecord<T>>& collapses)
+    -> std::unordered_map<std::size_t, std::array<T, 2>>
+{
+    // Start with all coarse-level UVs
+    auto fineUVs = coarseUVs;
+
+    // Undo collapses in reverse order (coarsest collapse first was last applied)
+    for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
+        auto& rec = *it;
+        auto& tri = rec.containingTri;
+
+        // All three containing-tri vertices should have UVs by now
+        auto uv0 = fineUVs.at(tri[0]);
+        auto uv1 = fineUVs.at(tri[1]);
+        auto uv2 = fineUVs.at(tri[2]);
+
+        std::array<T, 2> newUV;
+        newUV[0] = rec.bary[0] * uv0[0] + rec.bary[1] * uv1[0] + rec.bary[2] * uv2[0];
+        newUV[1] = rec.bary[0] * uv0[1] + rec.bary[1] * uv1[1] + rec.bary[2] * uv2[1];
+        fineUVs[rec.vRemoved] = newUV;
+    }
+
+    return fineUVs;
+}
+
+/**
+ * @brief Solve the LSCM system at one hierarchy level
+ *
+ * Builds the Lévy et al. Eq. 10 LSCM system on the given level mesh with the
+ * given pin vertices. If an initial guess is provided, uses solveWithGuess.
+ *
+ * @return UV coordinates indexed by original vertex index
+ */
+template <typename T, class SolverType>
+auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
+                    const detail::hlscm::HierarchyLevel<T>& level, std::size_t origPin0,
+                    std::size_t origPin1,
+                    const std::unordered_map<std::size_t, std::array<T, 2>>* initialGuess)
+    -> std::unordered_map<std::size_t, std::array<T, 2>>
+{
+    using Triplet = Eigen::Triplet<T>;
+    using SparseMatrix = Eigen::SparseMatrix<T>;
+    using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+
+    auto numFaces = levelMesh->num_faces();
+    auto numVerts = levelMesh->num_vertices();
+
+    // Map original pin indices to level-local indices
+    auto localPin0 = level.originalToLocal.at(origPin0);
+    auto localPin1 = level.originalToLocal.at(origPin1);
+    auto p0 = levelMesh->vertex(localPin0);
+    auto p1 = levelMesh->vertex(localPin1);
+
+    // Place pins on UV axes (same logic as AngleBasedLSCM)
+    auto pinVec = p1->pos - p0->pos;
+    auto dist = norm(pinVec);
+    pinVec /= dist;
+    p0->pos = {T(0), T(0), T(0)};
+    auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
+    auto maxAxis = std::distance(pinVec.begin(), maxElem);
+    dist = std::copysign(dist, *maxElem);
+    if (maxAxis == 0) {
+        p1->pos = {dist, T(0), T(0)};
+    } else {
+        p1->pos = {T(0), dist, T(0)};
+    }
+
+    auto numFixed = std::size_t(2);
+    auto numFree = numVerts - numFixed;
+
+    // Build free vertex index table
+    std::map<std::size_t, std::size_t> freeIdxTable;
+    for (const auto& v : levelMesh->vertices()) {
+        if (v == p0 || v == p1) {
+            continue;
+        }
+        auto newIdx = freeIdxTable.size();
+        freeIdxTable[v->idx] = newIdx;
+    }
+
+    // Setup pinned bFixed
+    std::vector<Triplet> tripletsB;
+    tripletsB.emplace_back(0, 0, p0->pos[0]);
+    tripletsB.emplace_back(1, 0, p0->pos[1]);
+    tripletsB.emplace_back(2, 0, p1->pos[0]);
+    tripletsB.emplace_back(3, 0, p1->pos[1]);
+    SparseMatrix bFixed(2 * numFixed, 1);
+    bFixed.reserve(tripletsB.size());
+    bFixed.setFromTriplets(tripletsB.begin(), tripletsB.end());
+
+    // Build LSCM system matrices
+    std::vector<Triplet> tripletsA;
+    tripletsB.clear();
+
+    auto addContrib = [&](std::size_t row, const auto& e, T c, T s) {
+        if (e->vertex == p0) {
+            tripletsB.emplace_back(row, 0, c);
+            tripletsB.emplace_back(row, 1, -s);
+            tripletsB.emplace_back(row + 1, 0, s);
+            tripletsB.emplace_back(row + 1, 1, c);
+        } else if (e->vertex == p1) {
+            tripletsB.emplace_back(row, 2, c);
+            tripletsB.emplace_back(row, 3, -s);
+            tripletsB.emplace_back(row + 1, 2, s);
+            tripletsB.emplace_back(row + 1, 3, c);
+        } else {
+            auto freeIdx = freeIdxTable.at(e->vertex->idx);
+            tripletsA.emplace_back(row, 2 * freeIdx, c);
+            tripletsA.emplace_back(row, 2 * freeIdx + 1, -s);
+            tripletsA.emplace_back(row + 1, 2 * freeIdx, s);
+            tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, c);
+        }
+    };
+
+    for (const auto& f : levelMesh->faces()) {
+        auto e0 = f->head;
+        auto e1 = e0->next;
+        auto e2 = e1->next;
+        auto sin0 = std::sin(e0->alpha);
+        auto sin1 = std::sin(e1->alpha);
+        auto sin2 = std::sin(e2->alpha);
+
+        std::vector<T> sins{sin0, sin1, sin2};
+        auto sinMaxElem = std::max_element(sins.begin(), sins.end());
+        auto sinMaxIdx = std::distance(sins.begin(), sinMaxElem);
+
+        if (sinMaxIdx == 0) {
+            auto temp = e0;
+            e0 = e1;
+            e1 = e2;
+            e2 = temp;
+            sin0 = sins[1];
+            sin1 = sins[2];
+            sin2 = sins[0];
+        } else if (sinMaxIdx == 1) {
+            auto temp = e2;
+            e2 = e1;
+            e1 = e0;
+            e0 = temp;
+            sin0 = sins[2];
+            sin1 = sins[0];
+            sin2 = sins[1];
+        }
+
+        auto ratio = (sin2 == T(0)) ? T(1) : sin1 / sin2;
+        auto cosine = std::cos(e0->alpha) * ratio;
+        auto sine = sin0 * ratio;
+
+        auto row = 2 * f->idx;
+        addContrib(row, e0, cosine - T(1), sine);
+        addContrib(row, e1, -cosine, -sine);
+        addContrib(row, e2, T(1), T(0));
+    }
+
+    SparseMatrix A(2 * numFaces, 2 * numFree);
+    A.reserve(tripletsA.size());
+    A.setFromTriplets(tripletsA.begin(), tripletsA.end());
+
+    SparseMatrix bFree(2 * numFaces, 2 * numFixed);
+    bFree.reserve(tripletsB.size());
+    bFree.setFromTriplets(tripletsB.begin(), tripletsB.end());
+
+    SparseMatrix b = bFree * bFixed * T(-1);
+
+    // Solve
+    DenseMatrix x;
+    if (initialGuess && !initialGuess->empty()) {
+        // Build initial guess vector from prolongated UVs
+        DenseMatrix x0(2 * numFree, 1);
+        for (const auto& v : levelMesh->vertices()) {
+            if (v == p0 || v == p1) {
+                continue;
+            }
+            auto freeIdx = freeIdxTable.at(v->idx);
+            auto origIdx = level.localToOriginal[v->idx];
+            auto guessIt = initialGuess->find(origIdx);
+            if (guessIt != initialGuess->end()) {
+                x0(2 * freeIdx, 0) = guessIt->second[0];
+                x0(2 * freeIdx + 1, 0) = guessIt->second[1];
+            } else {
+                x0(2 * freeIdx, 0) = T(0);
+                x0(2 * freeIdx + 1, 0) = T(0);
+            }
+        }
+
+        // Use solveWithGuess for iterative solvers
+        DenseMatrix bDense = b;
+        SolverType solver(A);
+        x = solver.solveWithGuess(bDense, x0);
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            throw SolverException("HLSCM: iterative solve failed at hierarchy level");
+        }
+    } else {
+        x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, SolverType>(A, b);
+    }
+
+    // Build output UV map (original vertex indices → UV)
+    std::unordered_map<std::size_t, std::array<T, 2>> uvs;
+    uvs[level.localToOriginal[p0->idx]] = {p0->pos[0], p0->pos[1]};
+    uvs[level.localToOriginal[p1->idx]] = {p1->pos[0], p1->pos[1]};
+    for (const auto& v : levelMesh->vertices()) {
+        if (v == p0 || v == p1) {
+            continue;
+        }
+        auto freeIdx = 2 * freeIdxTable.at(v->idx);
+        auto origIdx = level.localToOriginal[v->idx];
+        uvs[origIdx] = {x(freeIdx, 0), x(freeIdx + 1, 0)};
+    }
+    return uvs;
+}
+
 }  // namespace hlscm
 }  // namespace detail
 
@@ -640,11 +863,27 @@ public:
     /** @copydoc HierarchicalLSCM::Compute() */
     void compute(typename Mesh::Pointer& mesh) const
     {
+        std::size_t p0, p1;
         if (pinnedVertices_) {
-            Compute(mesh, pinnedVertices_->first, pinnedVertices_->second);
+            p0 = pinnedVertices_->first;
+            p1 = pinnedVertices_->second;
         } else {
-            Compute(mesh);
+            // Auto-select pins (same logic as Compute())
+            auto v0 = mesh->vertices_boundary().front();
+            auto e = v0->edge;
+            do {
+                if (e->pair->is_boundary()) {
+                    break;
+                }
+                e = e->pair->next;
+            } while (e != v0->edge);
+            if (e == v0->edge && !e->pair->is_boundary()) {
+                throw MeshException("Pinned vertex not on boundary");
+            }
+            p0 = v0->idx;
+            p1 = e->next->vertex->idx;
         }
+        ComputeImpl(mesh, p0, p1, levelRatio_, minCoarseVertices_);
     }
 
     /**
@@ -654,8 +893,20 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh)
     {
-        // Delegate to AngleBasedLSCM for now (stub)
-        AngleBasedLSCM<T, MeshType, Solver>::Compute(mesh);
+        // Pin selection: first boundary vertex + boundary-edge neighbor
+        auto p0 = mesh->vertices_boundary().front();
+        auto e = p0->edge;
+        do {
+            if (e->pair->is_boundary()) {
+                break;
+            }
+            e = e->pair->next;
+        } while (e != p0->edge);
+        if (e == p0->edge && !e->pair->is_boundary()) {
+            throw MeshException("Pinned vertex not on boundary");
+        }
+        auto p1 = e->next->vertex;
+        ComputeImpl(mesh, p0->idx, p1->idx);
     }
 
     /**
@@ -663,11 +914,56 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
     {
-        // Delegate to AngleBasedLSCM for now (stub)
-        AngleBasedLSCM<T, MeshType, Solver>::Compute(mesh, pin0Idx, pin1Idx);
+        ComputeImpl(mesh, pin0Idx, pin1Idx);
     }
 
 private:
+    static void ComputeImpl(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx,
+                            std::size_t levelRatio = 10, std::size_t minCoarseVerts = 100)
+    {
+        // Build mesh hierarchy
+        auto [levels, collapsesByLevel] =
+            detail::hlscm::buildHierarchy<T>(mesh, pin0Idx, pin1Idx, levelRatio, minCoarseVerts);
+
+        if (levels.size() <= 1) {
+            // Mesh too small for hierarchy — single-level LSCM solve
+            // Use AngleBasedLSCM for exact equivalence on small meshes
+            AngleBasedLSCM<T, MeshType, Solver>::Compute(mesh, pin0Idx, pin1Idx);
+            return;
+        }
+
+        // Solve coarsest level (last in the array)
+        auto coarsestIdx = levels.size() - 1;
+        auto coarseMesh = detail::hlscm::buildLevelMesh<T>(levels[coarsestIdx]);
+        ComputeMeshAngles(coarseMesh);
+        auto uvs = detail::hlscm::solveLSCMLevel<T, Solver>(coarseMesh, levels[coarsestIdx],
+                                                            pin0Idx, pin1Idx, nullptr);
+
+        // Prolongate and refine at each finer level
+        for (std::size_t k = coarsestIdx; k-- > 0;) {
+            // Prolongate UVs from level k+1 to level k
+            uvs = detail::hlscm::prolongateUVs<T>(uvs, collapsesByLevel[k]);
+
+            // Build level mesh and compute angles from 3D geometry
+            auto levelMesh = detail::hlscm::buildLevelMesh<T>(levels[k]);
+            ComputeMeshAngles(levelMesh);
+
+            // Solve with initial guess
+            uvs = detail::hlscm::solveLSCMLevel<T, Solver>(levelMesh, levels[k], pin0Idx, pin1Idx,
+                                                           &uvs);
+        }
+
+        // Transfer final UVs back to input mesh
+        for (const auto& v : mesh->vertices()) {
+            auto it = uvs.find(v->idx);
+            if (it != uvs.end()) {
+                v->pos[0] = it->second[0];
+                v->pos[1] = it->second[1];
+                v->pos[2] = T(0);
+            }
+        }
+    }
+
     /** Optional explicit pin pair */
     std::optional<std::pair<std::size_t, std::size_t>> pinnedVertices_;
     std::size_t levelRatio_{10};
