@@ -288,3 +288,21 @@ TEST(Parameterization, AngleBasedLSCM_SetPinnedVertices)
         }
     }
 }
+
+TEST(Fixtures, Hemisphere)
+{
+    using M = HalfEdgeMesh<float>;
+    auto mesh = ConstructHemisphere<M>(12, 24);
+    EXPECT_EQ(mesh->num_vertices(), 289u);
+    EXPECT_EQ(mesh->num_faces(), 552u);
+    EXPECT_GT(mesh->num_vertices_interior(), 0u);
+}
+
+TEST(Fixtures, WavySurface)
+{
+    using M = HalfEdgeMesh<float>;
+    auto mesh = ConstructWavySurface<M>(20, 20);
+    EXPECT_EQ(mesh->num_vertices(), 400u);
+    EXPECT_EQ(mesh->num_faces(), 722u);
+    EXPECT_GT(mesh->num_vertices_interior(), 0u);
+}
