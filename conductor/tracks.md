@@ -26,7 +26,7 @@
 | closed | T2 | No test for FindEdgePath on disconnected mesh | [#22](https://github.com/educelab/OpenABF/issues/22) | 2026-03-13 | 2026-03-13 |
 | closed | T3 | No round-trip IO test for OBJ and PLY | [#23](https://github.com/educelab/OpenABF/issues/23) | 2026-03-13 | 2026-03-13 |
 | closed | T4 | No test for Vec reverse iterators | [#24](https://github.com/educelab/OpenABF/issues/24) | 2026-03-13 | 2026-03-13 |
-| open | M1 | `Face::barycenter()` hardcodes `Vec<T, 3>` | [#25](https://github.com/educelab/OpenABF/issues/25) | 2026-03-13 | 2026-03-13 |
-| open | M2 | `Edge::magnitude()` is non-const | [#26](https://github.com/educelab/OpenABF/issues/26) | 2026-03-13 | 2026-03-13 |
+| closed | M1 | `Face::barycenter()` hardcodes `Vec<T, 3>` | [#25](https://github.com/educelab/OpenABF/issues/25) | 2026-03-13 | 2026-03-15 |
+| closed | M2 | `Edge::magnitude()` is non-const | [#26](https://github.com/educelab/OpenABF/issues/26) | 2026-03-13 | 2026-03-15 |
 | open | M3 | `detail::erase_if` is dead code | [#27](https://github.com/educelab/OpenABF/issues/27) | 2026-03-13 | 2026-03-13 |
-| open | M4 | `operator<<` for Vec defined outside OpenABF namespace | [#28](https://github.com/educelab/OpenABF/issues/28) | 2026-03-13 | 2026-03-13 |
+| closed | M4 | `operator<<` for Vec defined outside OpenABF namespace | [#28](https://github.com/educelab/OpenABF/issues/28) | 2026-03-13 | 2026-03-15 |
