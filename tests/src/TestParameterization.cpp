@@ -306,3 +306,148 @@ TEST(Fixtures, WavySurface)
     EXPECT_EQ(mesh->num_faces(), 722u);
     EXPECT_GT(mesh->num_vertices_interior(), 0u);
 }
+
+// ============================================================================
+// HLSCM tests (F1)
+// ============================================================================
+
+TEST(HLSCM, Pyramid)
+{
+    // Single-level fallback: HLSCM must produce identical output to LSCM
+    using HLSCM = HierarchicalLSCM<float>;
+    using LSCM = AngleBasedLSCM<float>;
+
+    auto mesh_lscm = ConstructPyramid<LSCM::Mesh>();
+    LSCM::Compute(mesh_lscm);
+
+    auto mesh_hlscm = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM::Compute(mesh_hlscm);
+
+    for (std::size_t v = 0; v < mesh_lscm->num_vertices(); ++v) {
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(mesh_hlscm->vertex(v)->pos[i], mesh_lscm->vertex(v)->pos[i])
+                << "vertex " << v << " component " << i;
+        }
+    }
+}
+
+TEST(HLSCM, ExplicitPins)
+{
+    using HLSCM = HierarchicalLSCM<float>;
+
+    auto mesh_auto = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM::Compute(mesh_auto);
+
+    auto mesh_explicit = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM::Compute(mesh_explicit, 0, 1);
+
+    for (std::size_t v = 0; v < mesh_auto->num_vertices(); ++v) {
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(mesh_explicit->vertex(v)->pos[i], mesh_auto->vertex(v)->pos[i]);
+        }
+    }
+}
+
+TEST(HLSCM, SetPinnedVertices)
+{
+    using HLSCM = HierarchicalLSCM<float>;
+
+    auto mesh_static = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM::Compute(mesh_static, 0, 1);
+
+    auto mesh_instance = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM hlscm;
+    hlscm.setPinnedVertices(0, 1);
+    hlscm.compute(mesh_instance);
+
+    for (std::size_t v = 0; v < mesh_static->num_vertices(); ++v) {
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(mesh_instance->vertex(v)->pos[i], mesh_static->vertex(v)->pos[i]);
+        }
+    }
+}
+
+TEST(HLSCM, Double)
+{
+    using HLSCM = HierarchicalLSCM<double>;
+    using LSCM = AngleBasedLSCM<double>;
+
+    auto mesh_lscm = ConstructPyramid<LSCM::Mesh>();
+    LSCM::Compute(mesh_lscm);
+
+    auto mesh_hlscm = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM::Compute(mesh_hlscm);
+
+    for (std::size_t v = 0; v < mesh_lscm->num_vertices(); ++v) {
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_DOUBLE_EQ(mesh_hlscm->vertex(v)->pos[i], mesh_lscm->vertex(v)->pos[i]);
+        }
+    }
+}
+
+TEST(HLSCM, ABFPlusPlus)
+{
+    using ABFType = ABFPlusPlus<float>;
+    using HLSCM = HierarchicalLSCM<float, ABFType::Mesh>;
+
+    auto mesh = ConstructPyramid<ABFType::Mesh>();
+    ABFType::Compute(mesh);
+    HLSCM::Compute(mesh);
+
+    for (std::size_t v = 0; v < mesh->num_vertices(); ++v) {
+        const auto& pos = mesh->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v;
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v;
+        EXPECT_FLOAT_EQ(pos[2], 0.f);
+    }
+}
+
+TEST(HLSCM, Hemisphere)
+{
+    // Non-trivial curvature: verify valid parameterization and no flipped triangles
+    using HLSCM = HierarchicalLSCM<float>;
+    auto mesh = ConstructHemisphere<HLSCM::Mesh>(12, 24);
+    HLSCM::Compute(mesh);
+
+    for (std::size_t v = 0; v < mesh->num_vertices(); ++v) {
+        const auto& pos = mesh->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v << " u not finite";
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v << " v not finite";
+        EXPECT_FLOAT_EQ(pos[2], 0.f) << "vertex " << v << " z != 0";
+    }
+
+    // Check no triangle flips (all faces have positive signed area in UV space)
+    for (const auto& f : mesh->faces()) {
+        auto e = f->head;
+        const auto& p0 = e->vertex->pos;
+        const auto& p1 = e->next->vertex->pos;
+        const auto& p2 = e->next->next->vertex->pos;
+        auto area = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p2[0] - p0[0]) * (p1[1] - p0[1]);
+        EXPECT_GT(area, 0.f) << "face " << f->idx << " is flipped";
+    }
+}
+
+TEST(HLSCM, WavySurface)
+{
+    // Spatially varying curvature: exercises multi-level hierarchy
+    using HLSCM = HierarchicalLSCM<float>;
+    auto mesh = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+    HLSCM::Compute(mesh);
+
+    for (std::size_t v = 0; v < mesh->num_vertices(); ++v) {
+        const auto& pos = mesh->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v << " u not finite";
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v << " v not finite";
+        EXPECT_FLOAT_EQ(pos[2], 0.f) << "vertex " << v << " z != 0";
+    }
+
+    // Check no triangle flips
+    for (const auto& f : mesh->faces()) {
+        auto e = f->head;
+        const auto& p0 = e->vertex->pos;
+        const auto& p1 = e->next->vertex->pos;
+        const auto& p2 = e->next->next->vertex->pos;
+        auto area = (p1[0] - p0[0]) * (p2[1] - p0[1]) - (p2[0] - p0[0]) * (p1[1] - p0[1]);
+        EXPECT_GT(area, 0.f) << "face " << f->idx << " is flipped";
+    }
+}
