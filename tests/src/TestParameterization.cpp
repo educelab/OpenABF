@@ -158,3 +158,34 @@ TEST(Parameterizations, ABF_MaxIters)
 
     EXPECT_EQ(abf.iterations(), 1u);
 }
+
+TEST(Parameterizations, ABFPlusPlus_TightThreshold)
+{
+    // Tighter threshold should produce a lower final gradient than the default
+    using ABFType = ABFPlusPlus<float>;
+
+    auto mesh_default = ConstructPyramid<ABFType::Mesh>();
+    ABFType abf_default;
+    abf_default.compute(mesh_default);
+
+    auto mesh_tight = ConstructPyramid<ABFType::Mesh>();
+    ABFType abf_tight;
+    abf_tight.setGradientThreshold(1e-6f);
+    abf_tight.setMaxIterations(100);
+    abf_tight.compute(mesh_tight);
+
+    EXPECT_LE(abf_tight.gradient(), abf_default.gradient());
+}
+
+TEST(Parameterizations, ABFPlusPlus_LooseThreshold)
+{
+    // A threshold larger than the initial gradient causes zero solver iterations
+    using ABFType = ABFPlusPlus<float>;
+
+    auto mesh = ConstructPyramid<ABFType::Mesh>();
+    ABFType abf;
+    abf.setGradientThreshold(1e6f);
+    abf.compute(mesh);
+
+    EXPECT_EQ(abf.iterations(), 0u);
+}
