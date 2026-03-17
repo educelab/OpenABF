@@ -163,7 +163,7 @@ auto main(const int argc, char* argv[]) -> int
     using CG = Eigen::ConjugateGradient<Mtx>;
     using LSCM_LU = OpenABF::AngleBasedLSCM<float, ABFMesh, LU>;
     using LSCM_CG = OpenABF::AngleBasedLSCM<float, ABFMesh, CG>;
-    using HLSCM = OpenABF::HierarchicalLSCM<float, ABFMesh, CG>;
+    using HLSCM = OpenABF::HierarchicalLSCM<float, ABFMesh>;
 
     // Assemble benchmark inputs
     std::vector<BenchInput> inputs;
