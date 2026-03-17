@@ -12,3 +12,6 @@ target_link_libraries(openabf_example_clone OpenABF::OpenABF)
 
 add_executable(openabf_example_alternative_solvers src/AlternativeSolvers.cpp)
 target_link_libraries(openabf_example_alternative_solvers OpenABF::OpenABF)
+
+add_executable(openabf_example_benchmark src/BenchmarkFlattening.cpp)
+target_link_libraries(openabf_example_benchmark OpenABF::OpenABF)
