@@ -81,10 +81,14 @@ auto main(const int argc, char* argv[]) -> int
         fs::create_directories(outputDir);
     }
 
-    // Build thread-count sequence: 1, 2, 4, 8, ... <= maxThreads
+    // Build thread-count sequence: 1, 2, 4, 8, ... <= maxThreads, then
+    // append maxThreads itself if it is not already a power of 2.
     std::vector<int> threadCounts;
     for (int t = 1; t <= maxThreads; t *= 2) {
         threadCounts.push_back(t);
+    }
+    if (threadCounts.back() != maxThreads) {
+        threadCounts.push_back(maxThreads);
     }
 
     // Determine actual counts Eigen will use (clamped to 1 without OpenMP)
