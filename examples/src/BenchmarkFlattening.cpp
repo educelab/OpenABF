@@ -4,7 +4,7 @@
  * # Flattening benchmark
  *
  * Measures wall-clock runtime for flattening configurations on one or more
- * meshes and prints results as a Markdown table.  LSCM CG and HLSCM CG are
+ * meshes and prints results as a Markdown table.  LSCM CG and HLSCM LSCG are
  * timed at 1 thread then at powers of 2 up to --threads N.
  *
  * Usage:
@@ -191,7 +191,7 @@ auto main(const int argc, char* argv[]) -> int
         std::cout << " | LSCM CG (" << t << "t) (s)";
     }
     for (int t : actualThreads) {
-        std::cout << " | HLSCM CG (" << t << "t) (s)";
+        std::cout << " | HLSCM LSCG (" << t << "t) (s)";
     }
     std::cout << " |\n";
 
@@ -264,7 +264,7 @@ auto main(const int argc, char* argv[]) -> int
             }
             OpenABF::WriteMesh(outputDir / (stem + "_lscm_lu.obj"), luMesh);
             OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg.obj"), cgMesh);
-            OpenABF::WriteMesh(outputDir / (stem + "_hlscm_cg.obj"), hlscmMesh);
+            OpenABF::WriteMesh(outputDir / (stem + "_hlscm_lscg.obj"), hlscmMesh);
         }
 
         std::cout << std::fixed << std::setprecision(2);
