@@ -4017,6 +4017,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     // Solve
     DenseMatrix x;
     if constexpr (detail::is_instance_of_v<SolverType, Eigen::LeastSquaresConjugateGradient>) {
+        // LSCG solves the rectangular system A x = b directly
         if (initialGuess && !initialGuess->empty()) {
             // Build initial guess vector from prolongated UVs
             DenseMatrix x0(2 * numFree, 1);
@@ -4035,13 +4036,11 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
                     x0(2 * freeIdx + 1, 0) = T(0);
                 }
             }
-
-            // Use solveWithGuess for iterative solvers
             DenseMatrix bDense = b;
             SolverType solver(A);
             x = solver.solveWithGuess(bDense, x0);
             if (solver.info() != Eigen::ComputationInfo::Success) {
-                throw SolverException("HLSCM: iterative solve failed at hierarchy level");
+                throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
             }
         } else {
             SolverType solver(A);
@@ -4049,6 +4048,44 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             x = solver.solve(bDense);
             if (solver.info() != Eigen::ComputationInfo::Success) {
                 throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
+            }
+        }
+    } else if constexpr (std::is_base_of_v<Eigen::IterativeSolverBase<SolverType>, SolverType>) {
+        // Other iterative solvers (e.g. ConjugateGradient) require a square SPD matrix;
+        // use normal equations AtA x = Atb
+        SparseMatrix AtA = A.transpose() * A;
+        AtA.makeCompressed();
+        SparseMatrix Atb = A.transpose() * b;
+        if (initialGuess && !initialGuess->empty()) {
+            // Build initial guess vector from prolongated UVs
+            DenseMatrix x0(2 * numFree, 1);
+            for (const auto& v : levelMesh->vertices()) {
+                if (v == p0 || v == p1) {
+                    continue;
+                }
+                auto freeIdx = freeIdxTable.at(v->idx);
+                auto origIdx = level.localToOriginal[v->idx];
+                auto guessIt = initialGuess->find(origIdx);
+                if (guessIt != initialGuess->end()) {
+                    x0(2 * freeIdx, 0) = guessIt->second[0];
+                    x0(2 * freeIdx + 1, 0) = guessIt->second[1];
+                } else {
+                    x0(2 * freeIdx, 0) = T(0);
+                    x0(2 * freeIdx + 1, 0) = T(0);
+                }
+            }
+            DenseMatrix AtbDense = Atb;
+            SolverType solver(AtA);
+            x = solver.solveWithGuess(AtbDense, x0);
+            if (solver.info() != Eigen::ComputationInfo::Success) {
+                throw SolverException("HLSCM: iterative solve failed at hierarchy level");
+            }
+        } else {
+            DenseMatrix AtbDense = Atb;
+            SolverType solver(AtA);
+            x = solver.solve(AtbDense);
+            if (solver.info() != Eigen::ComputationInfo::Success) {
+                throw SolverException("HLSCM: iterative solve failed at hierarchy level");
             }
         }
     } else {
@@ -4088,7 +4125,14 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
  *
  * @tparam T Floating-point type
  * @tparam MeshType HalfEdgeMesh type which implements the default mesh traits
- * @tparam Solver An Eigen iterative solver supporting solveWithGuess
+ * @tparam Solver An Eigen iterative or direct solver. Iterative solvers
+ *         (ConjugateGradient, LeastSquaresConjugateGradient) support warm-
+ *         starting from the coarser-level solution; direct solvers ignore the
+ *         initial guess. Defaults to LeastSquaresConjugateGradient, which
+ *         operates directly on the rectangular system and yields the best
+ *         convergence rate when combined with the hierarchical warm-start.
+ *         ConjugateGradient can be used for flat LSCM (no hierarchy) where
+ *         it is faster, but provides no benefit inside HLSCM.
  */
 template <typename T, class MeshType = HalfEdgeMesh<T>,
           class Solver = Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<T>>,

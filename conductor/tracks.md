@@ -31,3 +31,4 @@
 | closed | M2 | `Edge::magnitude()` is non-const | [#26](https://github.com/educelab/OpenABF/issues/26) | 2026-03-13 | 2026-03-15 |
 | closed | M3 | `detail::erase_if` is dead code | [#27](https://github.com/educelab/OpenABF/issues/27) | 2026-03-13 | 2026-03-15 |
 | closed | M4 | `operator<<` for Vec defined outside OpenABF namespace | [#28](https://github.com/educelab/OpenABF/issues/28) | 2026-03-13 | 2026-03-15 |
+| open | E1 | Flattening benchmark example | [#45](https://github.com/educelab/OpenABF/issues/45) | 2026-03-17 | 2026-03-17 |
