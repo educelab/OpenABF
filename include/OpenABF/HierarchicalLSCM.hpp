@@ -927,12 +927,14 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
  * @tparam Solver An Eigen iterative or direct solver. Iterative solvers
  *         (ConjugateGradient, LeastSquaresConjugateGradient) support warm-
  *         starting from the coarser-level solution; direct solvers ignore the
- *         initial guess. Defaults to ConjugateGradient which operates on the
- *         normal equations (AtA) and is faster and more memory-efficient than
- *         LeastSquaresConjugateGradient for most mesh sizes.
+ *         initial guess. Defaults to LeastSquaresConjugateGradient, which
+ *         operates directly on the rectangular system and yields the best
+ *         convergence rate when combined with the hierarchical warm-start.
+ *         ConjugateGradient can be used for flat LSCM (no hierarchy) where
+ *         it is faster, but provides no benefit inside HLSCM.
  */
 template <typename T, class MeshType = HalfEdgeMesh<T>,
-          class Solver = Eigen::ConjugateGradient<Eigen::SparseMatrix<T>>,
+          class Solver = Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<T>>,
           std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class HierarchicalLSCM
 {

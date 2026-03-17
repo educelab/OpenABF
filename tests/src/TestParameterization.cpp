@@ -625,9 +625,9 @@ TEST(HLSCM, ABFReducesConformalDistortion)
 
 TEST(HLSCM, PerformanceComparison)
 {
-    // Compare HLSCM vs AngleBasedLSCM using the same solver (CG) on a large
+    // Compare HLSCM vs AngleBasedLSCM using the same solver (LSCG) on a large
     // mesh, isolating the benefit of the hierarchical initial guess.
-    using SolverType = Eigen::ConjugateGradient<Eigen::SparseMatrix<float>>;
+    using SolverType = Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<float>>;
     using HLSCM = HierarchicalLSCM<float>;
     using LSCM = AngleBasedLSCM<float, HalfEdgeMesh<float>, SolverType>;
 
