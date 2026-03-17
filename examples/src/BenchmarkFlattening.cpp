@@ -262,6 +262,7 @@ auto main(const int argc, char* argv[]) -> int
                     ch = '_';
                 }
             }
+            OpenABF::WriteMesh(outputDir / (stem + "_3d.obj"), baseMesh);
             OpenABF::WriteMesh(outputDir / (stem + "_lscm_lu.obj"), luMesh);
             OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg.obj"), cgMesh);
             OpenABF::WriteMesh(outputDir / (stem + "_hlscm_lscg.obj"), hlscmMesh);
