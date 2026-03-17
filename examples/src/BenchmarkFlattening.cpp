@@ -4,8 +4,8 @@
  * # Flattening benchmark
  *
  * Measures wall-clock runtime for flattening configurations on one or more
- * meshes and prints results as a Markdown table.  LSCM CG, LSCM LSCG and HLSCM
- * are timed at 1 thread then at powers of 2 up to --threads N.
+ * meshes and prints results as a Markdown table.  LSCM CG and HLSCM CG are
+ * timed at 1 thread then at powers of 2 up to --threads N.
  *
  * Usage:
  * @code
@@ -161,11 +161,9 @@ auto main(const int argc, char* argv[]) -> int
     using ABF = OpenABF::ABFPlusPlus<float, ABFMesh>;
     using LU = Eigen::SparseLU<Mtx>;
     using CG = Eigen::ConjugateGradient<Mtx>;
-    using LSCG = Eigen::LeastSquaresConjugateGradient<Mtx>;
     using LSCM_LU = OpenABF::AngleBasedLSCM<float, ABFMesh, LU>;
     using LSCM_CG = OpenABF::AngleBasedLSCM<float, ABFMesh, CG>;
-    using LSCM_LSCG = OpenABF::AngleBasedLSCM<float, ABFMesh, LSCG>;
-    using HLSCM = OpenABF::HierarchicalLSCM<float, ABFMesh, LSCG>;
+    using HLSCM = OpenABF::HierarchicalLSCM<float, ABFMesh, CG>;
 
     // Assemble benchmark inputs
     std::vector<BenchInput> inputs;
@@ -193,15 +191,12 @@ auto main(const int argc, char* argv[]) -> int
         std::cout << " | LSCM CG (" << t << "t) (s)";
     }
     for (int t : actualThreads) {
-        std::cout << " | LSCM LSCG (" << t << "t) (s)";
-    }
-    for (int t : actualThreads) {
-        std::cout << " | HLSCM (" << t << "t) (s)";
+        std::cout << " | HLSCM CG (" << t << "t) (s)";
     }
     std::cout << " |\n";
 
     std::cout << "|------|-----------|-----------|------------------";
-    for (std::size_t i = 0; i < 3 * actualThreads.size(); ++i) {
+    for (std::size_t i = 0; i < 2 * actualThreads.size(); ++i) {
         std::cout << "-|------------------";
     }
     std::cout << "-|\n";
@@ -248,16 +243,6 @@ auto main(const int argc, char* argv[]) -> int
             }
         }
 
-        std::vector<double> lscgTimes;
-        typename ABFMesh::Pointer lscgMesh;
-        for (int t : actualThreads) {
-            auto [time, mesh] = runLSCM(t, [](auto& m) { LSCM_LSCG::Compute(m); });
-            lscgTimes.push_back(time);
-            if (t == 1) {
-                lscgMesh = mesh;
-            }
-        }
-
         std::vector<double> hlscmTimes;
         typename ABFMesh::Pointer hlscmMesh;
         for (int t : actualThreads) {
@@ -279,17 +264,13 @@ auto main(const int argc, char* argv[]) -> int
             }
             OpenABF::WriteMesh(outputDir / (stem + "_lscm_lu.obj"), luMesh);
             OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg.obj"), cgMesh);
-            OpenABF::WriteMesh(outputDir / (stem + "_lscm_lscg.obj"), lscgMesh);
-            OpenABF::WriteMesh(outputDir / (stem + "_hlscm.obj"), hlscmMesh);
+            OpenABF::WriteMesh(outputDir / (stem + "_hlscm_cg.obj"), hlscmMesh);
         }
 
         std::cout << std::fixed << std::setprecision(2);
         std::cout << "| " << label << " | " << numFaces << " | " << abfTime << " | " << luTime;
         for (double ct : cgTimes) {
             std::cout << " | " << ct;
-        }
-        for (double lt : lscgTimes) {
-            std::cout << " | " << lt;
         }
         for (double ht : hlscmTimes) {
             std::cout << " | " << ht;
