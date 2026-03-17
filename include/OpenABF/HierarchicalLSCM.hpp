@@ -815,7 +815,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
 
     // Solve
     DenseMatrix x;
-    if constexpr (detail::is_instance_of_v<SolverType, Eigen::LeastSquaresConjugateGradient>) {
+    if constexpr (std::is_base_of_v<Eigen::IterativeSolverBase<SolverType>, SolverType>) {
         if (initialGuess && !initialGuess->empty()) {
             // Build initial guess vector from prolongated UVs
             DenseMatrix x0(2 * numFree, 1);
@@ -847,7 +847,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             DenseMatrix bDense = b;
             x = solver.solve(bDense);
             if (solver.info() != Eigen::ComputationInfo::Success) {
-                throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
+                throw SolverException("HLSCM: iterative solve failed at hierarchy level");
             }
         }
     } else {
