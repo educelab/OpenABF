@@ -3934,7 +3934,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     auto numFree = numVerts - numFixed;
 
     // Build free vertex index table
-    std::map<std::size_t, std::size_t> freeIdxTable;
+    std::unordered_map<std::size_t, std::size_t> freeIdxTable;
     for (const auto& v : levelMesh->vertices()) {
         if (v == p0 || v == p1) {
             continue;
@@ -3985,7 +3985,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
         auto sin1 = std::sin(e1->alpha);
         auto sin2 = std::sin(e2->alpha);
 
-        std::vector<T> sins{sin0, sin1, sin2};
+        std::array<T, 3> sins{sin0, sin1, sin2};
         auto sinMaxElem = std::max_element(sins.begin(), sins.end());
         auto sinMaxIdx = std::distance(sins.begin(), sinMaxElem);
 
