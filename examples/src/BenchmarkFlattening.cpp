@@ -4,8 +4,8 @@
  * # Flattening benchmark
  *
  * Measures wall-clock runtime for flattening configurations on one or more
- * meshes and prints results as a Markdown table.  LSCM CG and HLSCM LSCG are
- * timed at 1 thread then at powers of 2 up to --threads N.
+ * meshes and prints results as a Markdown table.  LSCM CG and HLSCM variants
+ * are timed at each specified thread count.
  *
  * Usage:
  * @code
@@ -13,22 +13,29 @@
  * @endcode
  *
  * Options:
- *   --threads N        Max thread count for LSCG/HLSCM columns (default:
- *                      hardware concurrency). Columns run at 1, 2, 4, … N.
- *   --output-dir DIR   Write one flattened OBJ per algorithm per mesh into DIR.
- *   --builtin [MAX]    Benchmark the built-in wavy-surface sequence
- *                      (50k, 100k, 200k, 400k, 600k, 800k, 1M faces) up to MAX
- *                      faces (default: 1000000). Mesh files and --builtin may
- *                      be combined.
+ *   --threads N [N ...]  Thread counts to benchmark (default: 1, 2, 4, …,
+ *                        hardware concurrency). Accepts one or more values,
+ *                        e.g. --threads 1 4 12.
+ *   --output-dir DIR     Write one flattened OBJ per algorithm per mesh into
+ *                        DIR.
+ *   --builtin [MAX]      Benchmark the built-in wavy-surface sequence
+ *                        (50k, 100k, 200k, 400k, 600k, 800k, 1M faces) up to
+ *                        MAX faces (default: 1000000). Mesh files and
+ *                        --builtin may be combined.
  *
  * @note If Eigen was not compiled with OpenMP, all multi-thread columns will
  * report the same time as the 1-thread column.
+ *
+ * @note SparseLU can exhaust memory on large meshes. If a solver throws
+ * std::bad_alloc or OpenABF::SolverException the cell is reported as "N/A"
+ * and the run continues.
  */
 #include <chrono>
 #include <cmath>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -95,21 +102,33 @@ struct BenchInput {
     typename ABFMesh::Pointer mesh;
 };
 
+/** Sentinel value indicating a solver failed (OOM or SolverException) */
+static constexpr double kFailed = -1.0;
+
 auto main(const int argc, char* argv[]) -> int
 {
-    int maxThreads = static_cast<int>(std::thread::hardware_concurrency());
-    if (maxThreads < 1) {
-        maxThreads = 1;
-    }
     fs::path outputDir;
     bool builtinEnabled = false;
     std::size_t builtinMax = 1'000'000;
     std::vector<fs::path> meshFiles;
+    std::vector<int> threadCounts;
 
     for (int a = 1; a < argc; ++a) {
         std::string arg = argv[a];
-        if (arg == "--threads" && a + 1 < argc) {
-            maxThreads = std::stoi(argv[++a]);
+        if (arg == "--threads") {
+            // Consume one or more following numeric arguments
+            while (a + 1 < argc) {
+                std::string next = argv[a + 1];
+                if (next.rfind("--", 0) == 0) {
+                    break;
+                }
+                try {
+                    threadCounts.push_back(std::stoi(next));
+                    ++a;
+                } catch (...) {
+                    break;
+                }
+            }
         } else if (arg == "--output-dir" && a + 1 < argc) {
             outputDir = argv[++a];
         } else if (arg == "--builtin") {
@@ -129,8 +148,8 @@ auto main(const int argc, char* argv[]) -> int
 
     if (!builtinEnabled && meshFiles.empty()) {
         std::cerr << "Usage: " << fs::path(argv[0]).filename().string()
-                  << " [--threads N] [--output-dir DIR] [--builtin [MAX_FACES]]"
-                     " [mesh1.(obj|ply) ...]\n";
+                  << " [--threads N [N ...]] [--output-dir DIR]"
+                     " [--builtin [MAX_FACES]] [mesh1.(obj|ply) ...]\n";
         return EXIT_FAILURE;
     }
 
@@ -138,14 +157,20 @@ auto main(const int argc, char* argv[]) -> int
         fs::create_directories(outputDir);
     }
 
-    // Build thread-count sequence: 1, 2, 4, … <= maxThreads, plus maxThreads
-    // itself if not already a power of 2.
-    std::vector<int> threadCounts;
-    for (int t = 1; t <= maxThreads; t *= 2) {
-        threadCounts.push_back(t);
-    }
-    if (threadCounts.back() != maxThreads) {
-        threadCounts.push_back(maxThreads);
+    // Build thread-count sequence: if explicit values were given use them;
+    // otherwise default to 1, 2, 4, … <= hardware concurrency, plus the
+    // hardware concurrency if not already a power of 2.
+    if (threadCounts.empty()) {
+        int maxThreads = static_cast<int>(std::thread::hardware_concurrency());
+        if (maxThreads < 1) {
+            maxThreads = 1;
+        }
+        for (int t = 1; t <= maxThreads; t *= 2) {
+            threadCounts.push_back(t);
+        }
+        if (threadCounts.back() != maxThreads) {
+            threadCounts.push_back(maxThreads);
+        }
     }
 
     // Determine actual counts Eigen will use (clamped to 1 without OpenMP)
@@ -161,9 +186,11 @@ auto main(const int argc, char* argv[]) -> int
     using ABF = OpenABF::ABFPlusPlus<float, ABFMesh>;
     using LU = Eigen::SparseLU<Mtx>;
     using CG = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
+    using LSCG = Eigen::LeastSquaresConjugateGradient<Mtx>;
     using LSCM_LU = OpenABF::AngleBasedLSCM<float, ABFMesh, LU>;
     using LSCM_CG = OpenABF::AngleBasedLSCM<float, ABFMesh, CG>;
-    using HLSCM = OpenABF::HierarchicalLSCM<float, ABFMesh>;
+    using HLSCM_LSCG = OpenABF::HierarchicalLSCM<float, ABFMesh>;
+    using HLSCM_CG = OpenABF::HierarchicalLSCM<float, ABFMesh, CG>;
 
     // Assemble benchmark inputs
     std::vector<BenchInput> inputs;
@@ -193,13 +220,26 @@ auto main(const int argc, char* argv[]) -> int
     for (int t : actualThreads) {
         std::cout << " | HLSCM LSCG (" << t << "t) (s)";
     }
+    for (int t : actualThreads) {
+        std::cout << " | HLSCM CG (" << t << "t) (s)";
+    }
     std::cout << " |\n";
 
     std::cout << "|------|-----------|-----------|------------------";
-    for (std::size_t i = 0; i < 2 * actualThreads.size(); ++i) {
+    for (std::size_t i = 0; i < 3 * actualThreads.size(); ++i) {
         std::cout << "-|------------------";
     }
     std::cout << "-|\n";
+
+    // Helper to format a timed result (prints "N/A" for failures)
+    auto fmtTime = [](double t) -> std::string {
+        if (t < 0) {
+            return "N/A";
+        }
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(2) << t;
+        return oss.str();
+    };
 
     for (auto& input : inputs) {
         const auto& label = input.label;
@@ -207,7 +247,9 @@ auto main(const int argc, char* argv[]) -> int
         const auto numFaces = baseMesh->num_faces();
         std::cerr << "Benchmarking " << label << " (" << numFaces << " faces)...\n";
 
-        // Helper: run ABF++ then time a given LSCM variant; return {time, mesh}
+        // Helper: run ABF++ then time a given LSCM variant.
+        // Returns {kFailed, nullptr} if the solver throws bad_alloc or
+        // SolverException so the benchmark can print "N/A" and continue.
         auto runLSCM = [&](int threads,
                            auto computeLSCM) -> std::pair<double, typename ABFMesh::Pointer> {
             auto mesh = baseMesh->clone();
@@ -215,15 +257,27 @@ auto main(const int argc, char* argv[]) -> int
             float grad{OpenABF::INF<float>};
             ABF::Compute(mesh, iters, grad);
             Eigen::setNbThreads(threads);
-            double t = timeIt([&] { computeLSCM(mesh); });
+            double t = kFailed;
+            try {
+                t = timeIt([&] { computeLSCM(mesh); });
+            } catch (const std::bad_alloc&) {
+                std::cerr << "  [OOM]\n";
+            } catch (const OpenABF::SolverException& e) {
+                std::cerr << "  [solver error: " << e.what() << "]\n";
+            }
             Eigen::setNbThreads(1);
+            if (t < 0) {
+                return {kFailed, nullptr};
+            }
             return {t, mesh};
         };
 
-        // Warmup: one untimed run of each solver to hot-load mesh data into cache,
-        // preventing the 1-thread column from being penalized by cold-start effects.
+        // Warmup: one untimed run of each threaded solver to hot-load mesh
+        // data into cache, preventing the 1-thread column from being penalized
+        // by cold-start effects.
         runLSCM(1, [](auto& m) { LSCM_CG::Compute(m); });
-        runLSCM(1, [](auto& m) { HLSCM::Compute(m); });
+        runLSCM(1, [](auto& m) { HLSCM_LSCG::Compute(m); });
+        runLSCM(1, [](auto& m) { HLSCM_CG::Compute(m); });
 
         // ABF++ timing
         double abfTime{0};
@@ -243,22 +297,32 @@ auto main(const int argc, char* argv[]) -> int
         for (int t : actualThreads) {
             auto [time, mesh] = runLSCM(t, [](auto& m) { LSCM_CG::Compute(m); });
             cgTimes.push_back(time);
-            if (t == 1) {
+            if (t == actualThreads.front()) {
                 cgMesh = mesh;
             }
         }
 
-        std::vector<double> hlscmTimes;
-        typename ABFMesh::Pointer hlscmMesh;
+        std::vector<double> hlscmLscgTimes;
+        typename ABFMesh::Pointer hlscmLscgMesh;
         for (int t : actualThreads) {
-            auto [time, mesh] = runLSCM(t, [](auto& m) { HLSCM::Compute(m); });
-            hlscmTimes.push_back(time);
-            if (t == 1) {
-                hlscmMesh = mesh;
+            auto [time, mesh] = runLSCM(t, [](auto& m) { HLSCM_LSCG::Compute(m); });
+            hlscmLscgTimes.push_back(time);
+            if (t == actualThreads.front()) {
+                hlscmLscgMesh = mesh;
             }
         }
 
-        // Optionally write flattened meshes (1-thread; threading doesn't affect output)
+        std::vector<double> hlscmCgTimes;
+        typename ABFMesh::Pointer hlscmCgMesh;
+        for (int t : actualThreads) {
+            auto [time, mesh] = runLSCM(t, [](auto& m) { HLSCM_CG::Compute(m); });
+            hlscmCgTimes.push_back(time);
+            if (t == actualThreads.front()) {
+                hlscmCgMesh = mesh;
+            }
+        }
+
+        // Optionally write flattened meshes
         if (!outputDir.empty()) {
             // Sanitize label for use as filename stem
             auto stem = label;
@@ -268,18 +332,30 @@ auto main(const int argc, char* argv[]) -> int
                 }
             }
             OpenABF::WriteMesh(outputDir / (stem + "_3d.obj"), baseMesh);
-            OpenABF::WriteMesh(outputDir / (stem + "_lscm_lu.obj"), luMesh);
-            OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg.obj"), cgMesh);
-            OpenABF::WriteMesh(outputDir / (stem + "_hlscm_lscg.obj"), hlscmMesh);
+            if (luMesh) {
+                OpenABF::WriteMesh(outputDir / (stem + "_lscm_lu.obj"), luMesh);
+            }
+            if (cgMesh) {
+                OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg.obj"), cgMesh);
+            }
+            if (hlscmLscgMesh) {
+                OpenABF::WriteMesh(outputDir / (stem + "_hlscm_lscg.obj"), hlscmLscgMesh);
+            }
+            if (hlscmCgMesh) {
+                OpenABF::WriteMesh(outputDir / (stem + "_hlscm_cg.obj"), hlscmCgMesh);
+            }
         }
 
-        std::cout << std::fixed << std::setprecision(2);
-        std::cout << "| " << label << " | " << numFaces << " | " << abfTime << " | " << luTime;
+        std::cout << "| " << label << " | " << numFaces << " | " << std::fixed
+                  << std::setprecision(2) << abfTime << " | " << fmtTime(luTime);
         for (double ct : cgTimes) {
-            std::cout << " | " << ct;
+            std::cout << " | " << fmtTime(ct);
         }
-        for (double ht : hlscmTimes) {
-            std::cout << " | " << ht;
+        for (double ht : hlscmLscgTimes) {
+            std::cout << " | " << fmtTime(ht);
+        }
+        for (double ht : hlscmCgTimes) {
+            std::cout << " | " << fmtTime(ht);
         }
         std::cout << " |\n";
         std::cout.flush();
