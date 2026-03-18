@@ -3682,10 +3682,11 @@ private:
     void buildEdges_()
     {
         edges_.clear();
-        std::unordered_set<std::size_t> seen;
-        auto edgeKey = [this](std::size_t a, std::size_t b) -> std::size_t {
-            auto n = positions_.size();
-            return std::min(a, b) * n + std::max(a, b);
+        std::unordered_set<std::uint64_t> seen;
+        auto edgeKey = [this](std::size_t a, std::size_t b) -> std::uint64_t {
+            auto n = static_cast<std::uint64_t>(positions_.size());
+            return static_cast<std::uint64_t>(std::min(a, b)) * n +
+                   static_cast<std::uint64_t>(std::max(a, b));
         };
 
         for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
@@ -3793,6 +3794,10 @@ auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std
             pq.pop();
 
             auto [vRemove, vKeep] = edge;
+            // Skip stale entries whose endpoints have already been collapsed
+            if (!dmesh.isAlive(vRemove) || !dmesh.isAlive(vKeep)) {
+                continue;
+            }
             auto record = dmesh.tryCollapse(vRemove, vKeep);
             if (!record) {
                 continue;
@@ -4022,43 +4027,39 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
 
     SparseMatrix b = bFree * bFixed * T(-1);
 
+    // Build initial guess vector from prolongated UVs (shared by LSCG and CG branches)
+    auto buildInitialGuess = [&]() -> DenseMatrix {
+        DenseMatrix x0 = DenseMatrix::Zero(2 * numFree, 1);
+        for (const auto& v : levelMesh->vertices()) {
+            if (v == p0 || v == p1) {
+                continue;
+            }
+            auto freeIdx = freeIdxTable.at(v->idx);
+            auto origIdx = level.localToOriginal[v->idx];
+            auto guessIt = initialGuess->find(origIdx);
+            if (guessIt != initialGuess->end()) {
+                x0(2 * freeIdx, 0) = guessIt->second[0];
+                x0(2 * freeIdx + 1, 0) = guessIt->second[1];
+            }
+        }
+        return x0;
+    };
+
     // Solve
     DenseMatrix x;
     if constexpr (detail::is_instance_of_v<SolverType, Eigen::LeastSquaresConjugateGradient>) {
         // LSCG solves the rectangular system A x = b directly
+        DenseMatrix bDense = b;
+        SolverType solver(A);
         if (initialGuess && !initialGuess->empty()) {
-            // Build initial guess vector from prolongated UVs
-            DenseMatrix x0(2 * numFree, 1);
-            for (const auto& v : levelMesh->vertices()) {
-                if (v == p0 || v == p1) {
-                    continue;
-                }
-                auto freeIdx = freeIdxTable.at(v->idx);
-                auto origIdx = level.localToOriginal[v->idx];
-                auto guessIt = initialGuess->find(origIdx);
-                if (guessIt != initialGuess->end()) {
-                    x0(2 * freeIdx, 0) = guessIt->second[0];
-                    x0(2 * freeIdx + 1, 0) = guessIt->second[1];
-                } else {
-                    x0(2 * freeIdx, 0) = T(0);
-                    x0(2 * freeIdx + 1, 0) = T(0);
-                }
-            }
-            DenseMatrix bDense = b;
-            SolverType solver(A);
+            auto x0 = buildInitialGuess();
             x = solver.solveWithGuess(bDense, x0);
-            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
-                solver.info() == Eigen::ComputationInfo::InvalidInput) {
-                throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
-            }
         } else {
-            SolverType solver(A);
-            DenseMatrix bDense = b;
             x = solver.solve(bDense);
-            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
-                solver.info() == Eigen::ComputationInfo::InvalidInput) {
-                throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
-            }
+        }
+        if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+            solver.info() == Eigen::ComputationInfo::InvalidInput) {
+            throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
         }
     } else if constexpr (std::is_base_of_v<Eigen::IterativeSolverBase<SolverType>, SolverType>) {
         // Other iterative solvers (e.g. ConjugateGradient) require a square SPD matrix;
@@ -4066,39 +4067,17 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
         SparseMatrix AtA = A.transpose() * A;
         AtA.makeCompressed();
         SparseMatrix Atb = A.transpose() * b;
+        DenseMatrix AtbDense = Atb;
+        SolverType solver(AtA);
         if (initialGuess && !initialGuess->empty()) {
-            // Build initial guess vector from prolongated UVs
-            DenseMatrix x0(2 * numFree, 1);
-            for (const auto& v : levelMesh->vertices()) {
-                if (v == p0 || v == p1) {
-                    continue;
-                }
-                auto freeIdx = freeIdxTable.at(v->idx);
-                auto origIdx = level.localToOriginal[v->idx];
-                auto guessIt = initialGuess->find(origIdx);
-                if (guessIt != initialGuess->end()) {
-                    x0(2 * freeIdx, 0) = guessIt->second[0];
-                    x0(2 * freeIdx + 1, 0) = guessIt->second[1];
-                } else {
-                    x0(2 * freeIdx, 0) = T(0);
-                    x0(2 * freeIdx + 1, 0) = T(0);
-                }
-            }
-            DenseMatrix AtbDense = Atb;
-            SolverType solver(AtA);
+            auto x0 = buildInitialGuess();
             x = solver.solveWithGuess(AtbDense, x0);
-            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
-                solver.info() == Eigen::ComputationInfo::InvalidInput) {
-                throw SolverException("HLSCM: iterative solve failed at hierarchy level");
-            }
         } else {
-            DenseMatrix AtbDense = Atb;
-            SolverType solver(AtA);
             x = solver.solve(AtbDense);
-            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
-                solver.info() == Eigen::ComputationInfo::InvalidInput) {
-                throw SolverException("HLSCM: iterative solve failed at hierarchy level");
-            }
+        }
+        if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+            solver.info() == Eigen::ComputationInfo::InvalidInput) {
+            throw SolverException("HLSCM: iterative solve failed at hierarchy level");
         }
     } else {
         // Direct solver: no initial guess support; ignore initialGuess

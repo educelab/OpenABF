@@ -186,7 +186,6 @@ auto main(const int argc, char* argv[]) -> int
     using ABF = OpenABF::ABFPlusPlus<float, ABFMesh>;
     using LU = Eigen::SparseLU<Mtx>;
     using CG = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
-    using LSCG = Eigen::LeastSquaresConjugateGradient<Mtx>;
     using LSCM_LU = OpenABF::AngleBasedLSCM<float, ABFMesh, LU>;
     using LSCM_CG = OpenABF::AngleBasedLSCM<float, ABFMesh, CG>;
     using HLSCM_LSCG = OpenABF::HierarchicalLSCM<float, ABFMesh>;
