@@ -90,7 +90,15 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * @tparam Solver A solver implementing the
  * [Eigen Sparse solver
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
- * and templated on Eigen::SparseMatrix<T>
+ * and templated on Eigen::SparseMatrix<T>. The default SparseLU is robust but
+ * slow for large meshes. For iterative solving, prefer
+ * `Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper>`
+ * over the default `Lower`-only variant: the `Lower|Upper` template argument
+ * enables Eigen's full-matrix SpMV code path, which is faster and — when
+ * compiled with OpenMP — multi-threaded. Using only `Lower` (the Eigen
+ * default) routes through `selfadjointView<Lower>`, which is a different
+ * internal code path that is never OpenMP-parallelized regardless of
+ * `Eigen::setNbThreads()`.
  */
 template <typename T, class MeshType = HalfEdgeMesh<T>,
           class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,

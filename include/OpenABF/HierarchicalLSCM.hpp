@@ -838,14 +838,16 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             DenseMatrix bDense = b;
             SolverType solver(A);
             x = solver.solveWithGuess(bDense, x0);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
             }
         } else {
             SolverType solver(A);
             DenseMatrix bDense = b;
             x = solver.solve(bDense);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
             }
         }
@@ -876,14 +878,16 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             DenseMatrix AtbDense = Atb;
             SolverType solver(AtA);
             x = solver.solveWithGuess(AtbDense, x0);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: iterative solve failed at hierarchy level");
             }
         } else {
             DenseMatrix AtbDense = Atb;
             SolverType solver(AtA);
             x = solver.solve(AtbDense);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: iterative solve failed at hierarchy level");
             }
         }

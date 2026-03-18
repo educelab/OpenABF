@@ -2970,7 +2970,15 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * @tparam Solver A solver implementing the
  * [Eigen Sparse solver
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
- * and templated on Eigen::SparseMatrix<T>
+ * and templated on Eigen::SparseMatrix<T>. The default SparseLU is robust but
+ * slow for large meshes. For iterative solving, prefer
+ * `Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper>`
+ * over the default `Lower`-only variant: the `Lower|Upper` template argument
+ * enables Eigen's full-matrix SpMV code path, which is faster and — when
+ * compiled with OpenMP — multi-threaded. Using only `Lower` (the Eigen
+ * default) routes through `selfadjointView<Lower>`, which is a different
+ * internal code path that is never OpenMP-parallelized regardless of
+ * `Eigen::setNbThreads()`.
  */
 template <typename T, class MeshType = HalfEdgeMesh<T>,
           class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
@@ -4039,14 +4047,16 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             DenseMatrix bDense = b;
             SolverType solver(A);
             x = solver.solveWithGuess(bDense, x0);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
             }
         } else {
             SolverType solver(A);
             DenseMatrix bDense = b;
             x = solver.solve(bDense);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
             }
         }
@@ -4077,14 +4087,16 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             DenseMatrix AtbDense = Atb;
             SolverType solver(AtA);
             x = solver.solveWithGuess(AtbDense, x0);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: iterative solve failed at hierarchy level");
             }
         } else {
             DenseMatrix AtbDense = Atb;
             SolverType solver(AtA);
             x = solver.solve(AtbDense);
-            if (solver.info() != Eigen::ComputationInfo::Success) {
+            if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
+                solver.info() == Eigen::ComputationInfo::InvalidInput) {
                 throw SolverException("HLSCM: iterative solve failed at hierarchy level");
             }
         }

@@ -160,7 +160,7 @@ auto main(const int argc, char* argv[]) -> int
     using Mtx = Eigen::SparseMatrix<float>;
     using ABF = OpenABF::ABFPlusPlus<float, ABFMesh>;
     using LU = Eigen::SparseLU<Mtx>;
-    using CG = Eigen::ConjugateGradient<Mtx>;
+    using CG = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
     using LSCM_LU = OpenABF::AngleBasedLSCM<float, ABFMesh, LU>;
     using LSCM_CG = OpenABF::AngleBasedLSCM<float, ABFMesh, CG>;
     using HLSCM = OpenABF::HierarchicalLSCM<float, ABFMesh>;
@@ -219,6 +219,11 @@ auto main(const int argc, char* argv[]) -> int
             Eigen::setNbThreads(1);
             return {t, mesh};
         };
+
+        // Warmup: one untimed run of each solver to hot-load mesh data into cache,
+        // preventing the 1-thread column from being penalized by cold-start effects.
+        runLSCM(1, [](auto& m) { LSCM_CG::Compute(m); });
+        runLSCM(1, [](auto& m) { HLSCM::Compute(m); });
 
         // ABF++ timing
         double abfTime{0};
