@@ -53,7 +53,8 @@ approximation for a finer mesh, making cascadic multigrid highly effective.
 
 ```cpp
 template <typename T, class MeshType = HalfEdgeMesh<T>,
-          class Solver = Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<T>>,
+          class Solver = Eigen::ConjugateGradient<Eigen::SparseMatrix<T>,
+                                                   Eigen::Lower | Eigen::Upper>,
           std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class HierarchicalLSCM
 {
@@ -88,10 +89,11 @@ private:
 
 ### Key API Notes
 
-- **Solver default**: `LeastSquaresConjugateGradient` instead of `SparseLU`.
-  The hierarchy requires an iterative solver that accepts an initial guess via
-  `Eigen::LSCG::solveWithGuess()`. A direct solver gets no benefit from the
-  hierarchy since it solves from scratch every time.
+- **Solver default**: `ConjugateGradient<SparseMatrix<T>, Lower|Upper>` which
+  solves the normal equations (AᵀA x = Aᵀb) and enables OpenMP-parallelized
+  SpMV. `LeastSquaresConjugateGradient` is a valid alternative but lacks the
+  OpenMP benefit. Direct solvers get no benefit from the hierarchy since they
+  solve from scratch every time.
 
 - **Drop-in replacement**: `HierarchicalLSCM<T>::Compute(mesh)` can replace
   `AngleBasedLSCM<T>::Compute(mesh)` with no other changes.
@@ -120,9 +122,12 @@ data structure.
 - `std::priority_queue` for greedy cheapest-edge collapse.
 
 **Validity checks per collapse:**
-- No non-manifold topology (edge shared by > 2 faces after collapse)
-- Angular defect of removed vertex < 70°
-- Boundary vertices are not collapsed (preserves mesh boundary)
+- No non-manifold topology (link condition; reject two boundary vertices
+  collapsing via an interior edge)
+- Minimum angle threshold (10°) on all post-collapse faces
+- Normal-flip rejection on modified faces
+- Degenerate face rejection (duplicate vertices after substitution)
+- Pinned vertices are never collapsed
 
 **Collapse records:** Each collapse stores `{v_removed, v_kept, containing_face,
 barycentric_coords}` for use during prolongation.
@@ -174,10 +179,11 @@ mesh to each coarse mesh using the vertex mapping.
 | Decimation location | Internal to HLSCM | Avoids modifying HalfEdgeMesh; self-contained |
 | Error metric | QEM (Garland-Heckbert) | Standard, good geometric fidelity |
 | Level ratio | 10× (configurable) | Paper recommendation |
-| Default solver | LSCG | Required for `solveWithGuess` |
+| Default solver | CG with `Lower\|Upper` | OpenMP-parallelized SpMV; best multi-thread perf |
+| CG tolerance | 1e-8 | Sufficient for UV; enables effective warm-start |
 | Coarse mesh type | `HalfEdgeMesh<T>` | Simpler than user's MeshType; internal only |
 | ABF interaction | Geometry angles at coarse, mesh angles at finest | Preserves ABF optimization |
-| Boundary handling | Never collapse boundary vertices | Preserves mesh boundary topology |
+| Boundary handling | Allow collapse with non-manifold guards | Matches paper; enables deep hierarchy on open meshes |
 | Pin handling | Pins marked uncollapsible | Ensures pins exist at all levels |
 
 ## Future Considerations

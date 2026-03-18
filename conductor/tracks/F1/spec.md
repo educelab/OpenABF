@@ -13,12 +13,12 @@ GitHub issue #5
 Reference: https://static.aminer.org/pdf/PDF/000/593/591/least_squares_conformal_maps_for_automatic_texture_atlas_generation.pdf
 
 ## Acceptance Criteria
-- [ ] `HLSCM<T>` class is implemented with `compute()` and static `Compute()` API
+- [x] `HLSCM<T>` class is implemented with `compute()` and static `Compute()` API
   matching the style of `AngleBasedLSCM`
-- [ ] Works with the same `HalfEdgeMesh` types as `AngleBasedLSCM`
-- [ ] Tests verify correctness against known mesh configurations
-- [ ] Documented with algorithm citation
-- [ ] Included in `OpenABF.hpp`
+- [x] Works with the same `HalfEdgeMesh` types as `AngleBasedLSCM`
+- [x] Tests verify correctness against known mesh configurations
+- [x] Documented with algorithm citation
+- [x] Included in `OpenABF.hpp`
 
 ## Dependencies
 - A5 (pinned edge selection) may inform HLSCM's pinning strategy

@@ -1,6 +1,6 @@
 # E1 — Flattening benchmark example
 
-**Status:** open
+**Status:** closed
 **Issue:** https://github.com/educelab/OpenABF/issues/45
 **Dependencies:** F1
 
