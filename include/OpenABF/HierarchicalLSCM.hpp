@@ -160,7 +160,7 @@ public:
         if (!alive_[vRemove] || !alive_[vKeep]) {
             return std::nullopt;
         }
-        if (isBoundary_[vRemove] || isPinned_[vRemove]) {
+        if (isPinned_[vRemove]) {
             return std::nullopt;
         }
 
@@ -185,9 +185,14 @@ public:
             }
         }
 
-        // Exactly 2 shared faces for interior edge in manifold mesh
-        // (could be 1 for boundary, but we don't collapse boundary vertices)
-        if (sharedFaces.size() != 2) {
+        // Interior edges have 2 shared faces; boundary edges have 1.
+        if (sharedFaces.empty() || sharedFaces.size() > 2) {
+            return std::nullopt;
+        }
+
+        // Reject collapse of two boundary vertices via an interior edge:
+        // vKeep would inherit two disconnected boundary fans → non-manifold.
+        if (isBoundary_[vRemove] && isBoundary_[vKeep] && sharedFaces.size() == 2) {
             return std::nullopt;
         }
 
@@ -260,6 +265,10 @@ public:
                 if (vi == vRemove) {
                     vi = vKeep;
                 }
+            }
+            // Reject if substitution creates a degenerate face
+            if (newTri[0] == newTri[1] || newTri[1] == newTri[2] || newTri[0] == newTri[2]) {
+                return std::nullopt;
             }
             postFaces.push_back(newTri);
 
@@ -350,6 +359,12 @@ public:
         alive_[vRemove] = false;
         numAliveVerts_--;
 
+        // Propagate boundary status: if vRemove was on the boundary,
+        // vKeep inherits it (it now sits on the mesh boundary).
+        if (isBoundary_[vRemove]) {
+            isBoundary_[vKeep] = true;
+        }
+
         // Merge quadrics
         quadrics_[vKeep] += quadrics_[vRemove];
 
@@ -373,10 +388,10 @@ public:
     /** Check if a vertex is alive */
     [[nodiscard]] auto isAlive(std::size_t v) const -> bool { return alive_[v]; }
 
-    /** Check if a vertex is collapsible (not boundary, not pinned, alive) */
+    /** Check if a vertex is collapsible (not pinned, alive) */
     [[nodiscard]] auto isCollapsible(std::size_t v) const -> bool
     {
-        return alive_[v] && !isBoundary_[v] && !isPinned_[v];
+        return alive_[v] && !isPinned_[v];
     }
 
     /** Get edges incident to vertex v (pairs of (v, neighbor)) */
@@ -818,7 +833,16 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
 
     SparseMatrix b = bFree * bFixed * T(-1);
 
-    // Build initial guess vector from prolongated UVs (shared by LSCG and CG branches)
+    // Form the square SPD system AtA x = Atb.  This is the "symmetric
+    // matrix with good conditioning" described by Ray & Lévy (2003).
+    // Forming it once avoids redundant work across solver branches and
+    // lets CG operate directly on the symmetric system.
+    SparseMatrix AtA = A.transpose() * A;
+    AtA.makeCompressed();
+    DenseMatrix Atb = DenseMatrix(A.transpose() * b);
+
+    // Build initial guess vector from prolongated UVs
+    bool warmed = initialGuess && !initialGuess->empty();
     auto buildInitialGuess = [&]() -> DenseMatrix {
         DenseMatrix x0 = DenseMatrix::Zero(2 * numFree, 1);
         for (const auto& v : levelMesh->vertices()) {
@@ -836,15 +860,23 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
         return x0;
     };
 
+    // Convergence tolerance for iterative solvers.  Eigen defaults to
+    // machine epsilon (~2e-16 for double) which is far tighter than
+    // needed for UV parameterization and prevents the warm-start from
+    // reducing iteration count.  1e-8 gives ~8 digits of relative
+    // residual precision — more than sufficient for texturing.
+    constexpr T kTolerance = T(1e-8);
+
     // Solve
     DenseMatrix x;
     if constexpr (detail::is_instance_of_v<SolverType, Eigen::LeastSquaresConjugateGradient>) {
-        // LSCG solves the rectangular system A x = b directly
-        DenseMatrix bDense = b;
+        // LSCG operates on the rectangular system A directly (avoids
+        // squaring the condition number a second time to κ⁴).
         SolverType solver(A);
-        if (initialGuess && !initialGuess->empty()) {
-            auto x0 = buildInitialGuess();
-            x = solver.solveWithGuess(bDense, x0);
+        solver.setTolerance(kTolerance);
+        DenseMatrix bDense = DenseMatrix(b);
+        if (warmed) {
+            x = solver.solveWithGuess(bDense, buildInitialGuess());
         } else {
             x = solver.solve(bDense);
         }
@@ -853,26 +885,27 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
         }
     } else if constexpr (std::is_base_of_v<Eigen::IterativeSolverBase<SolverType>, SolverType>) {
-        // Other iterative solvers (e.g. ConjugateGradient) require a square SPD matrix;
-        // use normal equations AtA x = Atb
-        SparseMatrix AtA = A.transpose() * A;
-        AtA.makeCompressed();
-        SparseMatrix Atb = A.transpose() * b;
-        DenseMatrix AtbDense = Atb;
+        // CG and other iterative solvers on the square SPD system AtA.
+        // With Lower|Upper, CG's SpMV is OpenMP-parallelized.
         SolverType solver(AtA);
-        if (initialGuess && !initialGuess->empty()) {
-            auto x0 = buildInitialGuess();
-            x = solver.solveWithGuess(AtbDense, x0);
+        solver.setTolerance(kTolerance);
+        if (warmed) {
+            x = solver.solveWithGuess(Atb, buildInitialGuess());
         } else {
-            x = solver.solve(AtbDense);
+            x = solver.solve(Atb);
         }
         if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
             solver.info() == Eigen::ComputationInfo::InvalidInput) {
             throw SolverException("HLSCM: iterative solve failed at hierarchy level");
         }
     } else {
-        // Direct solver: no initial guess support; ignore initialGuess
-        x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, SolverType>(A, b);
+        // Direct solver: decompose AtA and solve.  No warm-start benefit.
+        SolverType solver;
+        solver.compute(AtA);
+        if (solver.info() != Eigen::ComputationInfo::Success) {
+            throw SolverException("HLSCM: solver decomposition failed");
+        }
+        x = solver.solve(Atb);
     }
 
     // Build output UV map (original vertex indices → UV)
@@ -910,14 +943,18 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
  * @tparam Solver An Eigen iterative or direct solver. Iterative solvers
  *         (ConjugateGradient, LeastSquaresConjugateGradient) support warm-
  *         starting from the coarser-level solution; direct solvers ignore the
- *         initial guess. Defaults to LeastSquaresConjugateGradient, which
- *         operates directly on the rectangular system and yields the best
- *         convergence rate when combined with the hierarchical warm-start.
- *         ConjugateGradient can be used for flat LSCM (no hierarchy) where
- *         it is faster, but provides no benefit inside HLSCM.
+ *         initial guess. Defaults to
+ *         `ConjugateGradient<SparseMatrix<T>, Lower|Upper>`, which solves the
+ *         normal equations (AᵀA x = Aᵀb) of the overdetermined LSCM system.
+ *         The `Lower|Upper` flag enables OpenMP-parallelized SpMV on the
+ *         symmetric AᵀA matrix, giving the best multi-thread performance.
+ *         LeastSquaresConjugateGradient is a valid alternative; it operates
+ *         on the same normal equations internally but without the OpenMP
+ *         benefit.
  */
 template <typename T, class MeshType = HalfEdgeMesh<T>,
-          class Solver = Eigen::LeastSquaresConjugateGradient<Eigen::SparseMatrix<T>>,
+          class Solver =
+              Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower | Eigen::Upper>,
           std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class HierarchicalLSCM
 {
