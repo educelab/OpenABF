@@ -49,7 +49,8 @@ namespace fs = std::filesystem;
 using Clock = std::chrono::steady_clock;
 using Seconds = std::chrono::duration<double>;
 
-using ABFMesh = OpenABF::detail::ABF::Mesh<float>;
+using FloatT = double;
+using ABFMesh = OpenABF::detail::ABF::Mesh<FloatT>;
 
 template <class Fn>
 auto timeIt(Fn&& fn) -> double
@@ -66,7 +67,7 @@ auto timeIt(Fn&& fn) -> double
  */
 auto buildWavySurface(std::size_t targetFaces) -> typename ABFMesh::Pointer
 {
-    using T = float;
+    using T = FloatT;
     auto n = static_cast<std::size_t>(std::floor(std::sqrt(targetFaces / 2.0))) + 1;
     std::size_t rows = n, cols = n;
 
@@ -182,14 +183,14 @@ auto main(const int argc, char* argv[]) -> int
     Eigen::setNbThreads(1);
 
     // Solver type aliases
-    using Mtx = Eigen::SparseMatrix<float>;
-    using ABF = OpenABF::ABFPlusPlus<float, ABFMesh>;
+    using Mtx = Eigen::SparseMatrix<FloatT>;
+    using ABF = OpenABF::ABFPlusPlus<FloatT, ABFMesh>;
     using LU = Eigen::SparseLU<Mtx>;
     using CG = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
-    using LSCM_LU = OpenABF::AngleBasedLSCM<float, ABFMesh, LU>;
-    using LSCM_CG = OpenABF::AngleBasedLSCM<float, ABFMesh, CG>;
-    using HLSCM_LSCG = OpenABF::HierarchicalLSCM<float, ABFMesh>;
-    using HLSCM_CG = OpenABF::HierarchicalLSCM<float, ABFMesh, CG>;
+    using LSCM_LU = OpenABF::AngleBasedLSCM<FloatT, ABFMesh, LU>;
+    using LSCM_CG = OpenABF::AngleBasedLSCM<FloatT, ABFMesh, CG>;
+    using HLSCM_LSCG = OpenABF::HierarchicalLSCM<FloatT, ABFMesh>;
+    using HLSCM_CG = OpenABF::HierarchicalLSCM<FloatT, ABFMesh, CG>;
 
     // Assemble benchmark inputs
     std::vector<BenchInput> inputs;
@@ -253,7 +254,7 @@ auto main(const int argc, char* argv[]) -> int
                            auto computeLSCM) -> std::pair<double, typename ABFMesh::Pointer> {
             auto mesh = baseMesh->clone();
             std::size_t iters{0};
-            float grad{OpenABF::INF<float>};
+            FloatT grad{OpenABF::INF<FloatT>};
             ABF::Compute(mesh, iters, grad);
             Eigen::setNbThreads(threads);
             double t = kFailed;
@@ -284,7 +285,7 @@ auto main(const int argc, char* argv[]) -> int
             auto mesh = baseMesh->clone();
             abfTime = timeIt([&] {
                 std::size_t iters{0};
-                float grad{OpenABF::INF<float>};
+                FloatT grad{OpenABF::INF<FloatT>};
                 ABF::Compute(mesh, iters, grad);
             });
         }
