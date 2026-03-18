@@ -196,5 +196,6 @@ This project implements data structures and algorithms derived from the
 following publications:
 * Alla Sheffer and Eric de Sturler. Parameterization of faceted surfaces for meshing using angle-based flattening. _Engineering with Computers_, 17(3):326–337, 2001.
 * Bruno Lévy, Sylvain Petitjean, Nicolas Ray, and Jérome Maillot. Least squares conformal maps for automatic texture atlas generation. _ACM Transactions on Graphics (TOG)_, 21(3):362–371, 2002.
+* Nicolas Ray and Bruno Lévy. Hierarchical least squares conformal map. In _11th Pacific Conference on Computer Graphics and Applications (PG 2003)_, pages 263–270. IEEE, 2003.
 * Alla Sheffer, Bruno Lévy, Maxim Mogilnitsky, and Alexander Bogomyakov. Abf++: fast and robust angle based flattening. _ACM Transactions on Graphics (TOG)_, 24(2):311–330, 2005.
 * S. Marschner, P. Shirley, M. Ashikhmin, M. Gleicher, N. Hoffman, G. Johnson, T. Munzner, E. Reinhard, W.B. Thompson, P. Willemsen, and B. Wyvill. _Fundamentals of computer graphics._ 4th edition, 2015.

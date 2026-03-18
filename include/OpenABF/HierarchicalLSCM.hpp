@@ -930,7 +930,8 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
  * @brief Compute parameterized mesh using Hierarchical LSCM
  *
  * Implements the HLSCM algorithm from Ray & Lévy, "Hierarchical Least Squares
- * Conformal Map" (2003). Uses cascadic multigrid to accelerate LSCM
+ * Conformal Map" (2003) \cite ray2003hlscm. Uses cascadic multigrid to
+ * accelerate LSCM
  * convergence: the mesh is decimated into a hierarchy, LSCM is solved on the
  * coarsest level, and the solution is prolongated and refined at each finer
  * level using conjugate gradient with the prolongated UVs as initial guess.
