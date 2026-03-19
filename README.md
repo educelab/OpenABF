@@ -57,7 +57,7 @@ the same. Care should be taken that this assumption is not violated when
 constructing your mesh.
 
 ## Documentation
-Visit our full library documentation [here](https://educelab.gitlab.io/OpenABF/docs/).
+Visit our full library documentation [here](https://educelab.github.io/OpenABF/).
 
 ## Installation
 ### CMake
