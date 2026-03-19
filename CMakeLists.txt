@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15...3.30 FATAL_ERROR)
-project(OpenABF VERSION 2.0.0)
+project(OpenABF VERSION 2.1.0)
 
 # Modules
 include(FetchContent)
