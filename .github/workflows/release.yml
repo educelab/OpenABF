@@ -1,0 +1,88 @@
+# Release workflow for OpenABF.
+#
+# Required secret:
+#   RELEASE_DISPATCH_TOKEN — an org-level Actions secret containing a PAT or
+#   GitHub App token with `repo` scope on the downstream repos
+#   (educelab/volume-cartographer and educelab/homebrew-code). The built-in
+#   GITHUB_TOKEN cannot trigger workflows in other repositories.
+
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions: {}
+
+jobs:
+  ci:
+    name: Build & Test
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: read
+
+  create_release:
+    name: Create GitHub Release
+    needs: ci
+    if: ${{ !contains(github.ref_name, '-rc.') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create release
+        run: |
+          export TAG="${{ github.ref_name }}"
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --verify-tag \
+            --title "Version ${TAG:1}" \
+            --generate-notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify_volume_cartographer:
+    name: Notify volume-cartographer
+    needs: ci
+    if: always() && needs.ci.result == 'success'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Set version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch to volume-cartographer
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+          repository: educelab/volume-cartographer
+          event-type: openabf-released
+          client-payload: >-
+            {
+              "tag": "${{ github.ref_name }}",
+              "version": "${{ steps.version.outputs.version }}",
+              "is_rc": ${{ contains(github.ref_name, '-rc.') }}
+            }
+
+  notify_homebrew:
+    name: Notify homebrew-code
+    needs: [ci, create_release]
+    if: ${{ !contains(github.ref_name, '-rc.') }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Set version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Dispatch to homebrew-code
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+          repository: educelab/homebrew-code
+          event-type: openabf-released
+          client-payload: >-
+            {
+              "tag": "${{ github.ref_name }}",
+              "version": "${{ steps.version.outputs.version }}"
+            }
