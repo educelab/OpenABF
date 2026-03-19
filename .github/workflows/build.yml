@@ -1,6 +1,7 @@
 name: Build & Test
 
 on:
+  workflow_call:
   push:
     branches: [ develop ]
     tags: [ 'v*' ]
