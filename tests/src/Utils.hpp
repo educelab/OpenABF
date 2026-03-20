@@ -54,10 +54,9 @@ auto ConstructGrid(std::size_t rows, std::size_t cols) -> typename MeshType::Poi
  *
  * Example: ConstructHemisphere(12, 24) → 289 vertices, 552 faces.
  */
-template <typename MeshType>
+template <class MeshType, typename T = float>
 auto ConstructHemisphere(std::size_t rings, std::size_t sectors) -> typename MeshType::Pointer
 {
-    using T = float;
     auto mesh = MeshType::New();
 
     // North pole (vertex 0)
@@ -104,10 +103,9 @@ auto ConstructHemisphere(std::size_t rings, std::size_t sectors) -> typename Mes
  *
  * Example: ConstructWavySurface(20, 20) → 400 vertices, 722 faces.
  */
-template <typename MeshType>
+template <class MeshType, typename T = float>
 auto ConstructWavySurface(std::size_t rows, std::size_t cols) -> typename MeshType::Pointer
 {
-    using T = float;
     auto mesh = MeshType::New();
 
     for (std::size_t r = 0; r < rows; ++r) {

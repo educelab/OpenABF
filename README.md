@@ -50,6 +50,34 @@ for (const auto& v : mesh->vertices()) {
 }
 ```
 
+### Hierarchical LSCM
+
+For large meshes (tens of thousands of faces or more), `HierarchicalLSCM` provides
+faster parameterization by using a cascadic multigrid approach: the mesh is
+decimated into a coarse-to-fine hierarchy, LSCM is solved on the coarsest level,
+and the solution is propagated upward as a warm start for each finer level.
+
+`HierarchicalLSCM` is a drop-in replacement for `AngleBasedLSCM`:
+
+```c++
+#include <OpenABF/OpenABF.hpp>
+
+using ABF = OpenABF::ABFPlusPlus<float>;
+using HLSCM = OpenABF::HierarchicalLSCM<float, ABF::Mesh>;
+
+// ... build mesh ...
+
+ABF::Compute(mesh);
+HLSCM::Compute(mesh);  // same API as AngleBasedLSCM
+```
+
+On meshes below `minCoarseVertices` (default: 100 vertices), `HierarchicalLSCM`
+automatically falls back to a single-level LSCM solve with no hierarchy overhead.
+
+**Note:** `HierarchicalLSCM` defaults to `ConjugateGradient` rather than
+`SparseLU`. For very small meshes or debugging, you can pass `SparseLU` explicitly
+as the `Solver` template parameter.
+
 **Note:** The `HalfEdgeMesh` class 
 [currently assumes](https://gitlab.com/educelab/OpenABF/-/issues/4) that the 
 surface has a boundary, is manifold, and that the winding order of all faces is 
