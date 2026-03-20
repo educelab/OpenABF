@@ -28,6 +28,7 @@ limitations under the License.
 #include "OpenABF/ABF.hpp"
 #include "OpenABF/ABFPlusPlus.hpp"
 #include "OpenABF/AngleBasedLSCM.hpp"
+#include "OpenABF/HierarchicalLSCM.hpp"
 
 #include "OpenABF/MeshIO.hpp"
 // clang-format on

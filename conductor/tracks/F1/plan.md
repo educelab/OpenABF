@@ -53,9 +53,11 @@ Build a lightweight mesh decimation engine in `detail::hlscm` namespace inside
 3. Half-edge collapse: given edge `(v_remove, v_keep)`, remove incident faces,
    redirect remaining faces, merge quadrics, record collapse for prolongation
 4. Priority-queue-driven greedy decimation with validity checks:
-   - No non-manifold topology post-collapse
-   - No boundary vertex collapse
-   - Angular defect threshold (70°)
+   - Link condition (no non-manifold topology post-collapse)
+   - Boundary vertex collapse allowed, with guard against two boundary
+     vertices collapsing via an interior edge (would create non-manifold)
+   - Minimum angle threshold (10°) on all post-collapse faces
+   - Normal-flip and degenerate-face rejection
    - Pinned vertices uncollapsible
 5. Hierarchy builder: given a target level ratio, repeatedly collapse cheapest
    valid edge; at each level boundary (vertex count crosses a ratio threshold),

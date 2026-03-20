@@ -1,0 +1,10 @@
+{
+  "id": "E1",
+  "title": "Flattening benchmark example",
+  "type": "example",
+  "status": "closed",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/45",
+  "created": "2026-03-17",
+  "updated": "2026-03-18",
+  "dependencies": ["F1"]
+}

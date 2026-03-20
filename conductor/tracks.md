@@ -18,8 +18,9 @@
 | closed | A4 | `gradient()` missing `[[nodiscard]]` | [#17](https://github.com/educelab/OpenABF/issues/17) | 2026-03-13 | 2026-03-16 |
 | closed | A5 | No configurable pinned edge selection for LSCM | [#2](https://github.com/educelab/OpenABF/issues/2) | 2026-03-13 | 2026-03-16 |
 | open | A7 | Multi-pin UV constraints for LSCM | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-03-16 | 2026-03-16 |
+| open | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-03-18 | 2026-03-18 |
 | closed | A6 | AngleBasedLSCM A/B matrix construction hard to follow | [#3](https://github.com/educelab/OpenABF/issues/3) | 2026-03-13 | 2026-03-16 |
-| open | F1 | HLSCM (Hierarchical LSCM) | [#5](https://github.com/educelab/OpenABF/issues/5) | 2026-03-13 | 2026-03-16 |
+| closed | F1 | HLSCM (Hierarchical LSCM) | [#5](https://github.com/educelab/OpenABF/issues/5) | 2026-03-13 | 2026-03-16 |
 | open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-03-13 |
 | open | F3 | Multi-component extraction and parameterization pipeline | [#19](https://github.com/educelab/OpenABF/issues/19) | 2026-03-13 | 2026-03-13 |
 | closed | F4 | Double-precision test coverage | [#20](https://github.com/educelab/OpenABF/issues/20) | 2026-03-13 | 2026-03-16 |
@@ -31,3 +32,7 @@
 | closed | M2 | `Edge::magnitude()` is non-const | [#26](https://github.com/educelab/OpenABF/issues/26) | 2026-03-13 | 2026-03-15 |
 | closed | M3 | `detail::erase_if` is dead code | [#27](https://github.com/educelab/OpenABF/issues/27) | 2026-03-13 | 2026-03-15 |
 | closed | M4 | `operator<<` for Vec defined outside OpenABF namespace | [#28](https://github.com/educelab/OpenABF/issues/28) | 2026-03-13 | 2026-03-15 |
+| closed | E1 | Flattening benchmark example | [#45](https://github.com/educelab/OpenABF/issues/45) | 2026-03-17 | 2026-03-18 |
+| open | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-03-20 | 2026-03-20 |
+| open | A8 | Extract shared LSCM system-building logic from solveLSCMLevel and ComputeImpl | [#64](https://github.com/educelab/OpenABF/issues/64) | 2026-03-20 | 2026-03-20 |
+| open | T5 | HLSCM internal component unit tests (buildHierarchy, prolongateUVs, solveLSCMLevel) | [#65](https://github.com/educelab/OpenABF/issues/65) | 2026-03-20 | 2026-03-20 |
