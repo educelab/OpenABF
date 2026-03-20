@@ -1,0 +1,10 @@
+{
+  "id": "M3",
+  "title": "detail::erase_if is dead code",
+  "type": "maintenance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/27",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}

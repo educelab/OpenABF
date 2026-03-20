@@ -1,0 +1,10 @@
+{
+  "id": "P1",
+  "title": "Mesh iteration methods return std::vector by value",
+  "type": "performance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/4",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}

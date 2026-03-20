@@ -1,0 +1,10 @@
+{
+  "id": "A3",
+  "title": "insert_face boundary update behavior undocumented",
+  "type": "improvement",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/16",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}

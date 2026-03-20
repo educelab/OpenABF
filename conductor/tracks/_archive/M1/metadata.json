@@ -1,0 +1,10 @@
+{
+  "id": "M1",
+  "title": "Face::barycenter() hardcodes Vec<T, 3>",
+  "type": "maintenance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/25",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "B5",
+  "title": "is_file_type accesses ext[0] without bounds check",
+  "type": "bug",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/10",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "P3",
+  "title": "InitializeAnglesAndWeights calls wheel() redundantly",
+  "type": "performance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/14",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}
