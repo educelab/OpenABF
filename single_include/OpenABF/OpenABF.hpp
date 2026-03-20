@@ -3212,6 +3212,7 @@ private:
 #include <numeric>
 #include <optional>
 #include <queue>
+#include <stdexcept>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -3374,12 +3375,15 @@ public:
         }
 
         // Find shared faces (will be removed) and vRemove-only faces (will be updated)
-        std::vector<std::size_t> sharedFaces;
-        std::vector<std::size_t> removeFaces;
+        // Reuse scratch storage
+        auto& sharedFaces = scratchShared_;
+        auto& removeFaces = scratchRemove_;
+        sharedFaces.clear();
+        removeFaces.clear();
+
         for (auto fi : vertFaces_[vRemove]) {
-            if (!faceAlive_[fi]) {
+            if (!faceAlive_[fi])
                 continue;
-            }
             bool hasKeep = false;
             for (auto vi : faces_[fi]) {
                 if (vi == vKeep) {
@@ -3387,17 +3391,15 @@ public:
                     break;
                 }
             }
-            if (hasKeep) {
+            if (hasKeep)
                 sharedFaces.push_back(fi);
-            } else {
+            else
                 removeFaces.push_back(fi);
-            }
         }
 
         // Interior edges have 2 shared faces; boundary edges have 1.
-        if (sharedFaces.empty() || sharedFaces.size() > 2) {
+        if (sharedFaces.empty() || sharedFaces.size() > 2)
             return std::nullopt;
-        }
 
         // Reject collapse of two boundary vertices via an interior edge:
         // vKeep would inherit two disconnected boundary fans → non-manifold.
@@ -3405,47 +3407,50 @@ public:
             return std::nullopt;
         }
 
-        // Check for topology validity: the link condition
-        // Vertices shared between vRemove's and vKeep's neighborhoods
-        // (excluding vRemove and vKeep themselves) must be exactly the
-        // two vertices opposite the shared faces.
-        auto neighborsOf = [&](std::size_t v) {
-            std::unordered_set<std::size_t> nbrs;
+        // Link condition: collect sorted unique neighbors of vRemove and vKeep
+        auto fillSortedNeighbors = [&](std::size_t v, std::vector<std::size_t>& out) {
+            out.clear();
             for (auto fi : vertFaces_[v]) {
-                if (!faceAlive_[fi]) {
+                if (!faceAlive_[fi])
                     continue;
-                }
                 for (auto vi : faces_[fi]) {
-                    if (vi != v) {
-                        nbrs.insert(vi);
-                    }
+                    if (vi != v)
+                        out.push_back(vi);
                 }
             }
-            return nbrs;
+            std::sort(out.begin(), out.end());
+            out.erase(std::unique(out.begin(), out.end()), out.end());
         };
 
-        auto nbrsRemove = neighborsOf(vRemove);
-        auto nbrsKeep = neighborsOf(vKeep);
+        fillSortedNeighbors(vRemove, scratchNbrsA_);
+        fillSortedNeighbors(vKeep, scratchNbrsB_);
 
-        std::unordered_set<std::size_t> sharedNbrs;
-        for (auto v : nbrsRemove) {
-            if (v != vKeep && nbrsKeep.count(v)) {
-                sharedNbrs.insert(v);
+        // Shared neighbors (excluding vKeep/vRemove from each other's sets)
+        scratchSharedNbrs_.clear();
+        for (auto v : scratchNbrsA_) {
+            if (v != vKeep && std::binary_search(scratchNbrsB_.begin(), scratchNbrsB_.end(), v)) {
+                scratchSharedNbrs_.push_back(v);
             }
         }
+        // scratchSharedNbrs_ is already sorted since scratchNbrsA_ is sorted
 
-        // The shared neighbors should be exactly the "opposite" vertices of
-        // the shared faces
-        std::unordered_set<std::size_t> expectedShared;
+        // Expected shared: opposite vertices of the shared faces (at most 2 entries)
+        std::array<std::size_t, 2> expectedShared{};
+        std::size_t numExpected = 0;
         for (auto fi : sharedFaces) {
             for (auto vi : faces_[fi]) {
-                if (vi != vRemove && vi != vKeep) {
-                    expectedShared.insert(vi);
-                }
+                if (vi != vRemove && vi != vKeep)
+                    expectedShared[numExpected++] = vi;
             }
         }
-        if (sharedNbrs != expectedShared) {
+        if (numExpected > 1 && expectedShared[0] > expectedShared[1])
+            std::swap(expectedShared[0], expectedShared[1]);
+
+        if (scratchSharedNbrs_.size() != numExpected)
             return std::nullopt;
+        for (std::size_t i = 0; i < numExpected; ++i) {
+            if (scratchSharedNbrs_[i] != expectedShared[i])
+                return std::nullopt;
         }
 
         // Minimum angle threshold (radians) — reject collapses that would
@@ -3458,11 +3463,14 @@ public:
         // maintain a minimum angle above the threshold.
         //
         // Collect the full set of post-collapse faces incident to vKeep.
-        std::vector<std::array<std::size_t, 3>> postFaces;
+        auto& postFaces = scratchPostFaces_;
+        postFaces.clear();
         // Existing vKeep faces (excluding shared faces which will be removed)
-        std::unordered_set<std::size_t> sharedSet(sharedFaces.begin(), sharedFaces.end());
+        auto isInShared = [&](std::size_t fi) {
+            return std::find(sharedFaces.begin(), sharedFaces.end(), fi) != sharedFaces.end();
+        };
         for (auto fi : vertFaces_[vKeep]) {
-            if (!faceAlive_[fi] || sharedSet.count(fi)) {
+            if (!faceAlive_[fi] || isInShared(fi)) {
                 continue;
             }
             postFaces.push_back(faces_[fi]);
@@ -3606,18 +3614,18 @@ public:
     /** Get edges incident to vertex v (pairs of (v, neighbor)) */
     [[nodiscard]] auto vertexNeighbors(std::size_t v) const -> std::vector<std::size_t>
     {
-        std::unordered_set<std::size_t> nbrs;
+        std::vector<std::size_t> nbrs;
         for (auto fi : vertFaces_[v]) {
-            if (!faceAlive_[fi]) {
+            if (!faceAlive_[fi])
                 continue;
-            }
             for (auto vi : faces_[fi]) {
-                if (vi != v && alive_[vi]) {
-                    nbrs.insert(vi);
-                }
+                if (vi != v && alive_[vi])
+                    nbrs.push_back(vi);
             }
         }
-        return {nbrs.begin(), nbrs.end()};
+        std::sort(nbrs.begin(), nbrs.end());
+        nbrs.erase(std::unique(nbrs.begin(), nbrs.end()), nbrs.end());
+        return nbrs;
     }
 
     /** Take a snapshot of surviving vertices and faces for a hierarchy level */
@@ -3741,6 +3749,10 @@ private:
 
         T v = (d11 * d20 - d01 * d21) / denom;
         T w = (d00 * d21 - d01 * d20) / denom;
+
+        // Clamp to avoid extreme extrapolation from far-away collapses
+        v = std::max(T(-0.5), std::min(T(1.5), v));
+        w = std::max(T(-0.5), std::min(T(1.5), w));
         T u = T(1) - v - w;
 
         return {u, v, w};
@@ -3757,6 +3769,14 @@ private:
     std::size_t numAliveVerts_{0};
     std::size_t numAliveFaces_{0};
     std::vector<std::pair<std::size_t, std::size_t>> edges_;
+
+    // Scratch storage reused across tryCollapse calls (avoids repeated heap allocation)
+    std::vector<std::size_t> scratchShared_;
+    std::vector<std::size_t> scratchRemove_;
+    std::vector<std::array<std::size_t, 3>> scratchPostFaces_;
+    std::vector<std::size_t> scratchNbrsA_;
+    std::vector<std::size_t> scratchNbrsB_;
+    std::vector<std::size_t> scratchSharedNbrs_;
 };
 
 /**
@@ -4042,14 +4062,6 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
 
     SparseMatrix b = bFree * bFixed * T(-1);
 
-    // Form the square SPD system AtA x = Atb.  This is the "symmetric
-    // matrix with good conditioning" described by Ray & Lévy (2003).
-    // Forming it once avoids redundant work across solver branches and
-    // lets CG operate directly on the symmetric system.
-    SparseMatrix AtA = A.transpose() * A;
-    AtA.makeCompressed();
-    DenseMatrix Atb = DenseMatrix(A.transpose() * b);
-
     // Build initial guess vector from prolongated UVs
     bool warmed = initialGuess && !initialGuess->empty();
     auto buildInitialGuess = [&]() -> DenseMatrix {
@@ -4079,8 +4091,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     // Solve
     DenseMatrix x;
     if constexpr (detail::is_instance_of_v<SolverType, Eigen::LeastSquaresConjugateGradient>) {
-        // LSCG operates on the rectangular system A directly (avoids
-        // squaring the condition number a second time to κ⁴).
+        // LSCG operates on the rectangular system A directly (avoids squaring the condition number)
         SolverType solver(A);
         solver.setTolerance(kTolerance);
         DenseMatrix bDense = DenseMatrix(b);
@@ -4090,12 +4101,15 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             x = solver.solve(bDense);
         }
         if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
-            solver.info() == Eigen::ComputationInfo::InvalidInput) {
+            solver.info() == Eigen::ComputationInfo::InvalidInput ||
+            solver.info() == Eigen::ComputationInfo::NoConvergence) {
             throw SolverException("HLSCM: LSCG solve failed at hierarchy level");
         }
     } else if constexpr (std::is_base_of_v<Eigen::IterativeSolverBase<SolverType>, SolverType>) {
         // CG and other iterative solvers on the square SPD system AtA.
-        // With Lower|Upper, CG's SpMV is OpenMP-parallelized.
+        SparseMatrix AtA = A.transpose() * A;
+        AtA.makeCompressed();
+        DenseMatrix Atb = DenseMatrix(A.transpose() * b);
         SolverType solver(AtA);
         solver.setTolerance(kTolerance);
         if (warmed) {
@@ -4104,11 +4118,15 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             x = solver.solve(Atb);
         }
         if (solver.info() == Eigen::ComputationInfo::NumericalIssue ||
-            solver.info() == Eigen::ComputationInfo::InvalidInput) {
+            solver.info() == Eigen::ComputationInfo::InvalidInput ||
+            solver.info() == Eigen::ComputationInfo::NoConvergence) {
             throw SolverException("HLSCM: iterative solve failed at hierarchy level");
         }
     } else {
-        // Direct solver: decompose AtA and solve.  No warm-start benefit.
+        // Direct solver: decompose AtA and solve. No warm-start benefit.
+        SparseMatrix AtA = A.transpose() * A;
+        AtA.makeCompressed();
+        DenseMatrix Atb = DenseMatrix(A.transpose() * b);
         SolverType solver;
         solver.compute(AtA);
         if (solver.info() != Eigen::ComputationInfo::Success) {
@@ -4161,6 +4179,19 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
  *         LeastSquaresConjugateGradient is a valid alternative; it operates
  *         on the same normal equations internally but without the OpenMP
  *         benefit.
+ *
+ * @note **Solver default differs from AngleBasedLSCM.** AngleBasedLSCM
+ *       defaults to SparseLU (a direct solver); HierarchicalLSCM defaults
+ *       to ConjugateGradient so it can warm-start from the coarser-level
+ *       solution. Using a direct solver via the `Solver` template parameter
+ *       is valid but disables warm-starting — the initial guess is ignored.
+ *
+ * @note **Single-level fallback.** When the mesh is too small to decimate
+ *       (all vertices are boundary, or minCoarseVertices is already reached),
+ *       HLSCM falls back to a standard LSCM solve using *this class's*
+ *       `Solver` template parameter, not AngleBasedLSCM's default (SparseLU).
+ *       The result is numerically equivalent but may differ in convergence
+ *       behavior from a plain AngleBasedLSCM call.
  */
 template <typename T, class MeshType = HalfEdgeMesh<T>,
           class Solver =
@@ -4178,13 +4209,35 @@ public:
         pinnedVertices_ = {pin0Idx, pin1Idx};
     }
 
-    /** @brief Set the vertex ratio between consecutive hierarchy levels */
-    void setLevelRatio(std::size_t ratio) { levelRatio_ = ratio; }
+    /** @brief Set the vertex ratio between consecutive hierarchy levels (default: 10) */
+    void setLevelRatio(std::size_t ratio)
+    {
+        if (ratio < 2) {
+            throw std::invalid_argument("HierarchicalLSCM: levelRatio must be >= 2");
+        }
+        levelRatio_ = ratio;
+    }
 
-    /** @brief Set the minimum vertex count at the coarsest level */
-    void setMinCoarseVertices(std::size_t count) { minCoarseVertices_ = count; }
+    /** @brief Set the minimum vertex count at the coarsest level (default: 100) */
+    void setMinCoarseVertices(std::size_t count)
+    {
+        if (count < 3) {
+            throw std::invalid_argument("HierarchicalLSCM: minCoarseVertices must be >= 3");
+        }
+        minCoarseVertices_ = count;
+    }
 
-    /** @copydoc HierarchicalLSCM::Compute() */
+    /**
+     * @brief Compute parameterization using instance configuration
+     *
+     * Uses the pinned vertices, level ratio, and minimum coarse vertices
+     * configured via `setPinnedVertices()`, `setLevelRatio()`, and
+     * `setMinCoarseVertices()`. If no pins are set, selects them automatically
+     * using the same boundary-walk logic as `Compute(mesh)`.
+     *
+     * @throws MeshException if pin selection fails (no boundary vertices)
+     * @throws SolverException if any hierarchy level fails to solve
+     */
     void compute(typename Mesh::Pointer& mesh) const
     {
         std::size_t p0, p1;
@@ -4201,6 +4254,10 @@ public:
      * @brief Compute with automatic pin selection
      *
      * Selects pins identically to AngleBasedLSCM::Compute().
+     *
+     * @throws MeshException if the mesh has no boundary vertices (pin selection
+     *         fails) or the mesh is otherwise invalid
+     * @throws SolverException if any hierarchy level fails to solve
      */
     static void Compute(typename Mesh::Pointer& mesh)
     {
@@ -4211,6 +4268,8 @@ public:
 
     /**
      * @brief Compute with explicit pinned vertex indices
+     *
+     * @throws SolverException if any hierarchy level fails to solve
      */
     static void Compute(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
     {
@@ -4221,7 +4280,11 @@ private:
     /** Select two pinned boundary vertices (same logic as AngleBasedLSCM) */
     static void AutoSelectPins(const typename Mesh::Pointer& mesh, std::size_t& p0, std::size_t& p1)
     {
-        auto v0 = mesh->vertices_boundary().front();
+        auto boundary = mesh->vertices_boundary();
+        if (boundary.empty()) {
+            throw MeshException("HierarchicalLSCM: mesh has no boundary vertices");
+        }
+        auto v0 = boundary.front();
         auto e = v0->edge;
         do {
             if (e->pair->is_boundary()) {
