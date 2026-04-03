@@ -38,8 +38,7 @@ auto main(const int argc, char* argv[]) -> int
     std::size_t iters{0};
     T grad{OpenABF::INF<T>};
     ABF::Compute(mesh, iters, grad);
-    std::cout << "ABF++ :: Iterations: " << iters << " :: Gradient: " << grad
-              << "\n";
+    std::cout << "ABF++ :: Iterations: " << iters << " :: Gradient: " << grad << "\n";
 
     std::cout << "Computing LSCM...\n";
     LSCM::Compute(mesh);

@@ -21,8 +21,7 @@ template <typename T1, typename T2>
 auto dot(const T1& a, const T2& b)
 {
     using Ret = decltype(*std::begin(a));
-    return std::inner_product(
-        std::begin(a), std::end(a), std::begin(b), Ret(0));
+    return std::inner_product(std::begin(a), std::end(a), std::begin(b), Ret(0));
 }
 /** @brief Vector cross product */
 template <typename T1, typename T2>
@@ -49,20 +48,18 @@ auto norm(const Vector& v, Norm norm = Norm::L2)
     using Ret = decltype(*std::begin(v));
     switch (norm) {
         case Norm::L1: {
-            return std::accumulate(
-                std::begin(v), std::end(v), Ret(0),
-                [](auto a, auto b) { return a + std::abs(b); });
+            return std::accumulate(std::begin(v), std::end(v), Ret(0),
+                                   [](auto a, auto b) { return a + std::abs(b); });
         }
         case Norm::L2: {
-            auto sum = std::accumulate(
-                std::begin(v), std::end(v), Ret(0),
-                [](auto a, auto b) { return a + (b * b); });
+            auto sum = std::accumulate(std::begin(v), std::end(v), Ret(0),
+                                       [](auto a, auto b) { return a + (b * b); });
             return std::sqrt(sum);
         }
         case Norm::LInf: {
-            return std::abs(*std::max_element(
-                std::begin(v), std::end(v),
-                [](auto a, auto b) { return std::abs(a) < std::abs(b); }));
+            return std::abs(*std::max_element(std::begin(v), std::end(v), [](auto a, auto b) {
+                return std::abs(a) < std::abs(b);
+            }));
         }
     }
     throw std::invalid_argument("Invalid norm option");
@@ -83,20 +80,16 @@ auto interior_angle(const Vector1& a, const Vector2& b)
 }
 
 /** @brief Convert degrees to radians */
-template <
-    typename T = float,
-    typename T2,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T = float, typename T2,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_radians(T2 deg) -> T
 {
     return deg * PI<T> / T(180);
 }
 
 /** @brief Convert radians to degrees */
-template <
-    typename T = float,
-    typename T2,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T = float, typename T2,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 constexpr auto to_degrees(T2 rad) -> T
 {
     return rad * T(180) / PI<T>;

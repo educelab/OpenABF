@@ -35,8 +35,7 @@ int main()
     std::cout << "Has boundary: " << HasBoundary(mesh) << std::endl;
     std::cout << "Edges: " << std::endl;
     for (const auto& e : mesh->edges()) {
-        std::cout << "  " << e->vertex->idx << " -> " << e->pair->vertex->idx
-                  << std::endl;
+        std::cout << "  " << e->vertex->idx << " -> " << e->pair->vertex->idx << std::endl;
     }
 
     // Insert a border seam between vertices 0 -> 1 -> 2
@@ -48,8 +47,7 @@ int main()
     std::cout << "Has boundary: " << HasBoundary(mesh) << std::endl;
     std::cout << "Edges: " << std::endl;
     for (const auto& e : mesh->edges()) {
-        std::cout << "  " << e->vertex->idx << " -> " << e->pair->vertex->idx
-                  << std::endl;
+        std::cout << "  " << e->vertex->idx << " -> " << e->pair->vertex->idx << std::endl;
     }
 
     // Run ABF++

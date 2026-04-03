@@ -1,72 +1,140 @@
-### Prototype build jobs ###
-.build_script: &build_script
-  - mkdir -p build/
-  - cd build/
-  - echo $CMAKE_CMD
-  - $CMAKE_CMD
-  - ninja
+# GitLab CI/CD Configuration for OpenABF
 
-.test_script: &test_script
-  - ctest -V
+stages:
+  - lint
+  - build
+  - test
+  - deploy
 
-.build:
-  variables:
-    EXTRA_CMAKE_FLAGS: ""
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  CMAKE_GENERATOR: "Ninja"
+  BUILD_DIR: "build"
+
+# Base template for build and test jobs
+.base_template:
   before_script:
-    - apt update
-    - apt install -y libeigen3-dev
-    - export CMAKE_CMD="cmake -GNinja $EXTRA_CMAKE_FLAGS .."
+    - apt-get update -y && apt-get install -y libeigen3-dev cmake ninja-build build-essential git
+  cache:
+    key: "$CI_JOB_NAME-$CI_COMMIT_REF_SLUG"
+    paths:
+      - ${BUILD_DIR}/
+
+### 1. Linting Stage ###
+
+format-check:
+  stage: lint
+  image: ubuntu:24.04
+  allow_failure: true
+  before_script:
+    - apt-get update -y && apt-get install -y clang-format git
   script:
-    - *build_script
+    - |
+      find include/ examples/ tests/ -name "*.hpp" -o -name "*.cpp" | xargs clang-format -i
+      git diff --exit-code || {
+        echo "Formatting check failed! See differences above."
+        exit 1
+      }
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG =~ /^v/
 
-.build_and_test:
-  extends: .build
-  script:
-    - *build_script
-    - *test_script
-
-### Tests ###
-test:debian:12:
-  extends: .build_and_test
-  needs: []
-  image:
-    name: ghcr.io/educelab/ci-docker:base.12.1
-    entrypoint: [""]
-  variables:
-    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_TESTS=ON"
-
-examples:debian:12:
-  extends: .build
-  needs: []
-  image:
-    name: ghcr.io/educelab/ci-docker:base.12.1
-    entrypoint: [""]
-  variables:
-    EXTRA_CMAKE_FLAGS: "-DOPENABF_BUILD_EXAMPLES=ON"
-
-single_header_updated:
-  needs: []
-  image: python:3.11
+amalgamation-check:
+  stage: lint
+  image: python:3.11-slim
+  allow_failure: true
+  before_script:
+    - apt-get update -y && apt-get install -y git
   script:
     - python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .
-    - changed=$(git diff --stat)
-    - if [[ "${changed}" != '' ]]; then echo "Files changed:" ${changed}; exit 1; fi
+    - changed=$(git diff --name-only single_include/OpenABF/OpenABF.hpp)
+    - |
+      if [[ "${changed}" != "" ]]; then
+        echo "The single-header version is out of date!";
+        echo "Run: python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .";
+        exit 1;
+      fi
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG =~ /^v/
 
-### Docs ###
-pages:
+### 2. Build Stage ###
+
+build:
+  stage: build
+  extends: .base_template
   needs: []
-  image: debian:bookworm-backports
+  parallel:
+    matrix:
+      - IMAGE: ["debian:bookworm", "ubuntu:24.04"]
+        OPENABF_MULTIHEADER: ["ON", "OFF"]
+      - IMAGE: ["debian:bookworm"]
+        CXX: ["clang++"]
+        CC: ["clang"]
+        OPENABF_MULTIHEADER: ["ON"]
+  image: $IMAGE
   before_script:
-    - apt-get update
-    - apt-get install -y build-essential doxygen graphviz texlive ghostscript cmake libeigen3-dev
+    - !reference [.base_template, before_script]
+    - if [ "$CC" = "clang" ]; then apt-get install -y clang; fi
   script:
-    - mkdir -p build/
-    - mkdir -p public/
-    - cmake -S . -B build/ -DOPENABF_BUILD_DOCS=ON
-    - cmake --build build/ --target docs
-    - mv build/docs/html/ public/docs/
+    - export SAFE_IMAGE_NAME=$(echo $IMAGE | tr ':.' '_')
+    - cmake -S . -B ${BUILD_DIR}_${SAFE_IMAGE_NAME}_${OPENABF_MULTIHEADER} 
+            -DOPENABF_MULTIHEADER=${OPENABF_MULTIHEADER}
+            -DOPENABF_BUILD_TESTS=ON 
+            -DOPENABF_BUILD_EXAMPLES=ON
+    - cmake --build ${BUILD_DIR}_${SAFE_IMAGE_NAME}_${OPENABF_MULTIHEADER}
+  artifacts:
+    paths:
+      - build_*
+    expire_in: 1 hour
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG =~ /^v/
+
+### 3. Test Stage ###
+
+test:
+  stage: test
+  extends: .base_template
+  parallel:
+    matrix:
+      - IMAGE: ["debian:bookworm", "ubuntu:24.04"]
+        OPENABF_MULTIHEADER: ["ON", "OFF"]
+      - IMAGE: ["debian:bookworm"]
+        CXX: ["clang++"]
+        CC: ["clang"]
+        OPENABF_MULTIHEADER: ["ON"]
+  image: $IMAGE
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - export SAFE_IMAGE_NAME=$(echo $IMAGE | tr ':.' '_')
+    - cd ${BUILD_DIR}_${SAFE_IMAGE_NAME}_${OPENABF_MULTIHEADER}
+    - ctest --output-on-failure
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG =~ /^v/
+
+### 4. Deploy Stage ###
+
+pages:
+  stage: deploy
+  image: debian:bookworm
+  before_script:
+    - apt-get update -y && apt-get install -y doxygen graphviz texlive-latex-base texlive-fonts-recommended ghostscript cmake libeigen3-dev build-essential ninja-build git
+  script:
+    - cmake -G Ninja -S . -B ${BUILD_DIR}_docs -DOPENABF_BUILD_DOCS=ON
+    - cmake --build ${BUILD_DIR}_docs --target docs
+    - mkdir -p public
+    - mv ${BUILD_DIR}_docs/docs/html/ public/docs/
   artifacts:
     paths:
       - public
-  only:
-    - develop
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_TAG =~ /^v/

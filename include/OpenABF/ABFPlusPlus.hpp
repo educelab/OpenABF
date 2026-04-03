@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cassert>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 #include <Eigen/SparseLU>
 
@@ -35,12 +38,9 @@ namespace OpenABF
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <
-    typename T,
-    class MeshType = detail::ABF::Mesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class ABFPlusPlus
 {
 public:
@@ -50,12 +50,15 @@ public:
     /** @brief Set the maximum number of iterations */
     void setMaxIterations(std::size_t it) { maxIters_ = it; }
 
+    /** @brief Set the gradient convergence threshold */
+    void setGradientThreshold(T t) { gradThreshold_ = t; }
+
     /**
      * @brief Get the mesh gradient
      *
      * **Note:** Result is only valid after running compute().
      */
-    auto gradient() const -> T { return grad_; }
+    [[nodiscard]] auto gradient() const -> T { return grad_; }
 
     /**
      * @brief Get the number of iterations of the last computation
@@ -67,7 +70,7 @@ public:
     /** @copydoc ABFPlusPlus::Compute */
     void compute(typename Mesh::Pointer& mesh)
     {
-        Compute(mesh, iters_, grad_, maxIters_);
+        Compute(mesh, iters_, grad_, maxIters_, gradThreshold_);
     }
 
     /**
@@ -77,11 +80,8 @@ public:
      * to find a solution.
      * @throws MeshException If mesh gradient cannot be calculated.
      */
-    static void Compute(
-        typename Mesh::Pointer& mesh,
-        std::size_t& iters,
-        T& gradient,
-        const std::size_t maxIters = 10)
+    static void Compute(typename Mesh::Pointer& mesh, std::size_t& iters, T& gradient,
+                        const std::size_t maxIters = 10, T gradThreshold = T(0.001))
     {
         using namespace detail::ABF;
 
@@ -95,7 +95,18 @@ public:
         }
         auto gradDelta = INF<T>;
         iters = 0;
-        while (gradient > 0.001 and gradDelta > 0.001 and iters < maxIters) {
+
+        // vertex idx -> interior vertex idx lookup (pre-built once, O(1) access)
+        std::vector<std::size_t> vIdx2vIntIdx(mesh->num_vertices(),
+                                              std::numeric_limits<std::size_t>::max());
+        {
+            std::size_t newIdx{0};
+            for (const auto& v : mesh->vertices_interior()) {
+                vIdx2vIntIdx[v->idx] = newIdx++;
+            }
+        }
+
+        while (gradient > gradThreshold and gradDelta > gradThreshold and iters < maxIters) {
             if (std::isnan(gradient) or std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
@@ -137,13 +148,6 @@ public:
             SparseMatrix b2(faceCnt + 2 * vIntCnt, 1);
             b2.reserve(triplets.size());
             b2.setFromTriplets(triplets.begin(), triplets.end());
-
-            // vertex idx -> interior vertex idx permutation
-            std::map<std::size_t, std::size_t> vIdx2vIntIdx;
-            std::size_t newIdx{0};
-            for (const auto& v : mesh->vertices_interior()) {
-                vIdx2vIntIdx[v->idx] = newIdx++;
-            }
 
             // Compute J1 + J2
             triplets.clear();
@@ -192,16 +196,15 @@ public:
 
             SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
             for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
-                for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k);
-                     it; ++it) {
-                    it.valueRef() = 1.F / it.value();
+                for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k); it; ++it) {
+                    it.valueRef() = T(1) / it.value();
                 }
             }
-            auto Jstar = JLiJt.block(faceCnt,0,2*vIntCnt,faceCnt);
-            auto JstarT = JLiJt.block(0,faceCnt,faceCnt, 2*vIntCnt);
-            auto Jstar2 = JLiJt.block(faceCnt,faceCnt,2*vIntCnt, 2*vIntCnt);
+            auto Jstar = JLiJt.block(faceCnt, 0, 2 * vIntCnt, faceCnt);
+            auto JstarT = JLiJt.block(0, faceCnt, faceCnt, 2 * vIntCnt);
+            auto Jstar2 = JLiJt.block(faceCnt, faceCnt, 2 * vIntCnt, 2 * vIntCnt);
             auto bstar1 = bstar.block(0, 0, faceCnt, 1);
-            auto bstar2 = bstar.block(faceCnt, 0, 2*vIntCnt, 1);
+            auto bstar2 = bstar.block(faceCnt, 0, 2 * vIntCnt, 1);
 
             // (J* Lam*^-1 J*^t - J**) delta_lambda_2 = J* Lam*^-1 b*_1 - b*_2
             SparseMatrix A = Jstar * LambdaStarInv * JstarT - Jstar2;
@@ -218,24 +221,22 @@ public:
             }
 
             // Compute Eq. 17 -> delta_lambda_1
-            auto deltaLambda1 =
-                LambdaStarInv * (bstar1 - JstarT * deltaLambda2);
+            auto deltaLambda1 = LambdaStarInv * (bstar1 - JstarT * deltaLambda2);
 
             // Construct deltaLambda
-            DenseVector deltaLambda(
-                deltaLambda1.rows() + deltaLambda2.rows(), 1);
+            DenseVector deltaLambda(deltaLambda1.rows() + deltaLambda2.rows(), 1);
             deltaLambda << DenseVector(deltaLambda1), DenseVector(deltaLambda2);
 
             // Compute Eq. 10 -> delta_alpha
-            DenseVector deltaAlpha =
-                LambdaInv * (b1 - J.transpose() * deltaLambda);
+            DenseVector deltaAlpha = LambdaInv * (b1 - J.transpose() * deltaLambda);
 
             // lambda += delta_lambda
             for (auto& f : mesh->faces()) {
                 f->lambda_tri += deltaLambda(f->idx, 0);
             }
             for (auto& v : mesh->vertices_interior()) {
-                auto intIdx = vIdx2vIntIdx.at(v->idx);
+                auto intIdx = vIdx2vIntIdx[v->idx];
+                assert(intIdx != std::numeric_limits<std::size_t>::max());
                 v->lambda_plan += deltaLambda(faceCnt + intIdx, 0);
                 v->lambda_len += deltaLambda(faceCnt + vIntCnt + intIdx, 0);
             }
@@ -273,6 +274,8 @@ private:
     std::size_t iters_{0};
     /** Max iterations */
     std::size_t maxIters_{10};
+    /** Gradient convergence threshold */
+    T gradThreshold_{0.001};
 };
 
 }  // namespace OpenABF

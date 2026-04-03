@@ -11,8 +11,7 @@ namespace OpenABF::io_utils
 {
 
 /** @brief Compare two string_views, ignoring case */
-static auto icase_compare(const std::string_view a, const std::string_view b)
-    -> bool
+static auto icase_compare(const std::string_view a, const std::string_view b) -> bool
 {
     // not the same length
     if (a.length() != b.length()) {
@@ -72,8 +71,7 @@ static auto trim(std::string_view s) -> std::string_view
  * ```
  */
 template <typename... Ds>
-static auto split(std::string_view s, const Ds&... ds)
-    -> std::vector<std::string_view>
+static auto split(std::string_view s, const Ds&... ds) -> std::vector<std::string_view>
 {
     constexpr std::string_view DEFAULT_DELIM{" "};
 
@@ -86,9 +84,7 @@ static auto split(std::string_view s, const Ds&... ds)
     }
 
     // Get a list of all delimiter start pos and sizes
-    std::vector<
-        std::pair<std::string_view::size_type, std::string_view::size_type>>
-        delimPos;
+    std::vector<std::pair<std::string_view::size_type, std::string_view::size_type>> delimPos;
     for (const auto& delim : delimiters) {
         auto b = s.find(delim, 0);
         while (b != std::string_view::npos) {
@@ -98,12 +94,10 @@ static auto split(std::string_view s, const Ds&... ds)
     }
 
     // Sort the delimiter start positions by first and largest
-    std::sort(
-        delimPos.begin(), delimPos.end(),
-        [](const auto& l, const auto& r) { return l.second > r.second; });
-    std::sort(
-        delimPos.begin(), delimPos.end(),
-        [](const auto& l, const auto& r) { return l.first < r.first; });
+    std::sort(delimPos.begin(), delimPos.end(),
+              [](const auto& l, const auto& r) { return l.second > r.second; });
+    std::sort(delimPos.begin(), delimPos.end(),
+              [](const auto& l, const auto& r) { return l.first < r.first; });
 
     // Split string
     std::vector<std::string_view> tokens;

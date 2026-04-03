@@ -1,0 +1,10 @@
+{
+  "id": "B2",
+  "title": "ABFPlusPlus LambdaStarInv inversion uses hardcoded 1.F",
+  "type": "bug",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/7",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}

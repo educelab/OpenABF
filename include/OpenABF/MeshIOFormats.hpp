@@ -19,6 +19,9 @@ template <typename PluginType>
 static auto is_file_type(const std::filesystem::path& path)
 {
     auto ext = path.extension().string();
+    if (ext.empty()) {
+        return false;
+    }
     if (ext[0] == '.') {
         ext = ext.substr(1);
     }
@@ -47,10 +50,7 @@ static auto is_file_type(const std::filesystem::path& path)
  */
 struct OBJ {
     /** @brief List of recognized file format extensions */
-    static auto Extensions() -> std::vector<std::string_view>
-    {
-        return {"obj"};
-    }
+    static auto Extensions() -> std::vector<std::string_view> { return {"obj"}; }
 
     /** Read the file stream into the provided object */
     template <typename MeshType>
@@ -78,9 +78,8 @@ struct OBJ {
             // Handle vertices
             if (parts[0] == "v") {
                 std::vector<T> v;
-                std::transform(
-                    parts.begin() + 1, parts.end(), std::back_inserter(v),
-                    to_numeric<T>);
+                std::transform(parts.begin() + 1, parts.end(), std::back_inserter(v),
+                               to_numeric<T>);
                 mesh.insert_vertex(v);
             }
 
@@ -89,9 +88,7 @@ struct OBJ {
                 std::vector<std::size_t> indices;
                 std::transform(
                     parts.begin() + 1, parts.end(), std::back_inserter(indices),
-                    [](const auto& p) {
-                        return to_numeric<std::size_t>(split(p, "/")[0]) - 1;
-                    });
+                    [](const auto& p) { return to_numeric<std::size_t>(split(p, "/")[0]) - 1; });
                 mesh.insert_face(indices);
             }
         }
@@ -114,8 +111,7 @@ struct OBJ {
             for (const auto& a : v->pos) {
                 auto res = std::to_chars(buf, buf + bufSize, a);
                 if (res.ec != std::errc()) {
-                    throw std::runtime_error(
-                        std::make_error_code(res.ec).message());
+                    throw std::runtime_error(std::make_error_code(res.ec).message());
                 }
                 os << ' ' << std::string_view(buf, res.ptr - buf);
             }
@@ -126,8 +122,7 @@ struct OBJ {
             for (const auto& a : v->normal()) {
                 auto res = std::to_chars(buf, buf + bufSize, a);
                 if (res.ec != std::errc()) {
-                    throw std::runtime_error(
-                        std::make_error_code(res.ec).message());
+                    throw std::runtime_error(std::make_error_code(res.ec).message());
                 }
                 os << ' ' << std::string_view(buf, res.ptr - buf);
             }
@@ -139,11 +134,9 @@ struct OBJ {
             const auto f = mesh.face(i);
             os << "f";
             for (const auto& e : *f) {
-                auto res =
-                    std::to_chars(buf, buf + bufSize, e->vertex->idx + 1);
+                auto res = std::to_chars(buf, buf + bufSize, e->vertex->idx + 1);
                 if (res.ec != std::errc()) {
-                    throw std::runtime_error(
-                        std::make_error_code(res.ec).message());
+                    throw std::runtime_error(std::make_error_code(res.ec).message());
                 }
                 // write vertex and normal IDs
                 const auto id = std::string_view(buf, res.ptr - buf);
@@ -175,10 +168,7 @@ struct OBJ {
  */
 struct PLY {
     /** @brief List of recognized file format extensions */
-    static auto Extensions() -> std::vector<std::string_view>
-    {
-        return {"ply"};
-    }
+    static auto Extensions() -> std::vector<std::string_view> { return {"ply"}; }
 
     /** Read the file stream into the provided object */
     template <typename MeshType>
@@ -201,8 +191,7 @@ struct PLY {
             throw std::runtime_error("File header missing format declaration");
         }
         if (fmtParts[1] != "ascii") {
-            const auto fmt =
-                std::string(fmtParts[1]) + " " + std::string(fmtParts[2]);
+            const auto fmt = std::string(fmtParts[1]) + " " + std::string(fmtParts[2]);
             throw std::runtime_error("Unsupported ply format: " + fmt);
         }
 
@@ -243,22 +232,19 @@ struct PLY {
             // Handle elements
             if (parts[0] == "element") {
                 elements.push_back(
-                    {.label = std::string(parts[1]),
-                     .count = to_numeric<std::uint32_t>(parts[2])});
+                    {.label = std::string(parts[1]), .count = to_numeric<std::uint32_t>(parts[2])});
             }
 
             // Handle properties for the most recent element
             else if (parts[0] == "property") {
                 if (parts[1] == "list") {
-                    elements.back().properties.push_back(
-                        {.is_list = true,
-                         .list_count_type = std::string(parts[2]),
-                         .label = std::string(parts[4]),
-                         .type = std::string(parts[3])});
+                    elements.back().properties.push_back({.is_list = true,
+                                                          .list_count_type = std::string(parts[2]),
+                                                          .label = std::string(parts[4]),
+                                                          .type = std::string(parts[3])});
                 } else {
                     elements.back().properties.push_back(
-                        {.label = std::string(parts[2]),
-                         .type = std::string(parts[1])});
+                        {.label = std::string(parts[2]), .type = std::string(parts[1])});
                 }
             }
 
@@ -271,20 +257,26 @@ struct PLY {
         // Set up vertex map: v[n] -> property[m]
         // Probably unnecessary
         std::array<std::size_t, 3> vmap{};
-        auto v_elem = std::find_if(
-            elements.begin(), elements.end(),
-            [](const auto& e) { return e.label == "vertex"; });
+        std::array<bool, 3> vmapFound{false, false, false};
+        auto v_elem = std::find_if(elements.begin(), elements.end(),
+                                   [](const auto& e) { return e.label == "vertex"; });
         if (v_elem == elements.end()) {
             throw std::runtime_error("Did not find vertex element");
         }
         for (auto i = 0; i < v_elem->properties.size(); ++i) {
             if (const auto& prop = v_elem->properties[i]; prop.label == "x") {
                 vmap[0] = i;
+                vmapFound[0] = true;
             } else if (prop.label == "y") {
                 vmap[1] = i;
+                vmapFound[1] = true;
             } else if (prop.label == "z") {
                 vmap[2] = i;
+                vmapFound[2] = true;
             }
+        }
+        if (!vmapFound[0] || !vmapFound[1] || !vmapFound[2]) {
+            throw std::runtime_error("PLY vertex element missing required x/y/z properties");
         }
 
         // Iterate the lines of the body
@@ -297,10 +289,8 @@ struct PLY {
                     std::getline(is, line);
                     const auto line_view = trim(line);
                     const auto parts = split(line_view);
-                    mesh.insert_vertex(
-                        to_numeric<T>(parts[vmap[0]]),
-                        to_numeric<T>(parts[vmap[1]]),
-                        to_numeric<T>(parts[vmap[2]]));
+                    mesh.insert_vertex(to_numeric<T>(parts[vmap[0]]), to_numeric<T>(parts[vmap[1]]),
+                                       to_numeric<T>(parts[vmap[2]]));
                 }
 
                 // parse face line
@@ -309,14 +299,12 @@ struct PLY {
                     const auto line_view = trim(line);
                     const auto parts = split(line_view);
                     if (parts[0] != "3") {
-                        throw std::runtime_error(
-                            "Unsupported number of vertices in face: " +
-                            std::string(parts[0]));
+                        throw std::runtime_error("Unsupported number of vertices in face: " +
+                                                 std::string(parts[0]));
                     }
-                    mesh.insert_face(
-                        to_numeric<std::size_t>(parts[1]),
-                        to_numeric<std::size_t>(parts[2]),
-                        to_numeric<std::size_t>(parts[3]));
+                    mesh.insert_face(to_numeric<std::size_t>(parts[1]),
+                                     to_numeric<std::size_t>(parts[2]),
+                                     to_numeric<std::size_t>(parts[3]));
                 }
 
                 // ignore unrecognized element

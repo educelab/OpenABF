@@ -2,7 +2,9 @@
 
 #include <cmath>
 #include <map>
+#include <optional>
 #include <type_traits>
+#include <utility>
 
 #include <Eigen/IterativeLinearSolvers>
 #include <Eigen/SparseLU>
@@ -26,12 +28,8 @@ constexpr bool is_instance_of_v<U<Vs...>, U> = std::true_type{};
 
 /** Solve least squares using A'Ab  */
 template <
-    class SparseMatrix,
-    class DenseMatrix,
-    class Solver,
-    std::enable_if_t<
-        !is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
-        bool> = false>
+    class SparseMatrix, class DenseMatrix, class Solver,
+    std::enable_if_t<!is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = false>
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Setup AtA and solver
@@ -54,12 +52,8 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 
 /** Solve least squares with LeastSquaresConjugateGradient */
 template <
-    class SparseMatrix,
-    class DenseMatrix,
-    class Solver,
-    std::enable_if_t<
-        is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>,
-        bool> = true>
+    class SparseMatrix, class DenseMatrix, class Solver,
+    std::enable_if_t<is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = true>
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Solve
@@ -96,25 +90,46 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * @tparam Solver A solver implementing the
  * [Eigen Sparse solver
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
- * and templated on Eigen::SparseMatrix<T>
+ * and templated on Eigen::SparseMatrix<T>. The default SparseLU is robust but
+ * slow for large meshes. For iterative solving, prefer
+ * `Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper>`
+ * over the default `Lower`-only variant: the `Lower|Upper` template argument
+ * enables Eigen's full-matrix SpMV code path, which is faster and — when
+ * compiled with OpenMP — multi-threaded. Using only `Lower` (the Eigen
+ * default) routes through `selfadjointView<Lower>`, which is a different
+ * internal code path that is never OpenMP-parallelized regardless of
+ * `Eigen::setNbThreads()`.
  */
-template <
-    typename T,
-    class MeshType = HalfEdgeMesh<T>,
-    class Solver =
-        Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-    std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <typename T, class MeshType = HalfEdgeMesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
+          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
 class AngleBasedLSCM
 {
 public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
 
-    /** @copydoc AngleBasedLSCM::Compute */
-    void compute(typename Mesh::Pointer& mesh) const { Compute(mesh); }
+    /** @brief Set the pinned vertex indices used by compute() */
+    void setPinnedVertices(std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        pinnedVertices_ = {pin0Idx, pin1Idx};
+    }
+
+    /** @copydoc AngleBasedLSCM::Compute() */
+    void compute(typename Mesh::Pointer& mesh) const
+    {
+        if (pinnedVertices_) {
+            Compute(mesh, pinnedVertices_->first, pinnedVertices_->second);
+        } else {
+            Compute(mesh);
+        }
+    }
 
     /**
-     * @brief Compute the parameterized mesh
+     * @brief Compute the parameterized mesh using automatic pin selection
+     *
+     * Selects the first boundary vertex and its boundary-edge neighbor as
+     * pinned vertices.
      *
      * @throws MeshException If pinned vertex is not on boundary.
      * @throws SolverException If matrix cannot be decomposed or if solver fails
@@ -122,13 +137,8 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh)
     {
-        using Triplet = Eigen::Triplet<T>;
-        using SparseMatrix = Eigen::SparseMatrix<T>;
-        using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
-
-        // Pinned vertex selection
-        // Get the end points of a boundary edge
-        auto p0 = mesh->vertices_boundary()[0];
+        // Pinned vertex selection: first boundary vertex + boundary-edge neighbor
+        auto p0 = mesh->vertices_boundary().front();
         auto e = p0->edge;
         do {
             if (e->pair->is_boundary()) {
@@ -140,6 +150,35 @@ public:
             throw MeshException("Pinned vertex not on boundary");
         }
         auto p1 = e->next->vertex;
+        ComputeImpl(mesh, p0, p1);
+    }
+
+    /**
+     * @brief Compute the parameterized mesh with explicit pinned vertex indices
+     *
+     * @param pin0Idx Index of the first pinned vertex (placed at the UV origin)
+     * @param pin1Idx Index of the second pinned vertex (placed on the nearest axis)
+     * @throws SolverException If matrix cannot be decomposed or if solver fails
+     * to find a solution.
+     */
+    static void Compute(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        ComputeImpl(mesh, mesh->vertex(pin0Idx), mesh->vertex(pin1Idx));
+    }
+
+private:
+    /** Optional explicit pin pair set via setPinnedVertices() */
+    std::optional<std::pair<std::size_t, std::size_t>> pinnedVertices_;
+
+    /**
+     * @brief Core solver: place p0/p1 on the UV axes then solve for free vertices
+     */
+    static void ComputeImpl(typename Mesh::Pointer& mesh, const typename Mesh::VertPtr& p0,
+                            const typename Mesh::VertPtr& p1)
+    {
+        using Triplet = Eigen::Triplet<T>;
+        using SparseMatrix = Eigen::SparseMatrix<T>;
+        using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
         // Map selected edge to closest XY axis
         // Use sign to select direction
@@ -187,6 +226,31 @@ public:
         // Are only solving for free vertices, so push pins in special matrix
         std::vector<Triplet> tripletsA;
         tripletsB.clear();
+
+        // Per-vertex contribution helper (Lévy et al. 2002, Eq. 10).
+        // Each vertex contributes a 2×2 conformal block [c, -s; s, c] at its
+        // column. Fixed pins (p0, p1) go into tripletsB; free vertices into
+        // tripletsA.
+        auto addContrib = [&](std::size_t row, const auto& e, T c, T s) {
+            if (e->vertex == p0) {
+                tripletsB.emplace_back(row, 0, c);
+                tripletsB.emplace_back(row, 1, -s);
+                tripletsB.emplace_back(row + 1, 0, s);
+                tripletsB.emplace_back(row + 1, 1, c);
+            } else if (e->vertex == p1) {
+                tripletsB.emplace_back(row, 2, c);
+                tripletsB.emplace_back(row, 3, -s);
+                tripletsB.emplace_back(row + 1, 2, s);
+                tripletsB.emplace_back(row + 1, 3, c);
+            } else {
+                auto freeIdx = freeIdxTable.at(e->vertex->idx);
+                tripletsA.emplace_back(row, 2 * freeIdx, c);
+                tripletsA.emplace_back(row, 2 * freeIdx + 1, -s);
+                tripletsA.emplace_back(row + 1, 2 * freeIdx, s);
+                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, c);
+            }
+        };
+
         for (const auto& f : mesh->faces()) {
             auto e0 = f->head;
             auto e1 = e0->next;
@@ -223,55 +287,11 @@ public:
             auto cosine = std::cos(e0->alpha) * ratio;
             auto sine = sin0 * ratio;
 
-            // If pin0 or pin1, put in fixedB matrix, else put in A
+            // Assemble per-vertex contributions for this face (Lévy et al. 2002, Eq. 10)
             auto row = 2 * f->idx;
-            if (e0->vertex == p0) {
-                tripletsB.emplace_back(row, 0, cosine - T(1));
-                tripletsB.emplace_back(row, 1, -sine);
-                tripletsB.emplace_back(row + 1, 0, sine);
-                tripletsB.emplace_back(row + 1, 1, cosine - T(1));
-            } else if (e0->vertex == p1) {
-                tripletsB.emplace_back(row, 2, cosine - T(1));
-                tripletsB.emplace_back(row, 3, -sine);
-                tripletsB.emplace_back(row + 1, 2, sine);
-                tripletsB.emplace_back(row + 1, 3, cosine - T(1));
-            } else {
-                auto freeIdx = freeIdxTable.at(e0->vertex->idx);
-                tripletsA.emplace_back(row, 2 * freeIdx, cosine - T(1));
-                tripletsA.emplace_back(row, 2 * freeIdx + 1, -sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx, sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, cosine - T(1));
-            }
-
-            if (e1->vertex == p0) {
-                tripletsB.emplace_back(row, 0, -cosine);
-                tripletsB.emplace_back(row, 1, sine);
-                tripletsB.emplace_back(row + 1, 0, -sine);
-                tripletsB.emplace_back(row + 1, 1, -cosine);
-            } else if (e1->vertex == p1) {
-                tripletsB.emplace_back(row, 2, -cosine);
-                tripletsB.emplace_back(row, 3, sine);
-                tripletsB.emplace_back(row + 1, 2, -sine);
-                tripletsB.emplace_back(row + 1, 3, -cosine);
-            } else {
-                auto freeIdx = freeIdxTable.at(e1->vertex->idx);
-                tripletsA.emplace_back(row, 2 * freeIdx, -cosine);
-                tripletsA.emplace_back(row, 2 * freeIdx + 1, sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx, -sine);
-                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, -cosine);
-            }
-
-            if (e2->vertex == p0) {
-                tripletsB.emplace_back(row, 0, T(1));
-                tripletsB.emplace_back(row + 1, 1, T(1));
-            } else if (e2->vertex == p1) {
-                tripletsB.emplace_back(row, 2, T(1));
-                tripletsB.emplace_back(row + 1, 3, T(1));
-            } else {
-                auto freeIdx = freeIdxTable.at(e2->vertex->idx);
-                tripletsA.emplace_back(row, 2 * freeIdx, T(1));
-                tripletsA.emplace_back(row + 1, 2 * freeIdx + 1, T(1));
-            }
+            addContrib(row, e0, cosine - T(1), sine);
+            addContrib(row, e1, -cosine, -sine);
+            addContrib(row, e2, T(1), T(0));
         }
         SparseMatrix A(2 * numFaces, 2 * numFree);
         A.reserve(tripletsA.size());
@@ -285,8 +305,7 @@ public:
         SparseMatrix b = bFree * bFixed * -1;
 
         // Solve for x
-        auto x =
-            detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(A, b);
+        auto x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(A, b);
 
         // Assign solution to UV coordinates
         // Pins are already updated, so these are free vertices

@@ -14,6 +14,8 @@ set(tests
     src/TestMath.cpp
     src/TestVec.cpp
     src/TestParameterization.cpp
+    src/TestMeshIOUtils.cpp
+    src/TestMeshIO.cpp
 )
 
 foreach(src ${tests})

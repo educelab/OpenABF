@@ -16,10 +16,7 @@ namespace OpenABF
  * @tparam T Element type
  * @tparam Dims Number of elements
  */
-template <
-    typename T,
-    std::size_t Dims,
-    std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+template <typename T, std::size_t Dims, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
 class Vec
 {
     /** Underlying element storage */
@@ -110,24 +107,24 @@ public:
     constexpr const_iterator cend() const noexcept { return val_.cend(); }
 
     /** @brief Get an iterator to the first element of the reverse vector */
-    constexpr iterator rbegin() noexcept { return val_.rbegin(); }
-    /** @brief Get an iterator to the first element of the vector */
-    constexpr const_iterator rbegin() const noexcept { return val_.rbegin(); }
-    /** @brief Get an iterator to the first element of the vector */
-    constexpr const_iterator crbegin() const noexcept { return val_.crbegin(); }
+    constexpr reverse_iterator rbegin() noexcept { return val_.rbegin(); }
+    /** @brief Get an iterator to the first element of the reverse vector */
+    constexpr const_reverse_iterator rbegin() const noexcept { return val_.rbegin(); }
+    /** @brief Get an iterator to the first element of the reverse vector */
+    constexpr const_reverse_iterator crbegin() const noexcept { return val_.crbegin(); }
 
     /**
      * @brief Get an iterator to one past the last element in the reverse vector
      */
-    constexpr iterator rend() noexcept { return val_.rend(); }
+    constexpr reverse_iterator rend() noexcept { return val_.rend(); }
     /**
      * @brief Get an iterator to one past the last element in the reverse vector
      */
-    constexpr const_iterator rend() const noexcept { return val_.rend(); }
+    constexpr const_reverse_iterator rend() const noexcept { return val_.rend(); }
     /**
      * @brief Get an iterator to one past the last element in the reverse vector
      */
-    constexpr const_iterator crend() const noexcept { return val_.crend(); }
+    constexpr const_reverse_iterator crend() const noexcept { return val_.crend(); }
 
     /** @brief Return whether the vector is empty (uninitialized) */
     constexpr bool empty() const noexcept { return val_.empty(); }
@@ -206,9 +203,7 @@ public:
     }
 
     /** @brief Multiplication assignment operator */
-    template <
-        typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
     Vec& operator*=(const T2& b)
     {
         for (auto& v : val_) {
@@ -218,17 +213,15 @@ public:
     }
 
     /** @brief Multiplication operator */
-    template <class Vector>
-    friend Vec operator*(Vec lhs, const Vector& rhs)
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend Vec operator*(Vec lhs, const T2& rhs)
     {
         lhs *= rhs;
         return lhs;
     }
 
     /** @brief Division assignment operator */
-    template <
-        typename T2,
-        std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
     Vec& operator/=(const T2& b)
     {
         for (auto& v : val_) {
@@ -238,8 +231,8 @@ public:
     }
 
     /** @brief Division operator */
-    template <class Vector>
-    friend Vec operator/(Vec lhs, const Vector& rhs)
+    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    friend Vec operator/(Vec lhs, const T2& rhs)
     {
         lhs /= rhs;
         return lhs;
@@ -275,11 +268,9 @@ using Vec3f = Vec<float, 3>;
 /** @brief 3D, 64-bit float vector */
 using Vec3d = Vec<double, 3>;
 
-}  // namespace OpenABF
-
 /** Debug: Print a vector to a std::ostream */
 template <typename T, std::size_t Dims>
-std::ostream& operator<<(std::ostream& os, const OpenABF::Vec<T, Dims>& vec)
+std::ostream& operator<<(std::ostream& os, const Vec<T, Dims>& vec)
 {
     os << "[";
     std::size_t i{0};
@@ -292,3 +283,5 @@ std::ostream& operator<<(std::ostream& os, const OpenABF::Vec<T, Dims>& vec)
     os << "]";
     return os;
 }
+
+}  // namespace OpenABF

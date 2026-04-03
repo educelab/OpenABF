@@ -1,0 +1,10 @@
+{
+  "id": "P2",
+  "title": "std::map for interior-vertex index lookup in solver",
+  "type": "performance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/13",
+  "archived": true,
+  "archived_at": "2026-03-20",
+  "archive_reason": "Completed"
+}
