@@ -33,9 +33,8 @@ static auto icase_compare(const std::string_view a, const std::string_view b) ->
 static auto trim_left(std::string_view s) -> std::string_view
 {
     const auto& loc = std::locale();
-    const auto start = std::find_if_not(
-        std::begin(s), std::end(s),
-        [&loc](auto ch) -> bool { return std::isspace(ch, loc); });
+    const auto start = std::find_if_not(std::begin(s), std::end(s),
+                                        [&loc](auto ch) -> bool { return std::isspace(ch, loc); });
     s.remove_prefix(std::distance(std::begin(s), start));
     return s;
 }
@@ -44,10 +43,9 @@ static auto trim_left(std::string_view s) -> std::string_view
 static auto trim_right(std::string_view s) -> std::string_view
 {
     const auto& loc = std::locale();
-    const auto start =
-        std::find_if_not(s.rbegin(), s.rend(), [&loc](auto ch) -> bool {
-            return std::isspace(ch, loc);
-        }).base();
+    const auto start = std::find_if_not(s.rbegin(), s.rend(), [&loc](auto ch) -> bool {
+                           return std::isspace(ch, loc);
+                       }).base();
     s.remove_suffix(std::distance(start, std::end(s)));
     return s;
 }
