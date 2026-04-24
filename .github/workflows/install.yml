@@ -1,0 +1,55 @@
+name: Install Test
+
+on:
+  workflow_call:
+  push:
+    branches: [ develop ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ develop ]
+
+jobs:
+  install-test:
+    name: ${{ matrix.distro }} (Multiheader=${{ matrix.multiheader }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: [ubuntu-24.04, ubuntu-22.04, debian-bookworm, fedora]
+        multiheader: [ON, OFF]
+        include:
+          - distro: ubuntu-24.04
+            image: ubuntu:24.04
+            install_deps: apt-get update && apt-get install -y cmake ninja-build build-essential libeigen3-dev
+          - distro: ubuntu-22.04
+            image: ubuntu:22.04
+            install_deps: apt-get update && apt-get install -y cmake ninja-build build-essential libeigen3-dev
+          - distro: debian-bookworm
+            image: debian:bookworm
+            install_deps: apt-get update && apt-get install -y cmake ninja-build build-essential libeigen3-dev
+          - distro: fedora
+            image: fedora:latest
+            install_deps: dnf install -y cmake ninja-build gcc-c++ eigen3-devel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: ${{ matrix.install_deps }}
+
+      - name: Install OpenABF
+        run: |
+          cmake -G Ninja -S . -B build \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+            -DOPENABF_MULTIHEADER=${{ matrix.multiheader }}
+          cmake --install build
+
+      - name: Build Test Project
+        run: |
+          cmake -G Ninja -S tests/install -B build_install_test \
+            -DCMAKE_PREFIX_PATH=${{ github.workspace }}/install
+          cmake --build build_install_test
+
+      - name: Run Test
+        run: ./build_install_test/install_test

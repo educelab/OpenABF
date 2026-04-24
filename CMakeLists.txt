@@ -27,6 +27,7 @@ if(OPENABF_MULTIHEADER)
         include/OpenABF/ABFPlusPlus.hpp
         include/OpenABF/Exceptions.hpp
         include/OpenABF/HalfEdgeMesh.hpp
+        include/OpenABF/HierarchicalLSCM.hpp
         include/OpenABF/AngleBasedLSCM.hpp
         include/OpenABF/Math.hpp
         include/OpenABF/Vec.hpp
