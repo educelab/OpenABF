@@ -24,13 +24,13 @@
 | open | F10 | Implement Ceres Solver Backend | [#58](https://github.com/educelab/OpenABF/issues/58) | 2026-03-20 | 2026-03-20 |
 | open | F11 | Implement ACVD | [#62](https://github.com/educelab/OpenABF/issues/62) | 2026-03-20 | 2026-03-20 |
 | open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-03-13 |
-| open | F3 | Multi-component extraction and parameterization pipeline | [#19](https://github.com/educelab/OpenABF/issues/19) | 2026-03-13 | 2026-03-13 |
-| ~ | M5 | split_edge and detail::filter cleanup | [#76](https://github.com/educelab/OpenABF/issues/76), [#77](https://github.com/educelab/OpenABF/issues/77), [#78](https://github.com/educelab/OpenABF/issues/78) | 2026-06-12 | 2026-06-12 |
+| ~ | F3 | Multi-component extraction and parameterization pipeline | [#19](https://github.com/educelab/OpenABF/issues/19) | 2026-03-13 | 2026-06-12 |
 
 ## Archived Tracks
 
 | Status | Track ID | Title | GitHub | Archived |
 | ------ | -------- | ----- | ------ | -------- |
+| closed | M5 | split_edge and detail::filter cleanup (PR #79) | [#76](https://github.com/educelab/OpenABF/issues/76), [#77](https://github.com/educelab/OpenABF/issues/77), [#78](https://github.com/educelab/OpenABF/issues/78) | 2026-06-12 |
 | closed | B1 | ABF lambda update index wrong for 2+ interior vertices | [#6](https://github.com/educelab/OpenABF/issues/6) | 2026-03-20 |
 | closed | B2 | ABFPlusPlus LambdaStarInv inversion uses hardcoded `1.F` | [#7](https://github.com/educelab/OpenABF/issues/7) | 2026-03-20 |
 | closed | B3 | Vec reverse iterators have wrong return type | [#8](https://github.com/educelab/OpenABF/issues/8) | 2026-03-20 |
