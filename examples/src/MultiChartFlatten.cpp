@@ -51,8 +51,7 @@ int main()
     // Tear the mesh along the vertical center line (v1 -> v4 -> v7) so the
     // grid splits into a left and right chart.
     std::cout << "Before split: " << mesh->num_connected_components() << " component(s)\n";
-    mesh->split_path({1, 4});
-    mesh->split_path({4, 7});
+    mesh->split_path({1, 4, 7});
     std::cout << "After split:  " << mesh->num_connected_components() << " component(s)\n";
 
     // Extract each connected component as an independent mesh. The back-map
