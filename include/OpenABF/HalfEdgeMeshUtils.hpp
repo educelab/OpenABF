@@ -13,9 +13,6 @@ You may obtain a copy of the License at
 #pragma once
 
 #include <type_traits>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 #include "OpenABF/HalfEdgeMesh.hpp"
 
@@ -23,65 +20,11 @@ namespace OpenABF
 {
 
 /**
- * @brief Extract each connected component of @p mesh into its own independent
- * mesh.
- *
- * The returned vector contains one `(extracted, back_map)` pair per connected
- * component. The extracted mesh is a deep copy: vertices are inserted via the
- * Vertex copy ctor (so user-defined VertexTraits are preserved), faces are
- * inserted via `insert_faces` which recomputes per-face geometric angles
- * (`alpha`) from positions. Vertex indices in the extracted mesh are
- * re-densified to `0..N-1` and `back_map[extracted_idx] == original_idx`.
- *
- * A single-component mesh round-trips as a single extracted copy whose
- * back-map is `{0, 1, ..., N-1}`.
- *
- * @note Edge traits beyond the geometric `alpha` are not currently copied; if
- * your code stores per-edge state that is not derivable from vertex positions,
- * recompute it on the extracted mesh after this call.
- */
-template <typename Mesh>
-auto ExtractConnectedComponents(const typename Mesh::Pointer& mesh)
-    -> std::vector<std::pair<typename Mesh::Pointer, std::vector<std::size_t>>>
-{
-    using MeshPtr = typename Mesh::Pointer;
-    std::vector<std::pair<MeshPtr, std::vector<std::size_t>>> result;
-
-    for (const auto& component : mesh->connected_components()) {
-        auto sub = Mesh::New();
-        std::unordered_map<std::size_t, std::size_t> remap;
-        std::vector<std::size_t> backMap;
-        std::vector<std::vector<std::size_t>> faceIdxs;
-        faceIdxs.reserve(component.size());
-
-        for (const auto& face : component) {
-            std::vector<std::size_t> tri;
-            for (const auto& edge : *face) {
-                const auto& v = edge->vertex;
-                auto it = remap.find(v->idx);
-                if (it == remap.end()) {
-                    const auto newIdx = sub->insert_vertex(*v);
-                    it = remap.emplace(v->idx, newIdx).first;
-                    backMap.push_back(v->idx);
-                }
-                tri.push_back(it->second);
-            }
-            faceIdxs.push_back(std::move(tri));
-        }
-
-        sub->insert_faces(faceIdxs);
-        result.emplace_back(std::move(sub), std::move(backMap));
-    }
-
-    return result;
-}
-
-/**
  * @brief Run an angle optimizer and parameterizer on every connected component
  * of @p mesh, then write the resulting UV coordinates back onto the source.
  *
  * For each connected component:
- *   1. Extract an independent mesh via `ExtractConnectedComponents`.
+ *   1. Extract an independent mesh via `mesh->extract_connected_components()`.
  *   2. Optionally run `AngleOptimizer::Compute(sub)` (skipped if
  *      `AngleOptimizer` is `void`).
  *   3. Run `Parameterizer::Compute(sub)`.
@@ -98,8 +41,7 @@ auto ExtractConnectedComponents(const typename Mesh::Pointer& mesh)
 template <typename AngleOptimizer, typename Parameterizer, typename MeshPtr>
 void ParameterizeConnectedComponents(const MeshPtr& mesh)
 {
-    using Mesh = typename MeshPtr::element_type;
-    auto components = ExtractConnectedComponents<Mesh>(mesh);
+    auto components = mesh->extract_connected_components();
     for (auto& [sub, backMap] : components) {
         if constexpr (not std::is_void_v<AngleOptimizer>) {
             AngleOptimizer::Compute(sub);

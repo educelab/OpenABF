@@ -534,3 +534,120 @@ TEST(HalfEdgeMesh, Clone)
         }
     }
 }
+
+TEST(HalfEdgeMesh, ExtractConnectedComponentsSingleCCPassthrough)
+{
+    // Single-CC mesh: extract_connected_components returns one element whose
+    // geometry and connectivity match the source and whose back-map is the
+    // identity over [0, N).
+    auto mesh = MeshType::New();
+    mesh->insert_vertices({{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {0.f, 1.f, 0.f}});
+    mesh->insert_faces({{0, 1, 2}});
+
+    auto components = mesh->extract_connected_components();
+    ASSERT_EQ(components.size(), 1u);
+
+    const auto& [sub, backMap] = components[0];
+    EXPECT_EQ(sub->num_vertices(), 3u);
+    EXPECT_EQ(sub->num_faces(), 1u);
+    EXPECT_EQ(backMap, (std::vector<std::size_t>{0, 1, 2}));
+
+    for (std::size_t i = 0; i < sub->num_vertices(); ++i) {
+        EXPECT_EQ(sub->vertex(i)->pos, mesh->vertex(backMap[i])->pos);
+    }
+}
+
+TEST(HalfEdgeMesh, ExtractConnectedComponentsTwoCCs)
+{
+    // Two disjoint triangles -> two extracted meshes with disjoint back-maps
+    // covering every original vertex exactly once.
+    auto mesh = MeshType::New();
+    mesh->insert_vertices({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {0.f, 1.f, 0.f},
+        {5.f, 5.f, 0.f},
+        {6.f, 5.f, 0.f},
+        {5.f, 6.f, 0.f},
+    });
+    mesh->insert_faces({{0, 1, 2}, {3, 4, 5}});
+    EXPECT_EQ(mesh->num_connected_components(), 2u);
+
+    auto components = mesh->extract_connected_components();
+    ASSERT_EQ(components.size(), 2u);
+
+    std::vector<std::size_t> originalsCovered;
+    for (const auto& [sub, backMap] : components) {
+        EXPECT_EQ(sub->num_vertices(), 3u);
+        EXPECT_EQ(sub->num_faces(), 1u);
+
+        for (std::size_t i = 0; i < sub->num_vertices(); ++i) {
+            EXPECT_EQ(sub->vertex(i)->idx, i);
+            EXPECT_EQ(sub->vertex(i)->pos, mesh->vertex(backMap[i])->pos);
+            originalsCovered.push_back(backMap[i]);
+        }
+    }
+
+    std::sort(originalsCovered.begin(), originalsCovered.end());
+    EXPECT_EQ(originalsCovered, (std::vector<std::size_t>{0, 1, 2, 3, 4, 5}));
+}
+
+namespace
+{
+// Custom edge traits with a field that has no geometric meaning, so the only
+// way it can survive extraction is if clone_face_ explicitly copied it.
+// Inherits DefaultEdgeTraits because insert_face_ runs ComputeFaceAngles
+// which needs `alpha`.
+struct CustomEdgeTraits : traits::DefaultEdgeTraits<float> {
+    int label{0};
+};
+using LabeledMesh = HalfEdgeMesh<float, 3, traits::DefaultVertexTraits<float>, CustomEdgeTraits,
+                                 traits::DefaultFaceTraits<float>>;
+}  // namespace
+
+TEST(HalfEdgeMesh, ExtractPreservesCustomEdgeTraits)
+{
+    // Build a two-CC mesh with a custom EdgeTraits struct. Set a unique label
+    // on every half-edge before extraction; verify extracted edges carry the
+    // same labels. This is the actual test for the "deep copy preserves
+    // traits" guarantee — geometric alpha is recomputed by insert_face_ and
+    // would survive even without explicit copying.
+    auto mesh = LabeledMesh::New();
+    mesh->insert_vertices({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {0.f, 1.f, 0.f},
+        {5.f, 5.f, 0.f},
+        {6.f, 5.f, 0.f},
+        {5.f, 6.f, 0.f},
+    });
+    mesh->insert_faces({{0, 1, 2}, {3, 4, 5}});
+
+    // Assign a label per (face_idx, edge_in_face_idx) pair so we can match
+    // them up after extraction.
+    int next = 1;
+    std::vector<std::vector<int>> srcLabels;
+    for (const auto& f : mesh->faces()) {
+        std::vector<int> faceLabels;
+        for (const auto& e : *f) {
+            e->label = next;
+            faceLabels.push_back(next);
+            ++next;
+        }
+        srcLabels.push_back(std::move(faceLabels));
+    }
+
+    auto components = mesh->extract_connected_components();
+    ASSERT_EQ(components.size(), 2u);
+
+    for (std::size_t c = 0; c < components.size(); ++c) {
+        auto& sub = components[c].first;
+        ASSERT_EQ(sub->num_faces(), 1u);
+        std::vector<int> subLabels;
+        for (const auto& e : *sub->face(0)) {
+            subLabels.push_back(e->label);
+        }
+        EXPECT_EQ(subLabels, srcLabels[c])
+            << "edge labels not preserved on extracted component " << c;
+    }
+}

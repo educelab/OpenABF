@@ -1693,6 +1693,57 @@ public:
         return components;
     }
 
+    /**
+     * @brief Extract each connected component of this mesh into its own
+     * independent mesh.
+     *
+     * Returns one `(extracted_mesh, back_map)` pair per connected component.
+     * The extracted meshes are deep copies that preserve VertexTraits,
+     * EdgeTraits, and FaceTraits via the relevant copy constructors. Vertex
+     * indices in the extracted meshes are re-densified to `0..N-1` and
+     * `back_map[extracted_idx] == original_idx` lets callers scatter
+     * per-vertex results from the sub-mesh back onto the source.
+     *
+     * A single-component mesh produces a vector of length 1 whose extracted
+     * mesh is equivalent to `clone()` and whose back-map is the identity.
+     */
+    auto extract_connected_components() -> std::vector<std::pair<Pointer, std::vector<std::size_t>>>
+    {
+        std::vector<std::pair<Pointer, std::vector<std::size_t>>> result;
+        for (const auto& component : connected_components()) {
+            auto sub = HalfEdgeMesh::New();
+            std::unordered_map<std::size_t, std::size_t> remap;
+            std::vector<std::size_t> backMap;
+
+            // Insert vertices first so the sub-mesh has the targets that
+            // clone_face_ will look up via verts_.at(...). Copy ctor here
+            // preserves VertexTraits.
+            for (const auto& face : component) {
+                for (const auto& edge : *face) {
+                    const auto& v = edge->vertex;
+                    if (remap.find(v->idx) == remap.end()) {
+                        const auto newIdx = sub->insert_vertex(*v);
+                        sub->verts_[newIdx]->edge = nullptr;
+                        remap.emplace(v->idx, newIdx);
+                        backMap.push_back(v->idx);
+                    }
+                }
+            }
+
+            // Clone each face into the sub-mesh, remapping source vertex
+            // indices to the sub-mesh's densified indices. clone_face_
+            // preserves FaceTraits and EdgeTraits.
+            const auto remapFn = [&remap](std::size_t i) { return remap.at(i); };
+            for (const auto& face : component) {
+                sub->clone_face_(face, remapFn);
+            }
+            sub->update_boundary();
+
+            result.emplace_back(std::move(sub), std::move(backMap));
+        }
+        return result;
+    }
+
     /** @brief Get the list of interior vertices in insertion order */
     auto vertices_interior() const
     {
@@ -2129,11 +2180,19 @@ private:
 
     /**
      * Extra steps which need to be run before insert_face_ when cloning a face
-     * from an existing mesh
+     * from an existing mesh. Preserves FaceTraits (via `Face::New(*face)`) and
+     * EdgeTraits (via `Edge::New(*e)`) by exploiting the trait-only copy
+     * constructors.
      *
-     * @param face Existing face from the mesh being cloned
+     * @param face Existing face from the mesh being cloned (may belong to a
+     *     different mesh than `this`).
+     * @param remap Callable mapping source-mesh vertex idx -> this-mesh
+     *     vertex idx. The default identity remap is used by `clone()` where
+     *     the two meshes share vertex indexing; `extract_connected_components`
+     *     passes a real remap when sub-meshes have re-densified indices.
      */
-    auto clone_face_(const FacePtr& face)
+    template <typename RemapFn>
+    auto clone_face_(const FacePtr& face, RemapFn remap)
     {
         // Copy the existing face
         auto f = Face::New(*face);
@@ -2141,8 +2200,8 @@ private:
         // Pre-make all edges
         std::vector<std::size_t> idxs;
         for (const auto& e : *face) {
-            auto startIdx = e->vertex->idx;
-            auto endIdx = e->pair->vertex->idx;
+            auto startIdx = remap(e->vertex->idx);
+            auto endIdx = remap(e->pair->vertex->idx);
             idxs.emplace_back(startIdx);
 
             // Make sure we haven't created this edge and pair already
@@ -2176,6 +2235,12 @@ private:
 
         // Create the face
         return insert_face_(idxs, f);
+    }
+
+    /** Identity-remap overload (source and target share vertex indexing). */
+    auto clone_face_(const FacePtr& face)
+    {
+        return clone_face_(face, [](std::size_t i) { return i; });
     }
 };
 }  // namespace OpenABF
@@ -4440,9 +4505,6 @@ You may obtain a copy of the License at
 
 
 #include <type_traits>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 // #include "OpenABF/HalfEdgeMesh.hpp"
 
@@ -4451,65 +4513,11 @@ namespace OpenABF
 {
 
 /**
- * @brief Extract each connected component of @p mesh into its own independent
- * mesh.
- *
- * The returned vector contains one `(extracted, back_map)` pair per connected
- * component. The extracted mesh is a deep copy: vertices are inserted via the
- * Vertex copy ctor (so user-defined VertexTraits are preserved), faces are
- * inserted via `insert_faces` which recomputes per-face geometric angles
- * (`alpha`) from positions. Vertex indices in the extracted mesh are
- * re-densified to `0..N-1` and `back_map[extracted_idx] == original_idx`.
- *
- * A single-component mesh round-trips as a single extracted copy whose
- * back-map is `{0, 1, ..., N-1}`.
- *
- * @note Edge traits beyond the geometric `alpha` are not currently copied; if
- * your code stores per-edge state that is not derivable from vertex positions,
- * recompute it on the extracted mesh after this call.
- */
-template <typename Mesh>
-auto ExtractConnectedComponents(const typename Mesh::Pointer& mesh)
-    -> std::vector<std::pair<typename Mesh::Pointer, std::vector<std::size_t>>>
-{
-    using MeshPtr = typename Mesh::Pointer;
-    std::vector<std::pair<MeshPtr, std::vector<std::size_t>>> result;
-
-    for (const auto& component : mesh->connected_components()) {
-        auto sub = Mesh::New();
-        std::unordered_map<std::size_t, std::size_t> remap;
-        std::vector<std::size_t> backMap;
-        std::vector<std::vector<std::size_t>> faceIdxs;
-        faceIdxs.reserve(component.size());
-
-        for (const auto& face : component) {
-            std::vector<std::size_t> tri;
-            for (const auto& edge : *face) {
-                const auto& v = edge->vertex;
-                auto it = remap.find(v->idx);
-                if (it == remap.end()) {
-                    const auto newIdx = sub->insert_vertex(*v);
-                    it = remap.emplace(v->idx, newIdx).first;
-                    backMap.push_back(v->idx);
-                }
-                tri.push_back(it->second);
-            }
-            faceIdxs.push_back(std::move(tri));
-        }
-
-        sub->insert_faces(faceIdxs);
-        result.emplace_back(std::move(sub), std::move(backMap));
-    }
-
-    return result;
-}
-
-/**
  * @brief Run an angle optimizer and parameterizer on every connected component
  * of @p mesh, then write the resulting UV coordinates back onto the source.
  *
  * For each connected component:
- *   1. Extract an independent mesh via `ExtractConnectedComponents`.
+ *   1. Extract an independent mesh via `mesh->extract_connected_components()`.
  *   2. Optionally run `AngleOptimizer::Compute(sub)` (skipped if
  *      `AngleOptimizer` is `void`).
  *   3. Run `Parameterizer::Compute(sub)`.
@@ -4526,8 +4534,7 @@ auto ExtractConnectedComponents(const typename Mesh::Pointer& mesh)
 template <typename AngleOptimizer, typename Parameterizer, typename MeshPtr>
 void ParameterizeConnectedComponents(const MeshPtr& mesh)
 {
-    using Mesh = typename MeshPtr::element_type;
-    auto components = ExtractConnectedComponents<Mesh>(mesh);
+    auto components = mesh->extract_connected_components();
     for (auto& [sub, backMap] : components) {
         if constexpr (not std::is_void_v<AngleOptimizer>) {
             AngleOptimizer::Compute(sub);
