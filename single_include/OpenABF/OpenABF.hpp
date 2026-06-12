@@ -498,9 +498,13 @@ auto vec_to_string(const T& v) -> std::string
     return ss.str();
 }
 
-/** Remove elements which meet the given predicate */
+/**
+ * Returns a copy of @p v with every element matching @p p removed. Naming
+ * matches std::remove_if (predicate selects elements to drop), NOT the
+ * conventional `filter` semantic where the predicate selects what to keep.
+ */
 template <class ForwardContainer, class UnaryPred>
-auto filter(ForwardContainer v, UnaryPred p)
+auto remove_if(ForwardContainer v, UnaryPred p)
 {
     auto end = std::remove_if(std::begin(v), std::end(v), p);
     v.erase(end, std::end(v));
@@ -1482,8 +1486,8 @@ public:
             if (edge->is_boundary()) {
                 // Get incoming boundary edges to the start point
                 auto inBoundary =
-                    detail::filter(incoming_edges(edge->vertex->idx),
-                                   [](const auto& e) { return not e->is_boundary(); });
+                    detail::remove_if(incoming_edges(edge->vertex->idx),
+                                      [](const auto& e) { return not e->is_boundary(); });
                 if (inBoundary.size() == 0 or inBoundary.size() > 1) {
                     const std::array<std::size_t, 2> idx{edge->vertex->idx,
                                                          edge->pair->vertex->idx};
@@ -1495,8 +1499,8 @@ public:
 
                 // Get outgoing boundary edges to the end point
                 auto outBoundary =
-                    detail::filter(outgoing_edges(edge->pair->vertex->idx),
-                                   [](const auto& e) { return not e->is_boundary(); });
+                    detail::remove_if(outgoing_edges(edge->pair->vertex->idx),
+                                      [](const auto& e) { return not e->is_boundary(); });
                 if (outBoundary.size() == 0 or outBoundary.size() > 1) {
                     const std::array<std::size_t, 2> idx{edge->vertex->idx,
                                                          edge->pair->vertex->idx};
@@ -1767,22 +1771,22 @@ public:
         auto startOnBoundary = oldStart->is_boundary();
         auto endOnBoundary = oldEnd->is_boundary();
 
-        // Get the new starting vertex for this edge
+        // Get the new starting vertex for this edge. detail::remove_if keeps
+        // only boundary half-edges (predicate selects what to drop). A
+        // manifold boundary vertex has exactly one boundary half-edge in each
+        // direction; more than one means a non-manifold split endpoint.
         VertPtr newStart;
         EdgePtr startIn, startOut;
         if (startOnBoundary) {
             auto newIdx = insert_vertex(oldStart->pos);
             newStart = verts_.at(newIdx);
 
-            auto in = detail::filter(incoming_edges(oldStart->idx),
-                                     [](auto e) { return not e->is_boundary(); });
-            auto out = detail::filter(outgoing_edges(oldStart->idx),
-                                      [](auto e) { return not e->is_boundary(); });
-            if (in.size() == 0 or out.size() == 0) {
-                throw MeshException("No incoming/outgoing edges");
-            }
-            if (in.size() > 1 or out.size() > 1) {
-                throw MeshException("Too many incoming/outgoing edges");
+            auto in = detail::remove_if(incoming_edges(oldStart->idx),
+                                        [](auto e) { return not e->is_boundary(); });
+            auto out = detail::remove_if(outgoing_edges(oldStart->idx),
+                                         [](auto e) { return not e->is_boundary(); });
+            if (in.size() != 1 or out.size() != 1) {
+                throw MeshException("Non-manifold boundary vertex at split endpoint");
             }
             startIn = in[0];
             startOut = out[0];
@@ -1797,15 +1801,12 @@ public:
             auto newIdx = insert_vertex(oldEnd->pos);
             newEnd = verts_.at(newIdx);
 
-            auto in = detail::filter(incoming_edges(oldEnd->idx),
-                                     [](auto e) { return not e->is_boundary(); });
-            auto out = detail::filter(outgoing_edges(oldEnd->idx),
-                                      [](auto e) { return not e->is_boundary(); });
-            if (in.size() == 0 or out.size() == 0) {
-                throw MeshException("No incoming/outgoing edges");
-            }
-            if (in.size() > 1 or out.size() > 1) {
-                throw MeshException("Too many incoming/outgoing edges");
+            auto in = detail::remove_if(incoming_edges(oldEnd->idx),
+                                        [](auto e) { return not e->is_boundary(); });
+            auto out = detail::remove_if(outgoing_edges(oldEnd->idx),
+                                         [](auto e) { return not e->is_boundary(); });
+            if (in.size() != 1 or out.size() != 1) {
+                throw MeshException("Non-manifold boundary vertex at split endpoint");
             }
             endIn = in[0];
             endOut = out[0];
@@ -1848,21 +1849,34 @@ public:
             newFwd->face->head = newFwd;
         }
 
-        // Update the face's edges
+        // Re-link neighbors of newFwd in the inherited face.
+        //
+        // newFwd->next (second half-edge of the face) needs to originate at
+        // newEnd, which it does unconditionally below — a no-op when
+        // endOnBoundary is false (newEnd == oldEnd).
+        //
+        // The neighboring half-edge across newFwd->prev (newFwd->prev->pair)
+        // also originates at newStart in the boundary branch, but it is
+        // ALWAYS covered downstream: it is either startOut itself (when the
+        // existing boundary at oldStart sits across newFwd->prev — the
+        // SimpleSplit case) and updated by the `startOut->vertex = newStart`
+        // assignment, or it is a non-boundary edge in newStart's fan and
+        // updated by the wheel loop below.
         newFwd->next->prev = newFwd;
         newFwd->prev->next = newFwd;
-        newFwd->next->vertex = newEnd;
-        newFwd->prev->pair->vertex = newStart;
+        rekey_edge_to_vertex(newFwd->next, newEnd);
 
-        // Update new boundary edges' next/prev
+        // Update new boundary edges' next/prev. The rekey_* calls move
+        // half-edges between edges_ multimap buckets so that
+        // outgoing_edges(idx) / Vertex::is_manifold() remain consistent.
         if (startOnBoundary) {
-            startOut->vertex = newStart;
+            rekey_edge_to_vertex(startOut, newStart);
             newBwd->next = startOut;
             startOut->prev = newBwd;
             oldFwd->prev = startIn;
             startIn->next = oldFwd;
             for (auto e : newStart->wheel()) {
-                e->vertex = newStart;
+                rekey_edge_to_vertex(e, newStart);
             }
         } else {
             newBwd->next = oldFwd;
@@ -1874,7 +1888,7 @@ public:
             oldFwd->next = endOut;
             endOut->prev = oldFwd;
             for (auto e : newEnd->wheel()) {
-                e->vertex = newEnd;
+                rekey_edge_to_vertex(e, newEnd);
             }
         } else {
             newBwd->prev = oldFwd;
@@ -1919,6 +1933,32 @@ public:
         }
 
         split_path(edgePath);
+    }
+
+    /**
+     * @brief Move @p e from its current edges_ bucket to the bucket keyed by
+     * @p newVert and update e->vertex.
+     *
+     * The edges_ multimap is keyed by half-edge origin vertex index. Any code
+     * that reassigns a half-edge's origin (e.g. split_edge duplicating a
+     * vertex and moving a fan of half-edges to the new vertex) must call this
+     * to keep the multimap consistent, otherwise outgoing_edges() /
+     * incoming_edges() / Vertex::is_manifold() return stale results.
+     */
+    void rekey_edge_to_vertex(const EdgePtr& e, const VertPtr& newVert)
+    {
+        if (e->vertex == newVert) {
+            return;
+        }
+        const auto range = edges_.equal_range(e->vertex->idx);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == e) {
+                edges_.erase(it);
+                break;
+            }
+        }
+        edges_.emplace(newVert->idx, e);
+        e->vertex = newVert;
     }
 
     /** @brief Get a list of outgoing edges from a specific vertex (by index) */

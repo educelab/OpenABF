@@ -197,6 +197,41 @@ TEST(HalfEdgeMesh, SimpleSplit)
     EXPECT_EQ(mesh->num_connected_components(), 2);
 }
 
+TEST(HalfEdgeMesh, SplitMidFanAtBoundaryVertex)
+{
+    // 3-triangle fan around boundary vertex v0. The fan is open between v1
+    // (right) and v4 (left); the existing boundary at v0 has incoming half-edge
+    // 1->0 and outgoing half-edge 0->4. Splitting edge 0->2 (the middle of the
+    // fan) was speculated to produce a pinched non-manifold vertex; verify
+    // empirically that the partition is clean: {T_a} on one side, {T_b, T_c}
+    // on the other, two connected components.
+    const auto mesh = MeshType::New();
+    mesh->insert_vertices({
+        {0.f, 0.f, 0.f},    // v0 — fan center, on boundary
+        {1.f, 0.f, 0.f},    // v1 — right fan end
+        {0.5f, 1.f, 0.f},   // v2
+        {-0.5f, 1.f, 0.f},  // v3
+        {-1.f, 0.f, 0.f},   // v4 — left fan end
+    });
+    mesh->insert_faces({{0, 1, 2}, {0, 2, 3}, {0, 3, 4}});
+    EXPECT_EQ(mesh->num_connected_components(), 1);
+
+    // Split the middle edge of the fan (between T_a and T_b)
+    mesh->split_path({0, 2});
+    EXPECT_EQ(mesh->num_connected_components(), 2);
+
+    // Boundary cycles should partition cleanly: one short cycle around the
+    // detached T_a, one longer cycle around the T_b U T_c piece.
+    const auto loops = mesh->boundaries();
+    ASSERT_EQ(loops.size(), 2u);
+    EXPECT_NE(loops[0].size(), loops[1].size());  // 3 vs 4
+
+    // Every vertex on the resulting mesh must be manifold
+    for (const auto& v : mesh->vertices()) {
+        EXPECT_TRUE(v->is_manifold()) << "vertex " << v->idx << " is non-manifold";
+    }
+}
+
 TEST(HalfEdgeMesh, TwoStageSplit)
 {
     // Build a mesh
