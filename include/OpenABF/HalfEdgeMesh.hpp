@@ -1251,26 +1251,44 @@ public:
     }
 
     /**
+     * @brief One element of `extract_connected_components()`'s output.
+     *
+     * Holds an extracted sub-mesh and the two index maps callers need to
+     * relate sub-mesh elements back to the source mesh. The mapping is 1-to-1
+     * in both directions for a manifold input — every source vertex/face is
+     * in exactly one component.
+     */
+    struct ExtractedComponent {
+        /** Deep copy of the connected component as an independent mesh. */
+        Pointer mesh;
+        /** `vertex_map[sub_idx] == original_idx`. */
+        std::vector<std::size_t> vertex_map;
+        /** `face_map[sub_idx] == original_idx`. */
+        std::vector<std::size_t> face_map;
+    };
+
+    /**
      * @brief Extract each connected component of this mesh into its own
      * independent mesh.
      *
-     * Returns one `(extracted_mesh, back_map)` pair per connected component.
-     * The extracted meshes are deep copies that preserve VertexTraits,
-     * EdgeTraits, and FaceTraits via the relevant copy constructors. Vertex
-     * indices in the extracted meshes are re-densified to `0..N-1` and
-     * `back_map[extracted_idx] == original_idx` lets callers scatter
-     * per-vertex results from the sub-mesh back onto the source.
+     * Returns one `ExtractedComponent` per connected component. The extracted
+     * meshes are deep copies that preserve VertexTraits, EdgeTraits, and
+     * FaceTraits via the relevant copy constructors. Vertex and face indices
+     * in the extracted meshes are re-densified to `0..N-1`; the `vertex_map`
+     * and `face_map` let callers scatter/gather per-vertex and per-face data
+     * between the sub-mesh and the source.
      *
      * A single-component mesh produces a vector of length 1 whose extracted
-     * mesh is equivalent to `clone()` and whose back-map is the identity.
+     * mesh is equivalent to `clone()` and whose maps are both the identity.
      */
-    auto extract_connected_components() -> std::vector<std::pair<Pointer, std::vector<std::size_t>>>
+    auto extract_connected_components() -> std::vector<ExtractedComponent>
     {
-        std::vector<std::pair<Pointer, std::vector<std::size_t>>> result;
+        std::vector<ExtractedComponent> result;
         for (const auto& component : connected_components()) {
-            auto sub = HalfEdgeMesh::New();
+            ExtractedComponent out;
+            out.mesh = HalfEdgeMesh::New();
             std::unordered_map<std::size_t, std::size_t> remap;
-            std::vector<std::size_t> backMap;
+            out.face_map.reserve(component.size());
 
             // Insert vertices first so the sub-mesh has the targets that
             // clone_face_ will look up via verts_.at(...). Copy ctor here
@@ -1279,24 +1297,27 @@ public:
                 for (const auto& edge : *face) {
                     const auto& v = edge->vertex;
                     if (remap.find(v->idx) == remap.end()) {
-                        const auto newIdx = sub->insert_vertex(*v);
-                        sub->verts_[newIdx]->edge = nullptr;
+                        const auto newIdx = out.mesh->insert_vertex(*v);
+                        out.mesh->verts_[newIdx]->edge = nullptr;
                         remap.emplace(v->idx, newIdx);
-                        backMap.push_back(v->idx);
+                        out.vertex_map.push_back(v->idx);
                     }
                 }
             }
 
             // Clone each face into the sub-mesh, remapping source vertex
             // indices to the sub-mesh's densified indices. clone_face_
-            // preserves FaceTraits and EdgeTraits.
+            // preserves FaceTraits and EdgeTraits. Face indices in the sub-
+            // mesh come out densified in insertion order, so the loop's idx
+            // matches the sub-face idx and we can record face_map alongside.
             const auto remapFn = [&remap](std::size_t i) { return remap.at(i); };
             for (const auto& face : component) {
-                sub->clone_face_(face, remapFn);
+                out.mesh->clone_face_(face, remapFn);
+                out.face_map.push_back(face->idx);
             }
-            sub->update_boundary();
+            out.mesh->update_boundary();
 
-            result.emplace_back(std::move(sub), std::move(backMap));
+            result.push_back(std::move(out));
         }
         return result;
     }
