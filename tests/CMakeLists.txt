@@ -11,7 +11,6 @@ FetchContent_MakeAvailable(googletest)
 ## Build the tests ##
 set(tests
     src/TestHalfEdgeMesh.cpp
-    src/TestHalfEdgeMeshUtils.cpp
     src/TestMath.cpp
     src/TestVec.cpp
     src/TestParameterization.cpp
