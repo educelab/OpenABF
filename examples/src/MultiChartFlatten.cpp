@@ -54,30 +54,33 @@ int main()
     mesh->split_path({1, 4, 7});
     std::cout << "After split:  " << mesh->num_connected_components() << " component(s)\n";
 
-    // Extract each connected component as an independent mesh. The back-map
-    // we get alongside each chart is the bridge between chart-vertex-idx and
-    // the original-mesh vertex-idx; downstream code that needs to scatter
-    // results back (e.g. a wedge UV table for mesh IO) uses it.
+    // Extract each connected component as an independent mesh. Each chart
+    // comes with a `vertex_map` and `face_map` that bridge chart indices to
+    // source-mesh indices; downstream code that scatters per-vertex or
+    // per-face data back to the source (e.g. wedge UV tables, per-face
+    // material assignments) uses them.
     auto charts = mesh->extract_connected_components();
     std::cout << "Extracted " << charts.size() << " chart(s)\n";
 
     // Flatten each chart in isolation and write it out as its own .obj.
     for (std::size_t i = 0; i < charts.size(); ++i) {
-        auto& [chart, backMap] = charts[i];
+        auto& cc = charts[i];
 
         std::size_t iters{0};
         float grad{OpenABF::INF<float>};
-        ABF::Compute(chart, iters, grad);
-        LSCM::Compute(chart);
+        ABF::Compute(cc.mesh, iters, grad);
+        LSCM::Compute(cc.mesh);
 
         const auto out = "openabf_example_multi_chart_" + std::to_string(i) + ".obj";
-        OpenABF::WriteMesh(out, chart);
-        std::cout << "Chart " << i << ": " << chart->num_vertices() << " vertices, "
-                  << chart->num_faces() << " faces, " << iters << " ABF++ iters -> " << out << "\n";
+        OpenABF::WriteMesh(out, cc.mesh);
+        std::cout << "Chart " << i << ": " << cc.mesh->num_vertices() << " vertices, "
+                  << cc.mesh->num_faces() << " faces, " << iters << " ABF++ iters -> " << out
+                  << "\n";
 
-        // back_map[chart_idx] -> original_idx, available for downstream uses
-        // such as building a per-wedge UV map keyed by the source mesh.
-        (void)backMap;
+        // cc.vertex_map[chart_idx] -> original vertex idx
+        // cc.face_map[chart_idx]   -> original face idx
+        // Available for downstream uses such as building a per-wedge UV map
+        // keyed by source-mesh face corners.
     }
 
     // The source mesh's 3D vertex positions are unchanged by the per-chart

@@ -538,8 +538,8 @@ TEST(HalfEdgeMesh, Clone)
 TEST(HalfEdgeMesh, ExtractConnectedComponentsSingleCCPassthrough)
 {
     // Single-CC mesh: extract_connected_components returns one element whose
-    // geometry and connectivity match the source and whose back-map is the
-    // identity over [0, N).
+    // geometry and connectivity match the source and whose vertex/face maps
+    // are both the identity over [0, N).
     auto mesh = MeshType::New();
     mesh->insert_vertices({{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {0.f, 1.f, 0.f}});
     mesh->insert_faces({{0, 1, 2}});
@@ -547,20 +547,22 @@ TEST(HalfEdgeMesh, ExtractConnectedComponentsSingleCCPassthrough)
     auto components = mesh->extract_connected_components();
     ASSERT_EQ(components.size(), 1u);
 
-    const auto& [sub, backMap] = components[0];
-    EXPECT_EQ(sub->num_vertices(), 3u);
-    EXPECT_EQ(sub->num_faces(), 1u);
-    EXPECT_EQ(backMap, (std::vector<std::size_t>{0, 1, 2}));
+    const auto& cc = components[0];
+    EXPECT_EQ(cc.mesh->num_vertices(), 3u);
+    EXPECT_EQ(cc.mesh->num_faces(), 1u);
+    EXPECT_EQ(cc.vertex_map, (std::vector<std::size_t>{0, 1, 2}));
+    EXPECT_EQ(cc.face_map, (std::vector<std::size_t>{0}));
 
-    for (std::size_t i = 0; i < sub->num_vertices(); ++i) {
-        EXPECT_EQ(sub->vertex(i)->pos, mesh->vertex(backMap[i])->pos);
+    for (std::size_t i = 0; i < cc.mesh->num_vertices(); ++i) {
+        EXPECT_EQ(cc.mesh->vertex(i)->pos, mesh->vertex(cc.vertex_map[i])->pos);
     }
 }
 
 TEST(HalfEdgeMesh, ExtractConnectedComponentsTwoCCs)
 {
-    // Two disjoint triangles -> two extracted meshes with disjoint back-maps
-    // covering every original vertex exactly once.
+    // Two disjoint triangles -> two extracted meshes with disjoint vertex
+    // maps covering every original vertex exactly once, and face maps
+    // pointing back to the source face indices.
     auto mesh = MeshType::New();
     mesh->insert_vertices({
         {0.f, 0.f, 0.f},
@@ -577,19 +579,24 @@ TEST(HalfEdgeMesh, ExtractConnectedComponentsTwoCCs)
     ASSERT_EQ(components.size(), 2u);
 
     std::vector<std::size_t> originalsCovered;
-    for (const auto& [sub, backMap] : components) {
-        EXPECT_EQ(sub->num_vertices(), 3u);
-        EXPECT_EQ(sub->num_faces(), 1u);
+    std::vector<std::size_t> facesCovered;
+    for (const auto& cc : components) {
+        EXPECT_EQ(cc.mesh->num_vertices(), 3u);
+        EXPECT_EQ(cc.mesh->num_faces(), 1u);
+        ASSERT_EQ(cc.face_map.size(), 1u);
+        facesCovered.push_back(cc.face_map[0]);
 
-        for (std::size_t i = 0; i < sub->num_vertices(); ++i) {
-            EXPECT_EQ(sub->vertex(i)->idx, i);
-            EXPECT_EQ(sub->vertex(i)->pos, mesh->vertex(backMap[i])->pos);
-            originalsCovered.push_back(backMap[i]);
+        for (std::size_t i = 0; i < cc.mesh->num_vertices(); ++i) {
+            EXPECT_EQ(cc.mesh->vertex(i)->idx, i);
+            EXPECT_EQ(cc.mesh->vertex(i)->pos, mesh->vertex(cc.vertex_map[i])->pos);
+            originalsCovered.push_back(cc.vertex_map[i]);
         }
     }
 
     std::sort(originalsCovered.begin(), originalsCovered.end());
     EXPECT_EQ(originalsCovered, (std::vector<std::size_t>{0, 1, 2, 3, 4, 5}));
+    std::sort(facesCovered.begin(), facesCovered.end());
+    EXPECT_EQ(facesCovered, (std::vector<std::size_t>{0, 1}));
 }
 
 namespace
@@ -641,7 +648,7 @@ TEST(HalfEdgeMesh, ExtractPreservesCustomEdgeTraits)
     ASSERT_EQ(components.size(), 2u);
 
     for (std::size_t c = 0; c < components.size(); ++c) {
-        auto& sub = components[c].first;
+        auto& sub = components[c].mesh;
         ASSERT_EQ(sub->num_faces(), 1u);
         std::vector<int> subLabels;
         for (const auto& e : *sub->face(0)) {
@@ -650,4 +657,59 @@ TEST(HalfEdgeMesh, ExtractPreservesCustomEdgeTraits)
         EXPECT_EQ(subLabels, srcLabels[c])
             << "edge labels not preserved on extracted component " << c;
     }
+}
+
+TEST(HalfEdgeMesh, ExtractFaceMapAfterSplit)
+{
+    // Realistic case: 3x3 grid torn down the middle. Extracted face_maps
+    // partition the source face indices [0, num_faces) without overlap.
+    auto mesh = MeshType::New();
+    mesh->insert_vertices({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {2.f, 0.f, 0.f},
+        {0.f, 1.f, 0.f},
+        {1.f, 1.f, 0.f},
+        {2.f, 1.f, 0.f},
+        {0.f, 2.f, 0.f},
+        {1.f, 2.f, 0.f},
+        {2.f, 2.f, 0.f},
+    });
+    mesh->insert_faces({
+        {0, 3, 1},
+        {1, 3, 4},
+        {1, 4, 2},
+        {2, 4, 5},
+        {3, 6, 4},
+        {4, 6, 7},
+        {4, 7, 5},
+        {5, 7, 8},
+    });
+    mesh->split_path({1, 4});
+    mesh->split_path({4, 7});
+    ASSERT_EQ(mesh->num_connected_components(), 2u);
+
+    auto components = mesh->extract_connected_components();
+    ASSERT_EQ(components.size(), 2u);
+
+    std::vector<std::size_t> allFaces;
+    for (const auto& cc : components) {
+        EXPECT_EQ(cc.face_map.size(), cc.mesh->num_faces());
+        for (std::size_t i = 0; i < cc.mesh->num_faces(); ++i) {
+            // Vertex positions on the extracted face match the source face
+            // they map back to.
+            auto srcFace = mesh->face(cc.face_map[i]);
+            auto srcIt = srcFace->begin();
+            auto subIt = cc.mesh->face(i)->begin();
+            while (srcIt != srcFace->end()) {
+                EXPECT_EQ((*srcIt)->vertex->pos, (*subIt)->vertex->pos);
+                ++srcIt;
+                ++subIt;
+            }
+            allFaces.push_back(cc.face_map[i]);
+        }
+    }
+
+    std::sort(allFaces.begin(), allFaces.end());
+    EXPECT_EQ(allFaces, (std::vector<std::size_t>{0, 1, 2, 3, 4, 5, 6, 7}));
 }
