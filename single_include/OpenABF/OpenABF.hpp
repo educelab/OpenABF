@@ -1864,19 +1864,19 @@ public:
         // updated by the wheel loop below.
         newFwd->next->prev = newFwd;
         newFwd->prev->next = newFwd;
-        rekey_edge_to_vertex(newFwd->next, newEnd);
+        rekey_edge_to_vertex_(newFwd->next, newEnd);
 
         // Update new boundary edges' next/prev. The rekey_* calls move
         // half-edges between edges_ multimap buckets so that
         // outgoing_edges(idx) / Vertex::is_manifold() remain consistent.
         if (startOnBoundary) {
-            rekey_edge_to_vertex(startOut, newStart);
+            rekey_edge_to_vertex_(startOut, newStart);
             newBwd->next = startOut;
             startOut->prev = newBwd;
             oldFwd->prev = startIn;
             startIn->next = oldFwd;
             for (auto e : newStart->wheel()) {
-                rekey_edge_to_vertex(e, newStart);
+                rekey_edge_to_vertex_(e, newStart);
             }
         } else {
             newBwd->next = oldFwd;
@@ -1888,7 +1888,7 @@ public:
             oldFwd->next = endOut;
             endOut->prev = oldFwd;
             for (auto e : newEnd->wheel()) {
-                rekey_edge_to_vertex(e, newEnd);
+                rekey_edge_to_vertex_(e, newEnd);
             }
         } else {
             newBwd->prev = oldFwd;
@@ -1935,32 +1935,6 @@ public:
         split_path(edgePath);
     }
 
-    /**
-     * @brief Move @p e from its current edges_ bucket to the bucket keyed by
-     * @p newVert and update e->vertex.
-     *
-     * The edges_ multimap is keyed by half-edge origin vertex index. Any code
-     * that reassigns a half-edge's origin (e.g. split_edge duplicating a
-     * vertex and moving a fan of half-edges to the new vertex) must call this
-     * to keep the multimap consistent, otherwise outgoing_edges() /
-     * incoming_edges() / Vertex::is_manifold() return stale results.
-     */
-    void rekey_edge_to_vertex(const EdgePtr& e, const VertPtr& newVert)
-    {
-        if (e->vertex == newVert) {
-            return;
-        }
-        const auto range = edges_.equal_range(e->vertex->idx);
-        for (auto it = range.first; it != range.second; ++it) {
-            if (it->second == e) {
-                edges_.erase(it);
-                break;
-            }
-        }
-        edges_.emplace(newVert->idx, e);
-        e->vertex = newVert;
-    }
-
     /** @brief Get a list of outgoing edges from a specific vertex (by index) */
     auto outgoing_edges(const std::size_t idx) -> std::vector<EdgePtr>
     {
@@ -1984,6 +1958,32 @@ public:
     }
 
 private:
+    /**
+     * Move @p e from its current edges_ bucket to the bucket keyed by
+     * @p newVert, and update e->vertex.
+     *
+     * edges_ is a multimap keyed by half-edge origin vertex index. Any code
+     * that reassigns a half-edge's origin (e.g. split_edge duplicating a
+     * vertex and moving a fan of half-edges to the new vertex) must call
+     * this to keep the multimap consistent, otherwise outgoing_edges() /
+     * incoming_edges() / Vertex::is_manifold() return stale results.
+     */
+    void rekey_edge_to_vertex_(const EdgePtr& e, const VertPtr& newVert)
+    {
+        if (e->vertex == newVert) {
+            return;
+        }
+        const auto range = edges_.equal_range(e->vertex->idx);
+        for (auto it = range.first; it != range.second; ++it) {
+            if (it->second == e) {
+                edges_.erase(it);
+                break;
+            }
+        }
+        edges_.emplace(newVert->idx, e);
+        e->vertex = newVert;
+    }
+
     /**
      * Face insertion implementation
      *
