@@ -362,11 +362,40 @@ TEST(HLSCM, SetPinnedVertices)
     hlscm.setPinnedVertices(0, 1);
     hlscm.compute(mesh_instance);
 
+    // Instance API must produce identical output to the static overload
     for (std::size_t v = 0; v < mesh_static->num_vertices(); ++v) {
         for (auto i = 0; i < 3; i++) {
             EXPECT_FLOAT_EQ(mesh_instance->vertex(v)->pos[i], mesh_static->vertex(v)->pos[i]);
         }
     }
+
+    // Pinned vertices must land at their expected UV positions exactly.
+    // HLSCM uses the same pin-placement logic as AngleBasedLSCM: pin0 at the
+    // origin and pin1 at distance |p1-p0| along the dominant world-space axis
+    // of the (p1-p0) vector. For ConstructPyramid with pins (0, 1) this places
+    // pin0 at {0, 0, 0} and pin1 at {2, 0, 0}.
+    const Vec3f expectedPin0{0, 0, 0};
+    const Vec3f expectedPin1{2, 0, 0};
+    for (auto i = 0; i < 3; i++) {
+        EXPECT_FLOAT_EQ(mesh_instance->vertex(0)->pos[i], expectedPin0[i]);
+        EXPECT_FLOAT_EQ(mesh_instance->vertex(1)->pos[i], expectedPin1[i]);
+    }
+
+    // Sanity check: pinning must actually be applied. Non-pinned vertices must
+    // not all collapse onto the pin positions.
+    bool anyNonPinnedDiffers = false;
+    for (std::size_t v = 2; v < mesh_instance->num_vertices(); ++v) {
+        const auto& p = mesh_instance->vertex(v)->pos;
+        const bool atPin0 =
+            (p[0] == expectedPin0[0]) && (p[1] == expectedPin0[1]) && (p[2] == expectedPin0[2]);
+        const bool atPin1 =
+            (p[0] == expectedPin1[0]) && (p[1] == expectedPin1[1]) && (p[2] == expectedPin1[2]);
+        if (!atPin0 && !atPin1) {
+            anyNonPinnedDiffers = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(anyNonPinnedDiffers);
 }
 
 TEST(HLSCM, Double)

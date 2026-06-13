@@ -12,7 +12,6 @@
 | open | P6 | Precompute sin/cos values before HLSCM face assembly loop | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-03-20 | 2026-03-20 |
 | open | A9 | Mark detail::hlscm types with @internal Doxygen tag | [#67](https://github.com/educelab/OpenABF/issues/67) | 2026-03-20 | 2026-03-20 |
 | open | A10 | Add static Compute() overloads accepting levelRatio and minCoarseVertices | [#68](https://github.com/educelab/OpenABF/issues/68) | 2026-03-20 | 2026-03-20 |
-| open | T6 | Add test for HLSCM::setPinnedVertices() instance API | [#51](https://github.com/educelab/OpenABF/issues/51) | 2026-03-20 | 2026-03-20 |
 | open | T7 | ABFPlusPlusAnglePreservation may be vacuous on flat wavy mesh | [#50](https://github.com/educelab/OpenABF/issues/50) | 2026-03-20 | 2026-03-20 |
 | open | E2 | Add sphere cap built-in mesh generator to benchmark | [#48](https://github.com/educelab/OpenABF/issues/48) | 2026-03-20 | 2026-03-20 |
 | open | F5 | Implement Hierarchical SLIM (H-SLIM) | [#52](https://github.com/educelab/OpenABF/issues/52) | 2026-03-20 | 2026-03-20 |
@@ -28,6 +27,7 @@
 
 | Status | Track ID | Title | GitHub | Archived |
 | ------ | -------- | ----- | ------ | -------- |
+| closed | T6 | Add test for HLSCM::setPinnedVertices() instance API | [#51](https://github.com/educelab/OpenABF/issues/51) | 2026-06-12 |
 | closed | T8 | Strengthen InstanceAPILevelRatio to verify parameters are applied | [#49](https://github.com/educelab/OpenABF/issues/49) | 2026-06-12 |
 | closed | F3 | Multi-component extraction and parameterization pipeline (PRs #80, #81; ParameterizeConnectedComponents descoped) | [#19](https://github.com/educelab/OpenABF/issues/19) | 2026-06-12 |
 | closed | M5 | split_edge and detail::filter cleanup (PR #79) | [#76](https://github.com/educelab/OpenABF/issues/76), [#77](https://github.com/educelab/OpenABF/issues/77), [#78](https://github.com/educelab/OpenABF/issues/78) | 2026-06-12 |
