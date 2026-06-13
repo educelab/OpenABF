@@ -3526,8 +3526,15 @@ struct HierarchyLevel {
     std::vector<std::array<std::size_t, 3>> faces;
     /** Map from level-local vertex index to original (finest) vertex index */
     std::vector<std::size_t> localToOriginal;
-    /** Map from original vertex index to level-local index */
-    std::unordered_map<std::size_t, std::size_t> originalToLocal;
+    /** Map from original vertex index to level-local index. Sized to the
+     *  finest-mesh vertex count; vertices not present at this level hold the
+     *  sentinel `kAbsent` (`SIZE_MAX`) so callers can distinguish "absent"
+     *  from "level-local idx 0".
+     */
+    std::vector<std::size_t> originalToLocal;
+
+    /** Sentinel marking "no level-local idx for this original vertex". */
+    static constexpr std::size_t kAbsent = std::numeric_limits<std::size_t>::max();
 };
 
 /**
@@ -3595,8 +3602,18 @@ public:
      * @brief Try to collapse edge (vRemove → vKeep), returning a collapse record
      *
      * Returns nullopt if the collapse is invalid.
+     *
+     * @param outKeepNbrs  Optional out-vector. On a successful collapse it is
+     *                     overwritten with vKeep's post-collapse neighbor
+     *                     vertex indices (sorted, unique). Passing a caller-
+     *                     owned vector here lets the PQ-update path reuse the
+     *                     allocation across collapses instead of letting
+     *                     `vertexNeighbors()` allocate a fresh vector each
+     *                     time.
      */
-    auto tryCollapse(std::size_t vRemove, std::size_t vKeep) -> std::optional<CollapseRecord<T>>
+    auto tryCollapse(std::size_t vRemove, std::size_t vKeep,
+                     std::vector<std::size_t>* outKeepNbrs = nullptr)
+        -> std::optional<CollapseRecord<T>>
     {
         if (!alive_[vRemove] || !alive_[vKeep]) {
             return std::nullopt;
@@ -3822,6 +3839,23 @@ public:
                                      [this](std::size_t fi) { return !faceAlive_[fi]; }),
                       vkFaces.end());
 
+        // Fill caller-owned post-collapse neighbor vector (reusing its
+        // allocation across calls). Equivalent to vertexNeighbors(vKeep) but
+        // without an additional heap allocation.
+        if (outKeepNbrs != nullptr) {
+            outKeepNbrs->clear();
+            for (auto fi : vkFaces) {
+                for (auto vi : faces_[fi]) {
+                    if (vi != vKeep && alive_[vi]) {
+                        outKeepNbrs->push_back(vi);
+                    }
+                }
+            }
+            std::sort(outKeepNbrs->begin(), outKeepNbrs->end());
+            outKeepNbrs->erase(std::unique(outKeepNbrs->begin(), outKeepNbrs->end()),
+                               outKeepNbrs->end());
+        }
+
         return record;
     }
 
@@ -3863,6 +3897,7 @@ public:
     [[nodiscard]] auto snapshot() const -> HierarchyLevel<T>
     {
         HierarchyLevel<T> level;
+        level.originalToLocal.assign(alive_.size(), HierarchyLevel<T>::kAbsent);
 
         // Build mapping from original indices to level-local indices
         std::size_t localIdx = 0;
@@ -3882,7 +3917,7 @@ public:
             }
             std::array<std::size_t, 3> localTri;
             for (int j = 0; j < 3; ++j) {
-                localTri[j] = level.originalToLocal.at(faces_[fi][j]);
+                localTri[j] = level.originalToLocal[faces_[fi][j]];
             }
             level.faces.push_back(localTri);
         }
@@ -4054,6 +4089,10 @@ auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std
         return {levels, collapsesByLevel};
     }
 
+    // Reused across collapses to avoid per-collapse heap allocation; populated
+    // by tryCollapse with vKeep's post-collapse neighbors.
+    std::vector<std::size_t> nbrs;
+
     while (targetVerts > minCoarseVerts) {
         auto nextTarget = std::max(targetVerts / levelRatio, minCoarseVerts);
         std::vector<CollapseRecord<T>> levelCollapses;
@@ -4082,15 +4121,15 @@ auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std
             if (!dmesh.isAlive(vRemove) || !dmesh.isAlive(vKeep)) {
                 continue;
             }
-            auto record = dmesh.tryCollapse(vRemove, vKeep);
+            auto record = dmesh.tryCollapse(vRemove, vKeep, &nbrs);
             if (!record) {
                 continue;
             }
 
             levelCollapses.push_back(*record);
 
-            // Add new edges involving vKeep to the priority queue
-            auto nbrs = dmesh.vertexNeighbors(vKeep);
+            // Add new edges involving vKeep to the priority queue using the
+            // post-collapse neighbor list populated by tryCollapse.
             for (auto nb : nbrs) {
                 if (dmesh.isCollapsible(nb)) {
                     pq.push({dmesh.collapseCost(nb, vKeep), {nb, vKeep}});
@@ -4125,12 +4164,11 @@ auto buildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>:
         mesh->insert_vertex(pos[0], pos[1], pos[2]);
     }
 
-    std::vector<std::vector<std::size_t>> faceVec;
-    faceVec.reserve(level.faces.size());
-    for (const auto& tri : level.faces) {
-        faceVec.push_back({tri[0], tri[1], tri[2]});
-    }
-    mesh->insert_faces(faceVec);
+    // level.faces is already `vector<array<size_t,3>>`; insert_faces is generic
+    // over containers-of-iterables so we can pass it directly instead of
+    // copying every face into a `vector<vector<size_t>>` (one heap allocation
+    // per face).
+    mesh->insert_faces(level.faces);
 
     return mesh;
 }
@@ -4139,8 +4177,8 @@ auto buildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>:
  *  solved/prolongated. NaN propagates if read by accident, making mistakes
  *  loud. */
 template <typename T>
-constexpr auto kUnsetUV = std::array<T, 2>{std::numeric_limits<T>::quiet_NaN(),
-                                           std::numeric_limits<T>::quiet_NaN()};
+constexpr auto kUnsetUV =
+    std::array<T, 2>{std::numeric_limits<T>::quiet_NaN(), std::numeric_limits<T>::quiet_NaN()};
 
 /**
  * @brief Prolongate UV coordinates from a coarser level to a finer level
@@ -4156,8 +4194,7 @@ constexpr auto kUnsetUV = std::array<T, 2>{std::numeric_limits<T>::quiet_NaN(),
  */
 template <typename T>
 auto prolongateUVs(std::vector<std::array<T, 2>> coarseUVs,
-                   const std::vector<CollapseRecord<T>>& collapses)
-    -> std::vector<std::array<T, 2>>
+                   const std::vector<CollapseRecord<T>>& collapses) -> std::vector<std::array<T, 2>>
 {
     // Start with the coarse-level UVs and fill in vRemoved slots in reverse.
     auto& fineUVs = coarseUVs;
@@ -4208,8 +4245,8 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     auto numFree = numVerts - numFixed;
 
     // Map original pin indices to level-local indices
-    auto localPin0 = level.originalToLocal.at(origPin0);
-    auto localPin1 = level.originalToLocal.at(origPin1);
+    auto localPin0 = level.originalToLocal[origPin0];
+    auto localPin1 = level.originalToLocal[origPin1];
     auto p0 = levelMesh->vertex(localPin0);
     auto p1 = levelMesh->vertex(localPin1);
 

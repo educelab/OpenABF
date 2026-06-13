@@ -955,27 +955,31 @@ TEST(HLSCMInternal, BuildHierarchy_LevelCount)
     }
 
     // For each level: localToOriginal and originalToLocal are consistent inverses.
+    using Level = OpenABF::detail::hlscm::HierarchyLevel<float>;
+    auto isPresent = [](const Level& lvl, std::size_t origIdx) {
+        return origIdx < lvl.originalToLocal.size() &&
+               lvl.originalToLocal[origIdx] != Level::kAbsent;
+    };
     for (std::size_t k = 0; k < levels.size(); ++k) {
         const auto& lvl = levels[k];
         EXPECT_EQ(lvl.localToOriginal.size(), lvl.positions.size())
             << "Level " << k << ": localToOriginal size != positions size";
-        EXPECT_EQ(lvl.originalToLocal.size(), lvl.localToOriginal.size())
-            << "Level " << k << ": map sizes mismatch";
+        // originalToLocal is sized to the finest-mesh vertex count; check the
+        // round-trip via localToOriginal instead of the raw container size.
         for (std::size_t li = 0; li < lvl.localToOriginal.size(); ++li) {
             auto origIdx = lvl.localToOriginal[li];
-            auto it = lvl.originalToLocal.find(origIdx);
-            ASSERT_NE(it, lvl.originalToLocal.end())
+            ASSERT_TRUE(isPresent(lvl, origIdx))
                 << "Level " << k << ": original idx " << origIdx << " missing from originalToLocal";
-            EXPECT_EQ(it->second, li)
+            EXPECT_EQ(lvl.originalToLocal[origIdx], li)
                 << "Level " << k << ": originalToLocal[" << origIdx << "] != " << li;
         }
     }
 
     // Pin vertices must appear in every level
     for (std::size_t k = 0; k < levels.size(); ++k) {
-        EXPECT_TRUE(levels[k].originalToLocal.count(pin0))
+        EXPECT_TRUE(isPresent(levels[k], pin0))
             << "Level " << k << " missing pin0 (vertex " << pin0 << ")";
-        EXPECT_TRUE(levels[k].originalToLocal.count(pin1))
+        EXPECT_TRUE(isPresent(levels[k], pin1))
             << "Level " << k << " missing pin1 (vertex " << pin1 << ")";
     }
 }
