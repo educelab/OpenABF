@@ -71,6 +71,17 @@ install(
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/OpenABF
 )
 
+# Multiheader builds also ship internal-use headers under detail/. These are
+# excluded from PUBLIC_HEADER (which installs flat) so their subdirectory
+# structure is preserved.
+if(OPENABF_MULTIHEADER)
+    install(
+        DIRECTORY include/OpenABF/detail/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/OpenABF/detail
+        FILES_MATCHING PATTERN "*.hpp"
+    )
+endif()
+
 # Docs
 find_package(Doxygen OPTIONAL_COMPONENTS dot)
 CMAKE_DEPENDENT_OPTION(OPENABF_BUILD_DOCS "Build Doxygen documentation" off "DOXYGEN_FOUND" off)
