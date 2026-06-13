@@ -11,7 +11,6 @@
 | open | T5 | HLSCM internal component unit tests (buildHierarchy, prolongateUVs, solveLSCMLevel) | [#65](https://github.com/educelab/OpenABF/issues/65) | 2026-03-20 | 2026-03-20 |
 | open | P6 | Precompute sin/cos values before HLSCM face assembly loop | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-03-20 | 2026-03-20 |
 | open | A10 | Add static Compute() overloads accepting levelRatio and minCoarseVertices | [#68](https://github.com/educelab/OpenABF/issues/68) | 2026-03-20 | 2026-03-20 |
-| open | T7 | ABFPlusPlusAnglePreservation may be vacuous on flat wavy mesh | [#50](https://github.com/educelab/OpenABF/issues/50) | 2026-03-20 | 2026-03-20 |
 | open | E2 | Add sphere cap built-in mesh generator to benchmark | [#48](https://github.com/educelab/OpenABF/issues/48) | 2026-03-20 | 2026-03-20 |
 | open | F5 | Implement Hierarchical SLIM (H-SLIM) | [#52](https://github.com/educelab/OpenABF/issues/52) | 2026-03-20 | 2026-03-20 |
 | open | F6 | Migrate to C++20 | [#54](https://github.com/educelab/OpenABF/issues/54) | 2026-03-20 | 2026-03-20 |
@@ -26,6 +25,7 @@
 
 | Status | Track ID | Title | GitHub | Archived |
 | ------ | -------- | ----- | ------ | -------- |
+| closed | T7 | ABFPlusPlusAnglePreservation now uses curved mesh (hemisphere) for meaningful ABF exercise | [#50](https://github.com/educelab/OpenABF/issues/50) | 2026-06-12 |
 | closed | A9 | Mark detail::hlscm types with @internal Doxygen tag | [#67](https://github.com/educelab/OpenABF/issues/67) | 2026-06-12 |
 | closed | T6 | Add test for HLSCM::setPinnedVertices() instance API | [#51](https://github.com/educelab/OpenABF/issues/51) | 2026-06-12 |
 | closed | T8 | Strengthen InstanceAPILevelRatio to verify parameters are applied | [#49](https://github.com/educelab/OpenABF/issues/49) | 2026-06-12 |
