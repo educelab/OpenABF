@@ -22,6 +22,12 @@
  *                        (50k, 100k, 200k, 400k, 600k, 800k, 1M faces) up to
  *                        MAX faces (default: 1000000). Mesh files and
  *                        --builtin may be combined.
+ *   --builtin-sphere [MAX]
+ *                        Benchmark the built-in sphere-cap (hemisphere)
+ *                        sequence using the same face-count progression as
+ *                        --builtin. Sphere caps have constant positive
+ *                        Gaussian curvature and exercise ABF+LSCM quality
+ *                        in addition to performance.
  *
  * @note If Eigen was not compiled with OpenMP, all multi-thread columns will
  * report the same time as the 1-thread column.
@@ -97,6 +103,63 @@ auto buildWavySurface(std::size_t targetFaces) -> typename ABFMesh::Pointer
     return mesh;
 }
 
+/** Build a sphere cap with approximately targetFaces triangles.
+ *
+ * The cap spans colatitude [0, thetaMax] over the full longitude range;
+ * thetaMax = π/2 yields a unit hemisphere. The cap has constant positive
+ * Gaussian curvature, which forces ABF++ to take many iterations and
+ * produces a harder LSCM system than the wavy surface.
+ *
+ * The pole is vertex 0; each successive ring has `sectors` vertices.
+ * Produces sectors * (2*rings - 1) faces. Rings and sectors are chosen so
+ * each triangle is roughly square: arc length per ring (thetaMax / rings)
+ * ≈ arc length per sector at the boundary (2π * sin(thetaMax) / sectors).
+ */
+auto buildSphereCap(std::size_t targetFaces, FloatT thetaMax = OpenABF::PI<FloatT> / FloatT(2)) ->
+    typename ABFMesh::Pointer
+{
+    using T = FloatT;
+    // sectors / rings to keep triangles roughly square
+    T aspect = T(2) * OpenABF::PI<T> * std::sin(thetaMax) / thetaMax;
+    // sectors * (2*rings - 1) ≈ targetFaces, with sectors ≈ aspect * rings
+    auto rings = static_cast<std::size_t>(
+                     std::floor(std::sqrt(static_cast<double>(targetFaces) / (2.0 * aspect)))) +
+                 1;
+    auto sectors = static_cast<std::size_t>(std::floor(aspect * static_cast<double>(rings)));
+    if (sectors < 3) {
+        sectors = 3;
+    }
+
+    auto mesh = ABFMesh::New();
+    mesh->insert_vertex(T(0), T(0), T(1));
+    for (std::size_t r = 1; r <= rings; ++r) {
+        T phi = thetaMax * T(r) / T(rings);
+        T sinPhi = std::sin(phi);
+        T cosPhi = std::cos(phi);
+        for (std::size_t s = 0; s < sectors; ++s) {
+            T theta = T(2) * OpenABF::PI<T> * T(s) / T(sectors);
+            mesh->insert_vertex(sinPhi * std::cos(theta), sinPhi * std::sin(theta), cosPhi);
+        }
+    }
+    std::vector<std::vector<std::size_t>> faces;
+    faces.reserve(sectors + 2 * (rings - 1) * sectors);
+    for (std::size_t s = 0; s < sectors; ++s) {
+        std::size_t next = (s + 1) % sectors;
+        faces.push_back({0, 1 + s, 1 + next});
+    }
+    for (std::size_t r = 0; r < rings - 1; ++r) {
+        std::size_t base0 = 1 + r * sectors;
+        std::size_t base1 = 1 + (r + 1) * sectors;
+        for (std::size_t s = 0; s < sectors; ++s) {
+            std::size_t next = (s + 1) % sectors;
+            faces.push_back({base0 + s, base1 + s, base0 + next});
+            faces.push_back({base0 + next, base1 + s, base1 + next});
+        }
+    }
+    mesh->insert_faces(faces);
+    return mesh;
+}
+
 /** Benchmark inputs: either a file path or a synthetic face count */
 struct BenchInput {
     std::string label;
@@ -111,6 +174,8 @@ auto main(const int argc, char* argv[]) -> int
     fs::path outputDir;
     bool builtinEnabled = false;
     std::size_t builtinMax = 1'000'000;
+    bool builtinSphereEnabled = false;
+    std::size_t builtinSphereMax = 1'000'000;
     std::vector<fs::path> meshFiles;
     std::vector<int> threadCounts;
 
@@ -142,15 +207,25 @@ auto main(const int argc, char* argv[]) -> int
                 } catch (...) {
                 }
             }
+        } else if (arg == "--builtin-sphere") {
+            builtinSphereEnabled = true;
+            if (a + 1 < argc) {
+                try {
+                    builtinSphereMax = std::stoull(argv[a + 1]);
+                    ++a;
+                } catch (...) {
+                }
+            }
         } else {
             meshFiles.emplace_back(argv[a]);
         }
     }
 
-    if (!builtinEnabled && meshFiles.empty()) {
+    if (!builtinEnabled && !builtinSphereEnabled && meshFiles.empty()) {
         std::cerr << "Usage: " << fs::path(argv[0]).filename().string()
                   << " [--threads N [N ...]] [--output-dir DIR]"
-                     " [--builtin [MAX_FACES]] [mesh1.(obj|ply) ...]\n";
+                     " [--builtin [MAX_FACES]] [--builtin-sphere [MAX_FACES]]"
+                     " [mesh1.(obj|ply) ...]\n";
         return EXIT_FAILURE;
     }
 
@@ -204,6 +279,18 @@ auto main(const int argc, char* argv[]) -> int
             }
             auto mesh = buildWavySurface(n);
             auto label = "wavy~" + std::to_string(mesh->num_faces()) + "f";
+            inputs.push_back({label, mesh});
+        }
+    }
+
+    if (builtinSphereEnabled) {
+        for (std::size_t n :
+             {50'000UL, 100'000UL, 200'000UL, 400'000UL, 600'000UL, 800'000UL, 1'000'000UL}) {
+            if (n > builtinSphereMax) {
+                break;
+            }
+            auto mesh = buildSphereCap(n);
+            auto label = "sphere~" + std::to_string(mesh->num_faces()) + "f";
             inputs.push_back({label, mesh});
         }
     }

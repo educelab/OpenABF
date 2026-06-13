@@ -1,9 +1,9 @@
 # E2 Implementation Plan
 
 ## Phase 1: Implementation
-- [ ] 1.1 Implement sphere cap mesh generator
-- [ ] 1.2 Integrate into benchmark example
+- [x] 1.1 Implement sphere cap mesh generator
+- [x] 1.2 Integrate into benchmark example
 
 ## Phase 2: Verification
-- [ ] 2.1 Verify benchmark runs with built-in mesh
-- [ ] 2.2 Verify parameterization output looks correct
+- [x] 2.1 Verify benchmark runs with built-in mesh
+- [x] 2.2 Verify parameterization output looks correct
