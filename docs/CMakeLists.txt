@@ -2,13 +2,6 @@
 set(DOXYGEN_DOT_IMAGE_FORMAT svg)
 set(DOXYGEN_EXTRACT_STATIC YES)
 set(DOXYGEN_EXTRACT_PRIVATE YES)
-# Render documentation for @internal-tagged blocks. OpenABF is header-only,
-# so the detail:: namespace is already visible to consumers; the @internal
-# tag signals API stability intent (don't depend on this) rather than
-# physical hiding. The detail:: namespace name carries that signal, so
-# leaving INTERNAL_DOCS=NO simply drops useful algorithmic context without
-# actually hiding anything.
-set(DOXYGEN_INTERNAL_DOCS YES)
 set(DOXYGEN_GENERATE_HTML YES)
 set(DOXYGEN_GENERATE_LATEX NO)
 set(DOXYGEN_HTML_EXTRA_STYLESHEET ${PROJECT_SOURCE_DIR}/docs/style/doxygen_extra.css)

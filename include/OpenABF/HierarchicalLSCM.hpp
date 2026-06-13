@@ -28,14 +28,12 @@ namespace OpenABF
 namespace detail
 {
 /**
- * @internal
  * @brief Implementation details for HierarchicalLSCM
  */
 namespace hlscm
 {
 
 /**
- * @internal
  * @brief Symmetric 4×4 quadric matrix for QEM error metric (Garland-Heckbert)
  */
 template <typename T>
@@ -72,7 +70,6 @@ struct Quadric {
 };
 
 /**
- * @internal
  * @brief Record of a single half-edge collapse for prolongation
  */
 template <typename T>
@@ -88,7 +85,6 @@ struct CollapseRecord {
 };
 
 /**
- * @internal
  * @brief A level in the mesh hierarchy
  */
 template <typename T>
@@ -104,7 +100,6 @@ struct HierarchyLevel {
 };
 
 /**
- * @internal
  * @brief Lightweight flat-array mesh for decimation
  *
  * Copies vertex positions and face connectivity from a HalfEdgeMesh into
@@ -585,7 +580,6 @@ private:
 };
 
 /**
- * @internal
  * @brief Build a mesh hierarchy by greedy QEM decimation
  *
  * Returns a vector of HierarchyLevel from finest to coarsest, plus
@@ -671,7 +665,6 @@ auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std
 }
 
 /**
- * @internal
  * @brief Build a HalfEdgeMesh from a hierarchy level
  */
 template <typename T>
@@ -694,7 +687,6 @@ auto buildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>:
 }
 
 /**
- * @internal
  * @brief Prolongate UV coordinates from a coarser level to a finer level
  *
  * Surviving vertices get their UVs directly; removed vertices get UVs
@@ -732,7 +724,6 @@ auto prolongateUVs(const std::unordered_map<std::size_t, std::array<T, 2>>& coar
 }
 
 /**
- * @internal
  * @brief Solve the LSCM system at one hierarchy level
  *
  * Builds the Lévy et al. Eq. 10 LSCM system on the given level mesh with the

@@ -14,7 +14,6 @@ namespace OpenABF::detail::lscm
 {
 
 /**
- * @internal
  * @brief Outputs of `buildSystem`: the LSCM least-squares system for a mesh
  *        with two pinned vertices.
  *
@@ -36,7 +35,6 @@ struct SystemParts {
 };
 
 /**
- * @internal
  * @brief Build the LSCM sparse system for a mesh with two pinned vertices.
  *
  * Mutates the mesh: places `p0` at the UV origin and `p1` on whichever XY
