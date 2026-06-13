@@ -1003,7 +1003,9 @@ TEST(HLSCMInternal, ProlongateUVs_BarycentricReconstruction)
 
     // Assign deterministic UVs to coarse-level vertices: U = origIdx, V = -origIdx
     // (anything works as long as we have one UV per surviving vertex)
-    std::unordered_map<std::size_t, std::array<float, 2>> coarseUVs;
+    auto isSet = [](const std::array<float, 2>& uv) { return !std::isnan(uv[0]); };
+    std::vector<std::array<float, 2>> coarseUVs(mesh->num_vertices(),
+                                                OpenABF::detail::hlscm::kUnsetUV<float>);
     for (auto origIdx : levels[1].localToOriginal) {
         coarseUVs[origIdx] = {static_cast<float>(origIdx), -static_cast<float>(origIdx)};
     }
@@ -1011,8 +1013,9 @@ TEST(HLSCMInternal, ProlongateUVs_BarycentricReconstruction)
     auto fineUVs = OpenABF::detail::hlscm::prolongateUVs<float>(coarseUVs, collapses);
 
     // Coarse UVs must survive untouched
-    for (const auto& [origIdx, uv] : coarseUVs) {
-        ASSERT_TRUE(fineUVs.count(origIdx))
+    for (auto origIdx : levels[1].localToOriginal) {
+        const auto& uv = coarseUVs[origIdx];
+        ASSERT_TRUE(isSet(fineUVs[origIdx]))
             << "Coarse vertex " << origIdx << " missing from prolongated UVs";
         EXPECT_FLOAT_EQ(fineUVs[origIdx][0], uv[0]) << "Coarse vertex " << origIdx << " U mutated";
         EXPECT_FLOAT_EQ(fineUVs[origIdx][1], uv[1]) << "Coarse vertex " << origIdx << " V mutated";
@@ -1023,21 +1026,21 @@ TEST(HLSCMInternal, ProlongateUVs_BarycentricReconstruction)
     auto expected = coarseUVs;
     for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
         const auto& rec = *it;
-        ASSERT_TRUE(expected.count(rec.containingTri[0]))
+        ASSERT_TRUE(isSet(expected[rec.containingTri[0]]))
             << "containingTri[0] " << rec.containingTri[0] << " UV missing";
-        ASSERT_TRUE(expected.count(rec.containingTri[1]))
+        ASSERT_TRUE(isSet(expected[rec.containingTri[1]]))
             << "containingTri[1] " << rec.containingTri[1] << " UV missing";
-        ASSERT_TRUE(expected.count(rec.containingTri[2]))
+        ASSERT_TRUE(isSet(expected[rec.containingTri[2]]))
             << "containingTri[2] " << rec.containingTri[2] << " UV missing";
-        auto uv0 = expected.at(rec.containingTri[0]);
-        auto uv1 = expected.at(rec.containingTri[1]);
-        auto uv2 = expected.at(rec.containingTri[2]);
+        auto uv0 = expected[rec.containingTri[0]];
+        auto uv1 = expected[rec.containingTri[1]];
+        auto uv2 = expected[rec.containingTri[2]];
         std::array<float, 2> exp{
             rec.bary[0] * uv0[0] + rec.bary[1] * uv1[0] + rec.bary[2] * uv2[0],
             rec.bary[0] * uv0[1] + rec.bary[1] * uv1[1] + rec.bary[2] * uv2[1]};
         expected[rec.vRemoved] = exp;
 
-        ASSERT_TRUE(fineUVs.count(rec.vRemoved))
+        ASSERT_TRUE(isSet(fineUVs[rec.vRemoved]))
             << "Removed vertex " << rec.vRemoved << " missing from prolongated UVs";
         EXPECT_NEAR(fineUVs[rec.vRemoved][0], exp[0], 1e-5f)
             << "vertex " << rec.vRemoved << " U mismatch";
@@ -1072,22 +1075,21 @@ TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
     auto levelMesh = OpenABF::detail::hlscm::buildLevelMesh<float>(level);
     OpenABF::ComputeMeshAngles(levelMesh);
 
+    const auto origVertCount = meshH->num_vertices();
     auto uvs = OpenABF::detail::hlscm::solveLSCMLevel<float, Solver>(levelMesh, level, pin0, pin1,
-                                                                     nullptr);
+                                                                     origVertCount, nullptr);
 
     // All UVs must be finite (z is implicit 0; solveLSCMLevel only returns 2-vectors)
     ASSERT_EQ(uvs.size(), meshH->num_vertices());
-    for (const auto& [origIdx, uv] : uvs) {
-        EXPECT_TRUE(std::isfinite(uv[0])) << "vertex " << origIdx << " U not finite";
-        EXPECT_TRUE(std::isfinite(uv[1])) << "vertex " << origIdx << " V not finite";
+    for (std::size_t origIdx = 0; origIdx < uvs.size(); ++origIdx) {
+        EXPECT_TRUE(std::isfinite(uvs[origIdx][0])) << "vertex " << origIdx << " U not finite";
+        EXPECT_TRUE(std::isfinite(uvs[origIdx][1])) << "vertex " << origIdx << " V not finite";
     }
 
     // The pinned vertices use the same placement logic as AngleBasedLSCM:
     // pin0 sits at the origin; pin1 sits on whichever axis its displacement
     // from pin0 has the largest magnitude. For the pyramid (verts 0=(0,0,0)
     // and 1=(2,0,0)), pin1 lies at (2, 0).
-    ASSERT_TRUE(uvs.count(pin0));
-    ASSERT_TRUE(uvs.count(pin1));
     EXPECT_FLOAT_EQ(uvs[pin0][0], 0.f);
     EXPECT_FLOAT_EQ(uvs[pin0][1], 0.f);
     EXPECT_FLOAT_EQ(uvs[pin1][0], 2.f);
@@ -1099,7 +1101,6 @@ TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
     LSCM::Compute(meshL, pin0, pin1);
 
     for (std::size_t v = 0; v < meshL->num_vertices(); ++v) {
-        ASSERT_TRUE(uvs.count(v)) << "vertex " << v << " missing from solveLSCMLevel UVs";
         const auto& ref = meshL->vertex(v)->pos;
         EXPECT_NEAR(uvs[v][0], ref[0], 1e-4f) << "vertex " << v << " U disagrees with LSCM";
         EXPECT_NEAR(uvs[v][1], ref[1], 1e-4f) << "vertex " << v << " V disagrees with LSCM";
