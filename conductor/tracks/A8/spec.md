@@ -40,9 +40,9 @@ Both `AngleBasedLSCM::ComputeImpl` and `HierarchicalLSCM::solveLSCMLevel` call
 solver dispatch, UV prolongation).
 
 ## Acceptance criteria
-- [ ] `detail::lscm::buildSystem` (or equivalent) is a single implementation used by both solvers
-- [ ] `solveLSCMLevel` and `AngleBasedLSCM::ComputeImpl` each call the shared utility
-- [ ] All existing parameterization tests pass (numerical results unchanged, bit-identical on reference meshes)
-- [ ] No new public API surface — `detail` namespace only
-- [ ] `freeIdxTable` container type is unified to `std::unordered_map<std::size_t, std::size_t>` (O(1) lookup; ABLSCM only uses `.at()` so the change is numerically inert)
-- [ ] The extracted utility is covered by direct tests for (a) dimensions of `A`/`b`, (b) free-vertex index table population, (c) pin-row contributions land in `b` not `A`
+- [x] `detail::lscm::buildSystem` (or equivalent) is a single implementation used by both solvers
+- [x] `solveLSCMLevel` and `AngleBasedLSCM::ComputeImpl` each call the shared utility
+- [x] All existing parameterization tests pass (numerical results unchanged, bit-identical on reference meshes)
+- [x] No new public API surface — `detail` namespace only
+- [x] `freeIdxTable` container type is unified to `std::unordered_map<std::size_t, std::size_t>` (O(1) lookup; ABLSCM only uses `.at()` so the change is numerically inert)
+- [x] The extracted utility is covered by direct tests for (a) dimensions of `A`/`b`, (b) free-vertex index table population, (c) pin-row contributions land in `b` not `A`
