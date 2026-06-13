@@ -1,32 +1,35 @@
 # F3 Implementation Plan
 
-## Phase 1 — Tests
-1. Test `ExtractConnectedComponents` on:
-   - A single-CC mesh (returns one element, same geometry)
-   - A two-CC mesh (returns two elements, correct vertex maps)
-   - A mesh with pre-computed angle traits (traits are preserved in extracted meshes)
-2. Test `ParameterizeConnectedComponents` runs without error on a two-CC mesh
+Status: completed (2026-06-12)
 
-## Phase 2 — ExtractConnectedComponents
-1. Create `include/OpenABF/HalfEdgeMeshUtils.hpp`
-2. Implement `ExtractConnectedComponents`:
-   - Call `mesh->connected_components()` to get face groups
-   - For each group, collect unique vertex indices, build a local index map
-   - Create a new `MeshType` mesh, insert vertices (copying traits via copy ctor)
-   - Insert faces using re-mapped indices (copying edge traits)
-   - Call `update_boundary()` on extracted mesh
-   - Build `original_idx` back-map vector
-3. Return the vector of pairs
+The merged design replaces the originally-planned free function
+`ExtractConnectedComponents` in `HalfEdgeMeshUtils.hpp` with a method on
+`HalfEdgeMesh` that returns an `ExtractedComponent` struct (with
+`vertex_map` and `face_map`). The high-level `ParameterizeConnectedComponents`
+wrapper (original Phase 3) was descoped — see note below.
+
+## Phase 1 — Tests
+- [x] **Task 1.1**: Test `extract_connected_components` on a single-CC mesh
+  (returns one element, same geometry) `a32e1e2`
+- [x] **Task 1.2**: Test on a two-CC mesh (returns two elements, correct
+  vertex maps) `a32e1e2`
+- [x] **Task 1.3**: Test trait preservation on a mesh with pre-computed
+  angle traits `a32e1e2`
+
+## Phase 2 — extract_connected_components
+- [x] **Task 2.1**: Implement `HalfEdgeMesh::extract_connected_components()`
+  as a method (not a free function in `HalfEdgeMeshUtils.hpp`) `a32e1e2`
+- [x] **Task 2.2**: Return `ExtractedComponent` struct with `mesh`,
+  `vertex_map`, and `face_map` fields `c97395f`
 
 ## Phase 3 — ParameterizeConnectedComponents
-1. Implement the convenience wrapper:
-   - Call `ExtractConnectedComponents`
-   - For each `(extracted_mesh, back_map)`:
-     - Run `AngleOptimizer::Compute(extracted_mesh)` if optimizer is not `void`
-     - Run `Parameterizer::Compute(extracted_mesh)`
-     - Write UV positions back to original mesh using `back_map`
-2. Add to `include/OpenABF/OpenABF.hpp` and `single_include.json`
+- [-] **Task 3.1**: Convenience wrapper — **DESCOPED** (2026-06-12). A
+  bundled wrapper that fixes the angle-optimizer + parameterizer choice and
+  writes UVs back automatically doesn't carry its weight: callers already
+  have the `vertex_map` they need, and per-component pipeline choices
+  (which optimizer, which solver, pin selection, error handling) vary too
+  much to hide behind one helper. The low-level extractor is sufficient.
 
 ## Phase 4 — Verify
-- Run `ctest`
-- End-to-end test: split_path → extract → parameterize → pack (with F2)
+- [x] **Verify 4.1**: `ctest` green on develop after merges `a32e1e2`, `c97395f`
+- [x] **Verify 4.2**: Reviewed and merged into develop via PRs #80, #81
