@@ -1,26 +1,25 @@
 # A8 Implementation Plan
 
 ## Phase 1: Audit and design shared interface
-1. Read `AngleBasedLSCM::ComputeImpl` and `HierarchicalLSCM::solveLSCMLevel` side by side
-2. Identify exact shared lines and the parameters/return values needed
-3. Design `detail::lscm::buildSystem<T, MeshPtr>(mesh, pin0, pin1)` → `SystemParts<T>`
-   - `SystemParts` holds: `SparseMatrix<T> A`, `SparseMatrix<T> b` (or dense), `unordered_map<size_t,size_t> freeIdxTable`
+- [ ] 1.1 Read `AngleBasedLSCM::ComputeImpl` and `HierarchicalLSCM::solveLSCMLevel` side by side
+- [ ] 1.2 Identify exact shared lines and the parameters/return values needed
+- [ ] 1.3 Design `detail::lscm::buildSystem<T, MeshPtr>(mesh, pin0, pin1)` → `SystemParts<T>`
+  - `SystemParts` holds: `SparseMatrix<T> A`, `SparseMatrix<T> b` (or dense), `unordered_map<size_t,size_t> freeIdxTable`
 
 ## Phase 2: Extract utility (TDD)
-1. Write `HLSCMInternal.BuildSystem_KnownMesh` test (pyramid, verify A/b dimensions and pin rows)
-2. Implement `detail::lscm::buildSystem` in a new header `include/OpenABF/detail/LscmSystem.hpp`
-   (or inline in `AngleBasedLSCM.hpp` at the bottom of the `detail` section)
-3. Test passes
+- [ ] 2.1 Write `HLSCMInternal.BuildSystem_KnownMesh` test (pyramid, verify A/b dimensions and pin rows)
+- [ ] 2.2 Implement `detail::lscm::buildSystem` in a new header `include/OpenABF/detail/LscmSystem.hpp` (or inline in `AngleBasedLSCM.hpp` at the bottom of the `detail` section)
+- [ ] 2.3 Test passes
 
 ## Phase 3: Migrate AngleBasedLSCM
-1. Replace duplicated logic in `AngleBasedLSCM::ComputeImpl` with call to `buildSystem`
-2. All existing parameterization tests pass — numerical results identical
+- [ ] 3.1 Replace duplicated logic in `AngleBasedLSCM::ComputeImpl` with call to `buildSystem`
+- [ ] 3.2 All existing parameterization tests pass — numerical results identical
 
 ## Phase 4: Migrate HierarchicalLSCM
-1. Replace duplicated logic in `solveLSCMLevel` with call to `buildSystem`
-2. All HLSCM tests pass — numerical results identical
+- [ ] 4.1 Replace duplicated logic in `solveLSCMLevel` with call to `buildSystem`
+- [ ] 4.2 All HLSCM tests pass — numerical results identical
 
 ## Phase 5: Update amalgamation and finalize
-1. Add new header to `single_include.json` if extracted to separate file
-2. Run amalgamation script
-3. Run clang-format
+- [ ] 5.1 Add new header to `single_include.json` if extracted to separate file
+- [ ] 5.2 Run amalgamation script
+- [ ] 5.3 Run clang-format
