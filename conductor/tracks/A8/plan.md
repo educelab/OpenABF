@@ -25,5 +25,5 @@
 - [x] 4.2 All HLSCM tests pass — including `HLSCM.MultiLevelHierarchy`, `HLSCM.ABFPlusPlusAnglePreservation` (T7 curved mesh), and `HLSCMInternal.SolveLSCMLevel_KnownMesh` which directly verifies parity with `AngleBasedLSCM`
 
 ## Phase 5: Amalgamation and finalize
-- [ ] 5.1 Verify amalgamation script picks up new header (`single_include.json` updated in 2.2); run `python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .`
-- [ ] 5.2 Run `git clang-format` and re-stage
+- [x] 5.1 Ran amalgamation; new `detail/LSCMSystem.hpp` is reached via the include graph (no `single_include.json` change needed). Verified `SystemParts`/`buildSystem` appear in `single_include/OpenABF/OpenABF.hpp`. Single-include build of `OpenABF_TestParameterization` passes ctest.
+- [x] 5.2 `git clang-format` clean — no further changes needed
