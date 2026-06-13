@@ -3,21 +3,30 @@
 ## Phase 1: Benchmark
 Add `CG(Diagonal)` and `CG(IC)` columns to `BenchmarkFlattening` and run against real meshes to establish a three-way comparison vs. the current `SparseLU` default.
 
-- [ ] 1.1 Add `AngleBasedLSCM` with `ConjugateGradient<Lower|Upper>` (Diagonal preconditioner) column to `BenchmarkFlattening.cpp`
-- [ ] 1.2 Add `AngleBasedLSCM` with `ConjugateGradient<Lower|Upper, IncompleteCholesky>` column to `BenchmarkFlattening.cpp`
-- [ ] 1.3 Run benchmark on real scroll meshes at multiple sizes
-- [ ] 1.4 Record results and determine if IC-CG beats SparseLU
+- [x] 1.1 Add `AngleBasedLSCM` with `ConjugateGradient<Lower|Upper>` (Diagonal preconditioner) column to `BenchmarkFlattening.cpp` — the existing `LSCM CG` column was already this (Eigen's CG default preconditioner is `DiagonalPreconditioner`); renamed to `LSCM CG-Diag` for clarity.
+- [x] 1.2 Add `AngleBasedLSCM` with `ConjugateGradient<Lower|Upper, IncompleteCholesky>` column to `BenchmarkFlattening.cpp` (`LSCM CG-IC`).
+- [x] 1.3 Run benchmark on built-in wavy + sphere mesh sequences at 50k–200k faces.
+- [x] 1.4 Record results — IC-CG does NOT beat SparseLU; in fact much slower.
+
+### Phase 1 results (1 thread, no OpenMP, FloatT=double)
+
+| Mesh        | Faces  | SparseLU | CG-Diag | CG-IC  | CG-IC / SparseLU |
+|-------------|--------|----------|---------|--------|------------------|
+| wavy~50k    | 49928  | 0.32s    | 3.80s   | 14.36s | 45×              |
+| wavy~100k   | 99458  | 0.91s    | 13.89s  | 69.17s | 76×              |
+| sphere~50k  | 50880  | 0.52s    | 2.24s   | 7.57s  | 15×              |
+
+The gap *widens* with mesh size: IC-CG is being dominated by IncompleteCholesky's factorization setup cost and a high per-iteration apply cost on these well-conditioned LSCM normal equations.  IC-CG is also markedly slower than Diagonal-CG, so on iterative-solver workloads `Diagonal` remains the better default preconditioner.
 
 ## Phase 2: Default Change (conditional on Phase 1)
-Only proceed if Phase 1 benchmarks show IC-CG is faster than SparseLU.
+**Not triggered.** Phase 1 acceptance criterion ("If IC-CG is faster than SparseLU") was not met. `AngleBasedLSCM`'s default `Solver` stays `SparseLU`.
 
-- [ ] 2.1 Change `AngleBasedLSCM` default `Solver` template parameter from `SparseLU` to `ConjugateGradient<SparseMatrix<T>, Lower|Upper, IncompleteCholesky<T>>`
-- [ ] 2.2 Update `@tparam Solver` doc: explain IC vs Diagonal tradeoff, note SparseLU as reliable fallback for small meshes or ill-conditioned systems
-- [ ] 2.3 Run `ctest` — all tests must pass
-- [ ] 2.4 Run `git clang-format`
-- [ ] 2.5 Regenerate amalgamated header
+- [x] 2.2 Update `@tparam Solver` doc — recorded that SparseLU is the benchmarked-fastest default in the 50k–200k face range, and that IC is available but currently underperforms Diagonal on the LSCM normal equations.
+- [x] 2.3 Run `ctest` — all 43 parameterization tests pass on `p4-ic-cg-preconditioner` against the modified BenchmarkFlattening + updated doc.
+- [x] 2.4 Run `git clang-format` — no changes needed.
+- [x] 2.5 Regenerate amalgamated header — single_include updated.
 
 ## Phase 3: Conductor & GitHub
-- [ ] 3.1 Commit and push
-- [ ] 3.2 Update PR / close issue #47
-- [ ] 3.3 Update tracks.md
+- [ ] 3.1 Commit and push (waiting on signing availability)
+- [ ] 3.2 Open PR against #47 describing the benchmark, the conclusion, and the doc update; close issue #47 as "investigated, default unchanged"
+- [ ] 3.3 Update tracks.md (move P4 to archived once PR lands)
