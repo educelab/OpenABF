@@ -12,6 +12,7 @@
 #include "OpenABF/Exceptions.hpp"
 #include "OpenABF/HalfEdgeMesh.hpp"
 #include "OpenABF/Math.hpp"
+#include "OpenABF/detail/LSCMSystem.hpp"
 
 namespace OpenABF
 {

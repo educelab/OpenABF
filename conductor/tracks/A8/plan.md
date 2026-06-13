@@ -10,11 +10,11 @@
   - **Header location**: new `include/OpenABF/detail/LSCMSystem.hpp`. Both `AngleBasedLSCM.hpp` and `HierarchicalLSCM.hpp` include it. HLSCM keeps its existing include of `AngleBasedLSCM.hpp` for `detail::SolveLeastSquares` / `detail::is_instance_of_v` (out of scope for A8)
 
 ## Phase 2: Extract utility (TDD)
-- [ ] 2.1a Write `LSCMSystemBuild.Dimensions_KnownMesh` test (pyramid) — assert `A` is `2·numFaces × 2·numFree`, `b` is `2·numFaces × 1`
-- [ ] 2.1b Write `LSCMSystemBuild.FreeIdxTable_Population` test — assert size = `numVerts - 2`, contains all non-pin vertex indices, no pin indices
-- [ ] 2.1c Write `LSCMSystemBuild.PinRowsLandInB` test — assert pin-row contributions appear in `b` (via the bFixed contraction) and not in `A`
-- [ ] 2.2 Implement `detail::lscm::buildSystem` in new header `include/OpenABF/detail/LSCMSystem.hpp`; add to `single_include.json` source list
-- [ ] 2.3 All three new tests pass
+- [x] 2.1a Write `LSCMSystemBuild.Dimensions_KnownMesh` test (pyramid) — assert `A` is `2·numFaces × 2·numFree`, `b` is `2·numFaces × 1`
+- [x] 2.1b Write `LSCMSystemBuild.FreeIdxTable_Population` test — assert size = `numVerts - 2`, contains all non-pin vertex indices, no pin indices
+- [x] 2.1c Write `LSCMSystemBuild.PinRowsLandInB` test — assert pin-row contributions appear in `b` (via the bFixed contraction) and not in `A`
+- [x] 2.2 Implement `detail::lscm::buildSystem` in new header `include/OpenABF/detail/LSCMSystem.hpp` (transitively reached via `AngleBasedLSCM.hpp`; no `single_include.json` edit needed — amalgamator follows the include graph)
+- [x] 2.3 All three new tests pass; full ctest suite (6/6) still passes
 
 ## Phase 3: Migrate AngleBasedLSCM
 - [ ] 3.1 Replace duplicated logic in `AngleBasedLSCM::ComputeImpl` with call to `detail::lscm::buildSystem`

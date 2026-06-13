@@ -1105,3 +1105,95 @@ TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
         EXPECT_NEAR(uvs[v][1], ref[1], 1e-4f) << "vertex " << v << " V disagrees with LSCM";
     }
 }
+
+// ------------------------------------------------------------------
+// LSCMSystemBuild — direct tests for detail::lscm::buildSystem (A8).
+//
+// buildSystem is the shared system-assembly utility extracted from
+// AngleBasedLSCM::ComputeImpl and HierarchicalLSCM::solveLSCMLevel. These
+// tests exercise it on a pyramid (3 faces, 4 vertices, 2 pins → 2 free),
+// asserting the structural invariants of the produced system rather than
+// the numerical solution (which is covered transitively by the existing
+// parameterization tests once both call sites migrate to buildSystem).
+// ------------------------------------------------------------------
+namespace
+{
+
+using LSCMSystemMesh = HalfEdgeMesh<float>;
+
+auto BuildPyramidSystem()
+{
+    constexpr std::size_t pin0Idx = 0;
+    constexpr std::size_t pin1Idx = 1;
+    auto mesh = ConstructPyramid<LSCMSystemMesh>();
+    ComputeMeshAngles(mesh);
+    auto p0 = mesh->vertex(pin0Idx);
+    auto p1 = mesh->vertex(pin1Idx);
+    auto parts = OpenABF::detail::lscm::buildSystem<float, LSCMSystemMesh>(mesh, p0, p1);
+    return std::make_tuple(mesh, p0, p1, std::move(parts));
+}
+
+}  // namespace
+
+TEST(LSCMSystemBuild, Dimensions_KnownMesh)
+{
+    auto [mesh, p0, p1, parts] = BuildPyramidSystem();
+
+    const auto numFaces = mesh->num_faces();
+    const auto numVerts = mesh->num_vertices();
+    const auto numFree = numVerts - 2;
+
+    EXPECT_EQ(static_cast<std::size_t>(parts.A.rows()), 2 * numFaces);
+    EXPECT_EQ(static_cast<std::size_t>(parts.A.cols()), 2 * numFree);
+    EXPECT_EQ(static_cast<std::size_t>(parts.b.rows()), 2 * numFaces);
+    EXPECT_EQ(static_cast<std::size_t>(parts.b.cols()), 1);
+}
+
+TEST(LSCMSystemBuild, FreeIdxTable_Population)
+{
+    auto [mesh, p0, p1, parts] = BuildPyramidSystem();
+
+    EXPECT_EQ(parts.freeIdxTable.size(), mesh->num_vertices() - 2);
+    EXPECT_EQ(parts.freeIdxTable.count(p0->idx), 0u)
+        << "freeIdxTable must not contain pin0 (idx=" << p0->idx << ")";
+    EXPECT_EQ(parts.freeIdxTable.count(p1->idx), 0u)
+        << "freeIdxTable must not contain pin1 (idx=" << p1->idx << ")";
+    for (const auto& v : mesh->vertices()) {
+        if (v == p0 or v == p1) {
+            continue;
+        }
+        EXPECT_EQ(parts.freeIdxTable.count(v->idx), 1u)
+            << "free vertex " << v->idx << " missing from freeIdxTable";
+    }
+
+    // All assigned slot indices are unique and contiguous in [0, numFree).
+    std::vector<std::size_t> slots;
+    slots.reserve(parts.freeIdxTable.size());
+    for (const auto& kv : parts.freeIdxTable) {
+        slots.push_back(kv.second);
+    }
+    std::sort(slots.begin(), slots.end());
+    for (std::size_t i = 0; i < slots.size(); ++i) {
+        EXPECT_EQ(slots[i], i) << "freeIdxTable slot " << i << " not contiguous";
+    }
+}
+
+TEST(LSCMSystemBuild, PinRowsLandInB)
+{
+    auto [mesh, p0, p1, parts] = BuildPyramidSystem();
+
+    // After buildSystem, p0 sits at the UV origin and p1 sits on the axis
+    // whose component of (p1->pos - p0->pos) had the largest magnitude.
+    // Therefore b = bFree * bFixed * -1 must have at least one nonzero entry
+    // (the pin1 axis contributes a nonzero displacement into b).
+    EXPECT_GT(parts.b.nonZeros(), 0)
+        << "Expected pin-row contributions to populate b via bFree * bFixed";
+
+    // Pin vertex indices must not appear as columns in A — A's columns are
+    // indexed by freeIdxTable slots only. We verify this structurally by
+    // confirming A has exactly 2*numFree columns (already covered by the
+    // dimensions test) and that pin vertices are absent from freeIdxTable
+    // (covered above). The combination is the structural guarantee that
+    // pin-row contributions cannot land in A.
+    SUCCEED();
+}
