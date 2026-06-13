@@ -21,8 +21,8 @@
 - [x] 3.2 All existing parameterization tests pass — `EXPECT_FLOAT_EQ` (`Parameterization.AngledBasedLSCM`) and `EXPECT_DOUBLE_EQ` (`Parameterizations.AngleBasedLSCM_Double`) against hardcoded baseline UVs both pass → bit-identical within 4 ULP
 
 ## Phase 4: Migrate HierarchicalLSCM
-- [ ] 4.1 Replace duplicated logic in `solveLSCMLevel` with call to `detail::lscm::buildSystem`
-- [ ] 4.2 All HLSCM tests pass — numerical results bit-identical (capture multi-level baseline, diff against post-refactor)
+- [x] 4.1 Replace duplicated logic in `solveLSCMLevel` with call to `detail::lscm::buildSystem`
+- [x] 4.2 All HLSCM tests pass — including `HLSCM.MultiLevelHierarchy`, `HLSCM.ABFPlusPlusAnglePreservation` (T7 curved mesh), and `HLSCMInternal.SolveLSCMLevel_KnownMesh` which directly verifies parity with `AngleBasedLSCM`
 
 ## Phase 5: Amalgamation and finalize
 - [ ] 5.1 Verify amalgamation script picks up new header (`single_include.json` updated in 2.2); run `python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .`
