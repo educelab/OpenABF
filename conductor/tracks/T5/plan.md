@@ -1,29 +1,37 @@
 # T5 Implementation Plan
 
-## Phase 1: Expose level count
-1. Change `buildHierarchy` return type to include the level count, or add a thin `buildHierarchyWithCount` wrapper
-2. Update `MultiLevelHierarchy` test to assert `levels.size() >= 2` directly
+## Phase 1: Expose level count — DONE (no header change required)
+- `detail::hlscm::buildHierarchy` already returns the levels vector by value, so
+  `levels.size()` directly yields the level count. No public-API change made.
+- `MultiLevelHierarchy` test now calls `buildHierarchy` directly and asserts
+  `levels.size() >= 2`.
 
-## Phase 2: BuildHierarchy_LevelCount test
-1. Call `detail::hlscm::buildHierarchy` on a 20×20 wavy surface with `minCoarseVerts=10`
-2. Assert `levels.size() >= 3` (known from existing benchmark)
-3. For each consecutive pair of levels, assert vertex count ratio ≈ `levelRatio`
-4. For each level, verify `localToOriginal` and `originalToLocal` are consistent inverses
-5. Assert pin vertices (idx 0 and 1) appear in every level's `localToOriginal`
+## Phase 2: BuildHierarchy_LevelCount test — DONE
+- Calls `detail::hlscm::buildHierarchy` on a 20×20 wavy surface with
+  `levelRatio=4`, `minCoarseVerts=10`.
+- Asserts `levels.size() >= 3`.
+- Asserts vertex-count ratio between consecutive non-floor levels lies in
+  `[0.5 * levelRatio, 2 * levelRatio]`.
+- Asserts `localToOriginal` and `originalToLocal` are consistent inverses on
+  every level.
+- Asserts pins 0 and 1 appear in every level's `originalToLocal`.
 
-## Phase 3: ProlongateUVs_BarycentricReconstruction test
-1. Build a 2-level hierarchy on a small grid
-2. Assign known UV positions to coarse-level vertices
-3. Call `prolongateUVs` with the known UVs and the collapse records
-4. For each collapsed vertex, compute expected UV from its `containingTri` + `bary` manually
-5. Assert each prolongated UV matches expected within 1e-5
+## Phase 3: ProlongateUVs_BarycentricReconstruction test — DONE
+- Builds a 2-level hierarchy on a 5×5 grid with `levelRatio=4`, `minCoarseVerts=5`.
+- Assigns deterministic UVs (`U = origIdx, V = -origIdx`) to coarse vertices.
+- Replays barycentric expansion in reverse-collapse order and asserts each
+  prolongated UV matches within `1e-5f`.
+- Also asserts coarse UVs survive untouched.
 
-## Phase 4: SolveLSCMLevel_KnownMesh test
-1. Build a single-level `HierarchyLevel` for the pyramid mesh
-2. Call `solveLSCMLevel` with pins 0 and 1, no initial guess
-3. Assert returned UV map has finite values and matches `AngleBasedLSCM::Compute` on same mesh
-4. Assert pinned vertices have exactly the expected UV positions (same as LSCM pin selection)
+## Phase 4: SolveLSCMLevel_KnownMesh test — DONE
+- Builds a single-level pyramid `HierarchyLevel`.
+- Calls `detail::hlscm::solveLSCMLevel<float, ConjugateGradient>` with pins 0/1
+  and no initial guess.
+- Asserts finite UVs, pin0 at `(0, 0)`, pin1 at `(2, 0)`.
+- Asserts result matches `AngleBasedLSCM<float, ..., ConjugateGradient>::Compute`
+  within `1e-4f` on the same mesh.
 
-## Phase 5: Verify and finalize
-- `ctest` all tests pass
-- `git clang-format`
+## Phase 5: Verify and finalize — DONE
+- `ctest`: all 6 test executables pass.
+- `git clang-format` applied to `tests/src/TestParameterization.cpp`.
+- No `include/` changes → no single-header regeneration required.

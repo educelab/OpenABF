@@ -538,11 +538,19 @@ TEST(HLSCM, InstanceAPILevelRatio)
 
 TEST(HLSCM, MultiLevelHierarchy)
 {
-    // Use a mesh large enough that multiple hierarchy levels are guaranteed
-    // by forcing minCoarseVertices(10) — well below the 400-vertex wavy mesh
+    // Verify a multi-level hierarchy is actually built by calling
+    // detail::hlscm::buildHierarchy directly and asserting on levels.size().
     using HLSCM = OpenABF::HierarchicalLSCM<float>;
     auto mesh = ConstructWavySurface<HLSCM::Mesh>(20, 20);
 
+    // Match HLSCM defaults except force a small minCoarseVerts so we get >1 level
+    auto [levels, collapsesByLevel] =
+        OpenABF::detail::hlscm::buildHierarchy<float>(mesh, 0, 1, /*levelRatio=*/10,
+                                                      /*minCoarseVerts=*/10);
+    EXPECT_GE(levels.size(), std::size_t(2))
+        << "buildHierarchy produced only " << levels.size() << " level(s)";
+
+    // Sanity-check that the full pipeline still runs end-to-end on this mesh
     HLSCM hlscm;
     hlscm.setMinCoarseVertices(10);
     ASSERT_NO_THROW(hlscm.compute(mesh));
@@ -899,4 +907,201 @@ TEST(HLSCMInternal, DecimationMesh_RejectsPinnedVertex)
     // vertex 3 is the apex (non-boundary, non-pinned) — collapse may succeed or be
     // rejected on geometric grounds, but must never crash
     (void)result2;
+}
+
+TEST(HLSCMInternal, BuildHierarchy_LevelCount)
+{
+    // Directly invoke detail::hlscm::buildHierarchy on a 20×20 wavy surface
+    // and assert that the returned hierarchy has the expected structure:
+    //   - At least 3 levels at minCoarseVerts=10
+    //   - Consecutive-level vertex-count ratio approximately matches levelRatio
+    //   - localToOriginal and originalToLocal are consistent inverses
+    //   - Pin vertices survive at every level
+    using HLSCM = OpenABF::HierarchicalLSCM<float>;
+    auto mesh = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 1;
+    constexpr std::size_t levelRatio = 4;
+    constexpr std::size_t minCoarseVerts = 10;
+
+    auto [levels, collapsesByLevel] =
+        OpenABF::detail::hlscm::buildHierarchy<float>(mesh, pin0, pin1, levelRatio, minCoarseVerts);
+
+    // 20x20 = 400 verts, ratio 4, min 10  →  400, 100, 25, 10  → 4 levels (≥3)
+    ASSERT_GE(levels.size(), std::size_t(3))
+        << "Expected hierarchy with >= 3 levels; got " << levels.size();
+
+    // levels and collapsesByLevel are paired: each collapsesByLevel[k]
+    // describes the transition from levels[k] to levels[k+1]
+    ASSERT_EQ(collapsesByLevel.size(), levels.size() - 1);
+
+    // For each consecutive pair, assert vertex count ratio ≈ levelRatio
+    // (within a generous tolerance because decimation may stop early for
+    // geometric reasons and the last step clamps to minCoarseVerts)
+    for (std::size_t k = 0; k + 1 < levels.size(); ++k) {
+        auto prev = levels[k].localToOriginal.size();
+        auto next = levels[k + 1].localToOriginal.size();
+        ASSERT_GT(prev, next) << "Level " << (k + 1) << " is not coarser than level " << k;
+        // ratio = prev/next; allow [0.5*levelRatio, 2*levelRatio] except at the
+        // floor where we clamp to minCoarseVerts
+        auto ratio = static_cast<double>(prev) / static_cast<double>(next);
+        if (next > minCoarseVerts) {
+            EXPECT_GE(ratio, 0.5 * levelRatio)
+                << "Level " << k << "→" << (k + 1) << " ratio " << ratio << " too small";
+            EXPECT_LE(ratio, 2.0 * levelRatio)
+                << "Level " << k << "→" << (k + 1) << " ratio " << ratio << " too large";
+        }
+    }
+
+    // For each level: localToOriginal and originalToLocal are consistent inverses.
+    for (std::size_t k = 0; k < levels.size(); ++k) {
+        const auto& lvl = levels[k];
+        EXPECT_EQ(lvl.localToOriginal.size(), lvl.positions.size())
+            << "Level " << k << ": localToOriginal size != positions size";
+        EXPECT_EQ(lvl.originalToLocal.size(), lvl.localToOriginal.size())
+            << "Level " << k << ": map sizes mismatch";
+        for (std::size_t li = 0; li < lvl.localToOriginal.size(); ++li) {
+            auto origIdx = lvl.localToOriginal[li];
+            auto it = lvl.originalToLocal.find(origIdx);
+            ASSERT_NE(it, lvl.originalToLocal.end())
+                << "Level " << k << ": original idx " << origIdx << " missing from originalToLocal";
+            EXPECT_EQ(it->second, li)
+                << "Level " << k << ": originalToLocal[" << origIdx << "] != " << li;
+        }
+    }
+
+    // Pin vertices must appear in every level
+    for (std::size_t k = 0; k < levels.size(); ++k) {
+        EXPECT_TRUE(levels[k].originalToLocal.count(pin0))
+            << "Level " << k << " missing pin0 (vertex " << pin0 << ")";
+        EXPECT_TRUE(levels[k].originalToLocal.count(pin1))
+            << "Level " << k << " missing pin1 (vertex " << pin1 << ")";
+    }
+}
+
+TEST(HLSCMInternal, ProlongateUVs_BarycentricReconstruction)
+{
+    // Build a 2-level hierarchy on a small grid, assign known UVs at the
+    // coarse level, and verify that prolongateUVs reconstructs the removed
+    // vertices' UVs as barycentric interpolations of the containingTri's UVs.
+    using HLSCM = OpenABF::HierarchicalLSCM<float>;
+    auto mesh = ConstructGrid<HLSCM::Mesh>(5, 5);
+
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 4;  // opposite corner of the top row
+
+    // Force a 2-level hierarchy (25 verts → ~6 verts at ratio 4).
+    auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
+        mesh, pin0, pin1, /*levelRatio=*/4, /*minCoarseVerts=*/5);
+    ASSERT_GE(levels.size(), std::size_t(2)) << "Expected at least 2 hierarchy levels";
+    ASSERT_FALSE(collapsesByLevel.empty()) << "Expected at least one collapse record set";
+
+    // Use the first transition (finest collapse set): from levels[0] to levels[1].
+    const auto& collapses = collapsesByLevel[0];
+    ASSERT_FALSE(collapses.empty()) << "Finest-level collapse set is empty";
+
+    // Assign deterministic UVs to coarse-level vertices: U = origIdx, V = -origIdx
+    // (anything works as long as we have one UV per surviving vertex)
+    std::unordered_map<std::size_t, std::array<float, 2>> coarseUVs;
+    for (auto origIdx : levels[1].localToOriginal) {
+        coarseUVs[origIdx] = {static_cast<float>(origIdx), -static_cast<float>(origIdx)};
+    }
+
+    auto fineUVs = OpenABF::detail::hlscm::prolongateUVs<float>(coarseUVs, collapses);
+
+    // Coarse UVs must survive untouched
+    for (const auto& [origIdx, uv] : coarseUVs) {
+        ASSERT_TRUE(fineUVs.count(origIdx))
+            << "Coarse vertex " << origIdx << " missing from prolongated UVs";
+        EXPECT_FLOAT_EQ(fineUVs[origIdx][0], uv[0]) << "Coarse vertex " << origIdx << " U mutated";
+        EXPECT_FLOAT_EQ(fineUVs[origIdx][1], uv[1]) << "Coarse vertex " << origIdx << " V mutated";
+    }
+
+    // Replay barycentric expansion in the same order as prolongateUVs (reverse
+    // of the collapse log) and verify the prolongated UVs match within 1e-5.
+    auto expected = coarseUVs;
+    for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
+        const auto& rec = *it;
+        ASSERT_TRUE(expected.count(rec.containingTri[0]))
+            << "containingTri[0] " << rec.containingTri[0] << " UV missing";
+        ASSERT_TRUE(expected.count(rec.containingTri[1]))
+            << "containingTri[1] " << rec.containingTri[1] << " UV missing";
+        ASSERT_TRUE(expected.count(rec.containingTri[2]))
+            << "containingTri[2] " << rec.containingTri[2] << " UV missing";
+        auto uv0 = expected.at(rec.containingTri[0]);
+        auto uv1 = expected.at(rec.containingTri[1]);
+        auto uv2 = expected.at(rec.containingTri[2]);
+        std::array<float, 2> exp{
+            rec.bary[0] * uv0[0] + rec.bary[1] * uv1[0] + rec.bary[2] * uv2[0],
+            rec.bary[0] * uv0[1] + rec.bary[1] * uv1[1] + rec.bary[2] * uv2[1]};
+        expected[rec.vRemoved] = exp;
+
+        ASSERT_TRUE(fineUVs.count(rec.vRemoved))
+            << "Removed vertex " << rec.vRemoved << " missing from prolongated UVs";
+        EXPECT_NEAR(fineUVs[rec.vRemoved][0], exp[0], 1e-5f)
+            << "vertex " << rec.vRemoved << " U mismatch";
+        EXPECT_NEAR(fineUVs[rec.vRemoved][1], exp[1], 1e-5f)
+            << "vertex " << rec.vRemoved << " V mismatch";
+    }
+}
+
+TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
+{
+    // Call detail::hlscm::solveLSCMLevel directly on a single-level pyramid
+    // HierarchyLevel and assert:
+    //   - all returned UVs are finite and z-component is implicit 0
+    //   - pinned vertices have the prescribed UV positions (same pin
+    //     placement convention as AngleBasedLSCM)
+    //   - the result matches AngleBasedLSCM::Compute on the same mesh
+    using HLSCM = OpenABF::HierarchicalLSCM<float>;
+    using Solver =
+        Eigen::ConjugateGradient<Eigen::SparseMatrix<float>, Eigen::Lower | Eigen::Upper>;
+    using LSCM = OpenABF::AngleBasedLSCM<float, HLSCM::Mesh, Solver>;
+
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 1;
+
+    // Build a single-level hierarchy (pyramid is too small to decimate).
+    auto meshH = ConstructPyramid<HLSCM::Mesh>();
+    auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
+        meshH, pin0, pin1, /*levelRatio=*/10, /*minCoarseVerts=*/100);
+    ASSERT_EQ(levels.size(), std::size_t(1)) << "Pyramid should produce a single-level hierarchy";
+
+    const auto& level = levels[0];
+    auto levelMesh = OpenABF::detail::hlscm::buildLevelMesh<float>(level);
+    OpenABF::ComputeMeshAngles(levelMesh);
+
+    auto uvs = OpenABF::detail::hlscm::solveLSCMLevel<float, Solver>(levelMesh, level, pin0, pin1,
+                                                                     nullptr);
+
+    // All UVs must be finite (z is implicit 0; solveLSCMLevel only returns 2-vectors)
+    ASSERT_EQ(uvs.size(), meshH->num_vertices());
+    for (const auto& [origIdx, uv] : uvs) {
+        EXPECT_TRUE(std::isfinite(uv[0])) << "vertex " << origIdx << " U not finite";
+        EXPECT_TRUE(std::isfinite(uv[1])) << "vertex " << origIdx << " V not finite";
+    }
+
+    // The pinned vertices use the same placement logic as AngleBasedLSCM:
+    // pin0 sits at the origin; pin1 sits on whichever axis its displacement
+    // from pin0 has the largest magnitude. For the pyramid (verts 0=(0,0,0)
+    // and 1=(2,0,0)), pin1 lies at (2, 0).
+    ASSERT_TRUE(uvs.count(pin0));
+    ASSERT_TRUE(uvs.count(pin1));
+    EXPECT_FLOAT_EQ(uvs[pin0][0], 0.f);
+    EXPECT_FLOAT_EQ(uvs[pin0][1], 0.f);
+    EXPECT_FLOAT_EQ(uvs[pin1][0], 2.f);
+    EXPECT_FLOAT_EQ(uvs[pin1][1], 0.f);
+
+    // Compute the reference solution via the top-level AngleBasedLSCM with the
+    // same solver and same pin selection; results must match.
+    auto meshL = ConstructPyramid<LSCM::Mesh>();
+    LSCM::Compute(meshL, pin0, pin1);
+
+    for (std::size_t v = 0; v < meshL->num_vertices(); ++v) {
+        ASSERT_TRUE(uvs.count(v)) << "vertex " << v << " missing from solveLSCMLevel UVs";
+        const auto& ref = meshL->vertex(v)->pos;
+        EXPECT_NEAR(uvs[v][0], ref[0], 1e-4f) << "vertex " << v << " U disagrees with LSCM";
+        EXPECT_NEAR(uvs[v][1], ref[1], 1e-4f) << "vertex " << v << " V disagrees with LSCM";
+    }
 }

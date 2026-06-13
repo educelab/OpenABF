@@ -8,7 +8,6 @@
 | open | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-03-18 | 2026-03-18 |
 | open | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-03-20 | 2026-03-20 |
 | open | A8 | Extract shared LSCM system-building logic from solveLSCMLevel and ComputeImpl | [#64](https://github.com/educelab/OpenABF/issues/64) | 2026-03-20 | 2026-03-20 |
-| open | T5 | HLSCM internal component unit tests (buildHierarchy, prolongateUVs, solveLSCMLevel) | [#65](https://github.com/educelab/OpenABF/issues/65) | 2026-03-20 | 2026-03-20 |
 | open | P6 | Precompute sin/cos values before HLSCM face assembly loop | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-03-20 | 2026-03-20 |
 | open | A10 | Add static Compute() overloads accepting levelRatio and minCoarseVertices | [#68](https://github.com/educelab/OpenABF/issues/68) | 2026-03-20 | 2026-03-20 |
 | open | E2 | Add sphere cap built-in mesh generator to benchmark | [#48](https://github.com/educelab/OpenABF/issues/48) | 2026-03-20 | 2026-03-20 |
@@ -25,6 +24,7 @@
 
 | Status | Track ID | Title | GitHub | Archived |
 | ------ | -------- | ----- | ------ | -------- |
+| closed | T5 | HLSCM internal component unit tests (buildHierarchy, prolongateUVs, solveLSCMLevel) | [#65](https://github.com/educelab/OpenABF/issues/65) | 2026-06-12 |
 | closed | T7 | ABFPlusPlusAnglePreservation now uses curved mesh (hemisphere) for meaningful ABF exercise | [#50](https://github.com/educelab/OpenABF/issues/50) | 2026-06-12 |
 | closed | A9 | Mark detail::hlscm types with @internal Doxygen tag | [#67](https://github.com/educelab/OpenABF/issues/67) | 2026-06-12 |
 | closed | T6 | Add test for HLSCM::setPinnedVertices() instance API | [#51](https://github.com/educelab/OpenABF/issues/51) | 2026-06-12 |
