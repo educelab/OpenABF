@@ -2,7 +2,7 @@
 
 ## Phase 1: Implementation
 - [x] 1.1 Implement sphere cap mesh generator
-- [~] 1.2 Integrate into benchmark example
+- [x] 1.2 Integrate into benchmark example
 
 ## Phase 2: Verification
 - [ ] 2.1 Verify benchmark runs with built-in mesh
