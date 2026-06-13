@@ -5,5 +5,5 @@
 - [x] 1.2 Integrate into benchmark example
 
 ## Phase 2: Verification
-- [ ] 2.1 Verify benchmark runs with built-in mesh
-- [ ] 2.2 Verify parameterization output looks correct
+- [x] 2.1 Verify benchmark runs with built-in mesh
+- [x] 2.2 Verify parameterization output looks correct
