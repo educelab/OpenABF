@@ -4,7 +4,22 @@
 https://github.com/educelab/OpenABF/issues/66
 
 ## Status
-**Blocked on [A8](../A8/spec.md) (#64).**
+**Closed as obsolete (2026-06-13)** — superseded by [A8](../A8/spec.md) (PR #88).
+
+### Why obsolete
+Post-A8, the face-assembly loop lives in `detail::lscm::buildSystem`
+(`include/OpenABF/detail/LSCMSystem.hpp`). Trig usage in that loop is:
+
+- 3 × `std::sin` per face — each on a distinct edge `alpha`
+- 1 × `std::cos` per face — on the post-rotation `e0->alpha`
+
+Every alpha is per-corner (per-face wedge) and is touched at most once per
+face. There is no per-face redundancy and no cross-face sharing for
+precomputation to eliminate. Splitting the loop into a precompute pass plus
+an assembly pass would add memory traffic without reducing trig count.
+
+If a future change makes alphas shared across faces (e.g. cached per-edge
+angles after a mesh-rep refactor), this issue can be reopened.
 
 ## Re-evaluate after A8
 Before starting work on this track, confirm it is still worth doing:
