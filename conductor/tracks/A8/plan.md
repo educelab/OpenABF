@@ -17,8 +17,8 @@
 - [x] 2.3 All three new tests pass; full ctest suite (6/6) still passes
 
 ## Phase 3: Migrate AngleBasedLSCM
-- [ ] 3.1 Replace duplicated logic in `AngleBasedLSCM::ComputeImpl` with call to `detail::lscm::buildSystem`
-- [ ] 3.2 All existing parameterization tests pass — numerical results bit-identical on a reference mesh (capture baseline UVs from current build, diff against post-refactor)
+- [x] 3.1 Replace duplicated logic in `AngleBasedLSCM::ComputeImpl` with call to `detail::lscm::buildSystem`
+- [x] 3.2 All existing parameterization tests pass — `EXPECT_FLOAT_EQ` (`Parameterization.AngledBasedLSCM`) and `EXPECT_DOUBLE_EQ` (`Parameterizations.AngleBasedLSCM_Double`) against hardcoded baseline UVs both pass → bit-identical within 4 ULP
 
 ## Phase 4: Migrate HierarchicalLSCM
 - [ ] 4.1 Replace duplicated logic in `solveLSCMLevel` with call to `detail::lscm::buildSystem`
