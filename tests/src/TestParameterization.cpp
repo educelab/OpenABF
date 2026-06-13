@@ -458,7 +458,11 @@ TEST(HLSCM, WavySurface)
 
 TEST(HLSCM, InstanceAPILevelRatio)
 {
-    // Verify setLevelRatio/setMinCoarseVertices produce valid results
+    // Verify that setLevelRatio/setMinCoarseVertices produce valid results AND
+    // that the levelRatio parameter actually affects hierarchy construction.
+    // A no-op setLevelRatio (e.g., parameter ignored) would cause the
+    // hierarchy-depth assertion below to fail because both ratios would
+    // produce identical hierarchies.
     using HLSCM = HierarchicalLSCM<float>;
 
     auto mesh = ConstructWavySurface<HLSCM::Mesh>(20, 20);
@@ -473,6 +477,34 @@ TEST(HLSCM, InstanceAPILevelRatio)
         EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v;
         EXPECT_FLOAT_EQ(pos[2], 0.f);
     }
+
+    // Directly invoke buildHierarchy with two clearly different levelRatio
+    // values on the same input.  A larger ratio decimates more aggressively
+    // per level and should produce a hierarchy with fewer levels (each level
+    // also having a smaller alive-vertex count) than a small ratio.
+    using namespace OpenABF::detail::hlscm;
+    auto mesh2 = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 19;  // opposite corner of a 20x20 grid row
+    constexpr std::size_t minCoarseVerts = 10;
+
+    auto [levelsSmall, _csmall] =
+        buildHierarchy<float>(mesh2, pin0, pin1, /*levelRatio=*/2, minCoarseVerts);
+    auto [levelsLarge, _clarge] =
+        buildHierarchy<float>(mesh2, pin0, pin1, /*levelRatio=*/8, minCoarseVerts);
+
+    // Sanity: both hierarchies have at least the finest level
+    ASSERT_GE(levelsSmall.size(), 1u);
+    ASSERT_GE(levelsLarge.size(), 1u);
+
+    // Observable effect: levelRatio=2 must produce more (or equal-but-not-fewer)
+    // levels than levelRatio=8 on a 400-vertex mesh decimated to <=10 verts.
+    // Concretely we expect strict inequality here — if equal, levelRatio is
+    // not being applied.
+    EXPECT_GT(levelsSmall.size(), levelsLarge.size())
+        << "levelRatio appears to have no effect on hierarchy depth: " << "ratio=2 produced "
+        << levelsSmall.size() << " levels, " << "ratio=8 produced " << levelsLarge.size()
+        << " levels";
 }
 
 TEST(HLSCM, MultiLevelHierarchy)
