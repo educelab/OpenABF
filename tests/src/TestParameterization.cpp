@@ -561,22 +561,57 @@ TEST(HLSCM, ABFPlusPlusAnglePreservation)
     // hierarchy level by checking that the result differs from geometry-only
     // HLSCM.  If angles were being discarded (recomputed from geometry), both
     // would produce identical output.
+    //
+    // Uses a hemisphere (genuine Gaussian curvature) so ABF angle correction
+    // has meaningful work to do.  On a near-flat mesh (e.g. wavy surface) the
+    // ABF correction is small, so the UV deltas are also small and the test
+    // is weak; a hemisphere guarantees a strong, easy-to-detect signal.
     using ABFType = ABFPlusPlus<float>;
     using HLSCM_ABF = HierarchicalLSCM<float, ABFType::Mesh>;
     using HLSCM_Geo = HierarchicalLSCM<float>;
 
-    constexpr std::size_t N = 20;
+    constexpr std::size_t rings = 12;
+    constexpr std::size_t sectors = 24;
+
+    // Snapshot the raw geometry angles before ABF rewrites them so we can
+    // verify ABF actually altered the angles (i.e. its output is non-trivial).
+    auto saveAngles = [](const auto& mesh) {
+        std::unordered_map<std::size_t, float> angles;
+        for (const auto& f : mesh->faces()) {
+            for (auto& e : *f) {
+                angles[e->idx] = e->alpha;
+            }
+        }
+        return angles;
+    };
 
     // HLSCM with ABF-optimized angles
-    auto mesh_abf = ConstructWavySurface<ABFType::Mesh>(N, N);
+    auto mesh_abf = ConstructHemisphere<ABFType::Mesh>(rings, sectors);
+    auto rawAngles = saveAngles(mesh_abf);
     ABFType::Compute(mesh_abf);
+
+    // Confirm ABF actually changed the per-half-edge angles before HLSCM runs.
+    // Without this, an "anyDifference" check downstream could be triggered by
+    // unrelated noise (solver tolerances, etc.).
+    float maxAngleDelta = 0.f;
+    for (const auto& f : mesh_abf->faces()) {
+        for (auto& e : *f) {
+            maxAngleDelta = std::max(maxAngleDelta, std::abs(e->alpha - rawAngles.at(e->idx)));
+        }
+    }
+    EXPECT_GT(maxAngleDelta, 1e-3f)
+        << "ABF++ did not modify input angles meaningfully on the curved mesh "
+           "(maxAngleDelta="
+        << maxAngleDelta << ")";
+
     HLSCM_ABF::Compute(mesh_abf);
 
     // HLSCM with geometry-only angles (no ABF)
-    auto mesh_geo = ConstructWavySurface<HLSCM_Geo::Mesh>(N, N);
+    auto mesh_geo = ConstructHemisphere<HLSCM_Geo::Mesh>(rings, sectors);
     HLSCM_Geo::Compute(mesh_geo);
 
     // Both must produce valid UVs
+    ASSERT_EQ(mesh_abf->num_vertices(), mesh_geo->num_vertices());
     for (std::size_t v = 0; v < mesh_abf->num_vertices(); ++v) {
         const auto& pos = mesh_abf->vertex(v)->pos;
         EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v;
@@ -584,22 +619,25 @@ TEST(HLSCM, ABFPlusPlusAnglePreservation)
         EXPECT_FLOAT_EQ(pos[2], 0.f);
     }
 
-    // The ABF-optimized angles should produce a measurably different result
-    // from geometry angles, proving they are actually being used at the
-    // finest level.
-    bool anyDifference = false;
+    // Measure UV difference between the two parameterizations.  Because the
+    // two solves are independent (different boundary pins resolve to the same
+    // similarity class but not the same exact coordinates), we look at the
+    // per-vertex maximum delta and require it to be substantially larger than
+    // numerical noise.  On a hemisphere the signal is order 0.1+ in UV units;
+    // a regression that discards ABF angles drops this to ~0.
+    float maxDiff = 0.f;
+    double l2Diff = 0.0;
     for (std::size_t v = 0; v < mesh_abf->num_vertices(); ++v) {
         for (int i = 0; i < 2; ++i) {
-            if (std::abs(mesh_abf->vertex(v)->pos[i] - mesh_geo->vertex(v)->pos[i]) > 1e-6f) {
-                anyDifference = true;
-                break;
-            }
+            float d = std::abs(mesh_abf->vertex(v)->pos[i] - mesh_geo->vertex(v)->pos[i]);
+            maxDiff = std::max(maxDiff, d);
+            l2Diff += static_cast<double>(d) * static_cast<double>(d);
         }
-        if (anyDifference)
-            break;
     }
-    EXPECT_TRUE(anyDifference) << "ABF++ angles had no effect on HLSCM output — "
-                                  "angles may not be preserved at finest hierarchy level";
+    EXPECT_GT(maxDiff, 1e-2f) << "ABF++ angles had negligible effect on HLSCM output "
+                                 "(maxDiff="
+                              << maxDiff << ", L2=" << std::sqrt(l2Diff)
+                              << ") — angles may not be preserved at finest hierarchy level";
 }
 
 TEST(HLSCM, ABFReducesConformalDistortion)
