@@ -1,25 +1,29 @@
 # A8 Implementation Plan
 
 ## Phase 1: Audit and design shared interface
-- [ ] 1.1 Read `AngleBasedLSCM::ComputeImpl` and `HierarchicalLSCM::solveLSCMLevel` side by side
-- [ ] 1.2 Identify exact shared lines and the parameters/return values needed
-- [ ] 1.3 Design `detail::lscm::buildSystem<T, MeshPtr>(mesh, pin0, pin1)` → `SystemParts<T>`
-  - `SystemParts` holds: `SparseMatrix<T> A`, `SparseMatrix<T> b` (or dense), `unordered_map<size_t,size_t> freeIdxTable`
+- [x] 1.1 Read `AngleBasedLSCM::ComputeImpl` and `HierarchicalLSCM::solveLSCMLevel` side by side; confirm pin-axis placement and `addContrib` lambda are already in sync — the only remaining drift is the `freeIdxTable` container type
+- [x] 1.2 Record the design decisions below in the plan (these are deliberate up-front choices, not Phase-3 discoveries):
+  - **Signature**: `detail::lscm::buildSystem<T, MeshType>(meshPtr, p0VertPtr, p1VertPtr) -> SystemParts<T>` where `SystemParts<T>` holds `SparseMatrix<T> A`, `SparseMatrix<T> b`, `std::unordered_map<std::size_t, std::size_t> freeIdxTable`
+  - **Responsibilities**: buildSystem performs pin placement on UV axes (mutates `p0->pos`, `p1->pos`) AND assembly. Pin *selection* (boundary-search or index→VertPtr) stays in the callers — that is where the two solvers correctly differ
+  - **`freeIdxTable` type**: `std::unordered_map<std::size_t, std::size_t>` in the unified utility. ABLSCM only uses `.at()` lookup, so the swap from `std::map` is numerically inert
+  - **`addContrib` lambda**: stays as a local lambda inside `buildSystem` — not exposed; revisit at A7 if multi-pin needs composability
+  - **Header location**: new `include/OpenABF/detail/LSCMSystem.hpp`. Both `AngleBasedLSCM.hpp` and `HierarchicalLSCM.hpp` include it. HLSCM keeps its existing include of `AngleBasedLSCM.hpp` for `detail::SolveLeastSquares` / `detail::is_instance_of_v` (out of scope for A8)
 
 ## Phase 2: Extract utility (TDD)
-- [ ] 2.1 Write `HLSCMInternal.BuildSystem_KnownMesh` test (pyramid, verify A/b dimensions and pin rows)
-- [ ] 2.2 Implement `detail::lscm::buildSystem` in a new header `include/OpenABF/detail/LscmSystem.hpp` (or inline in `AngleBasedLSCM.hpp` at the bottom of the `detail` section)
-- [ ] 2.3 Test passes
+- [ ] 2.1a Write `LSCMSystemBuild.Dimensions_KnownMesh` test (pyramid) — assert `A` is `2·numFaces × 2·numFree`, `b` is `2·numFaces × 1`
+- [ ] 2.1b Write `LSCMSystemBuild.FreeIdxTable_Population` test — assert size = `numVerts - 2`, contains all non-pin vertex indices, no pin indices
+- [ ] 2.1c Write `LSCMSystemBuild.PinRowsLandInB` test — assert pin-row contributions appear in `b` (via the bFixed contraction) and not in `A`
+- [ ] 2.2 Implement `detail::lscm::buildSystem` in new header `include/OpenABF/detail/LSCMSystem.hpp`; add to `single_include.json` source list
+- [ ] 2.3 All three new tests pass
 
 ## Phase 3: Migrate AngleBasedLSCM
-- [ ] 3.1 Replace duplicated logic in `AngleBasedLSCM::ComputeImpl` with call to `buildSystem`
-- [ ] 3.2 All existing parameterization tests pass — numerical results identical
+- [ ] 3.1 Replace duplicated logic in `AngleBasedLSCM::ComputeImpl` with call to `detail::lscm::buildSystem`
+- [ ] 3.2 All existing parameterization tests pass — numerical results bit-identical on a reference mesh (capture baseline UVs from current build, diff against post-refactor)
 
 ## Phase 4: Migrate HierarchicalLSCM
-- [ ] 4.1 Replace duplicated logic in `solveLSCMLevel` with call to `buildSystem`
-- [ ] 4.2 All HLSCM tests pass — numerical results identical
+- [ ] 4.1 Replace duplicated logic in `solveLSCMLevel` with call to `detail::lscm::buildSystem`
+- [ ] 4.2 All HLSCM tests pass — numerical results bit-identical (capture multi-level baseline, diff against post-refactor)
 
-## Phase 5: Update amalgamation and finalize
-- [ ] 5.1 Add new header to `single_include.json` if extracted to separate file
-- [ ] 5.2 Run amalgamation script
-- [ ] 5.3 Run clang-format
+## Phase 5: Amalgamation and finalize
+- [ ] 5.1 Verify amalgamation script picks up new header (`single_include.json` updated in 2.2); run `python3 thirdparty/amalgamate/amalgamate.py -c single_include.json -s .`
+- [ ] 5.2 Run `git clang-format` and re-stage

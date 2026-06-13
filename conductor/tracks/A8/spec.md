@@ -12,14 +12,15 @@ https://github.com/educelab/OpenABF/issues/64
 `HierarchicalLSCM::solveLSCMLevel` duplicates approximately 150 lines of
 `AngleBasedLSCM::ComputeImpl`. The duplicated sections are:
 
-1. Pin placement and boundary-vertex handling
+1. Pin placement on UV axes
 2. Free-vertex index table construction (`freeIdxTable`)
 3. LSCM sparse system assembly (building the `A` matrix and `b` vector from edge angles)
 4. UV extraction from the solver solution vector `x`
 
-Any bug fix in one implementation must be manually applied to the other. The two have already
-drifted (pin-axis selection, index table type). Future algorithm changes (e.g. A7 multi-pin
-constraints) must be applied twice.
+Any bug fix in one implementation must be manually applied to the other. The two
+have already drifted: `freeIdxTable` is `std::map` in `AngleBasedLSCM` and
+`std::unordered_map` in `HierarchicalLSCM`. Future algorithm changes
+(e.g. A7 multi-pin constraints) must be applied twice.
 
 ## Proposed design
 Extract the shared logic into a `detail::lscm` namespace utility:
@@ -41,6 +42,7 @@ solver dispatch, UV prolongation).
 ## Acceptance criteria
 - [ ] `detail::lscm::buildSystem` (or equivalent) is a single implementation used by both solvers
 - [ ] `solveLSCMLevel` and `AngleBasedLSCM::ComputeImpl` each call the shared utility
-- [ ] All existing parameterization tests pass (numerical results unchanged)
+- [ ] All existing parameterization tests pass (numerical results unchanged, bit-identical on reference meshes)
 - [ ] No new public API surface — `detail` namespace only
-- [ ] The extracted utility is covered by at least one direct test (can use T5 infrastructure)
+- [ ] `freeIdxTable` container type is unified to `std::unordered_map<std::size_t, std::size_t>` (O(1) lookup; ABLSCM only uses `.at()` so the change is numerically inert)
+- [ ] The extracted utility is covered by direct tests for (a) dimensions of `A`/`b`, (b) free-vertex index table population, (c) pin-row contributions land in `b` not `A`

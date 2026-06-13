@@ -26,7 +26,7 @@ Planned work order (updated 2026-06-13):
 
 | Status | Track ID | Title | GitHub | Created | Updated |
 | ------ | -------- | ----- | ------ | ------- | ------- |
-| open | A8 | Extract shared LSCM system-building logic from solveLSCMLevel and ComputeImpl | [#64](https://github.com/educelab/OpenABF/issues/64) | 2026-03-20 | 2026-06-13 |
+| in_progress | A8 | Extract shared LSCM system-building logic from solveLSCMLevel and ComputeImpl | [#64](https://github.com/educelab/OpenABF/issues/64) | 2026-03-20 | 2026-06-13 |
 | open | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-03-18 | 2026-06-13 |
 | open | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-03-20 | 2026-06-13 |
 | blocked | P6 | Precompute sin/cos values before HLSCM face assembly loop (blocked on A8; re-evaluate necessity after A8 lands) | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-03-20 | 2026-06-13 |
