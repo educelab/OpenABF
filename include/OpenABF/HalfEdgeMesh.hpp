@@ -76,14 +76,18 @@ auto remove_if(ForwardContainer v, UnaryPred p)
  */
 template <typename Iter>
 struct Range {
-    /// \cond INTERNAL
+    /** First iterator in the range. */
     Iter first_;
+    /** One-past-last iterator in the range. */
     Iter last_;
+    /** Range begin iterator. */
     auto begin() const -> Iter { return first_; }
+    /** Range end iterator. */
     auto end() const -> Iter { return last_; }
+    /** True if the range is empty. */
     auto empty() const -> bool { return first_ == last_; }
+    /** First element of the range. */
     auto front() const -> decltype(*first_) { return *first_; }
-    /// \endcond
 };
 
 /**
@@ -96,22 +100,31 @@ template <typename Iter, typename Pred>
 class FilteringIterator
 {
 public:
-    /// \cond INTERNAL
+    /** Difference type. */
     using difference_type = std::ptrdiff_t;
+    /** Value type. */
     using value_type = typename std::iterator_traits<Iter>::value_type;
+    /** Pointer type. */
     using pointer = typename std::iterator_traits<Iter>::pointer;
+    /** Reference type. */
     using reference = typename std::iterator_traits<Iter>::reference;
+    /** Iterator category. */
     using iterator_category = std::input_iterator_tag;
 
+    /** Default constructor. */
     FilteringIterator() = default;
+    /** Construct over `[current, end)` filtering by `pred`. */
     FilteringIterator(Iter current, Iter end, Pred pred) : current_{current}, end_{end}, pred_{pred}
     {
         advance_to_next();
     }
 
+    /** Dereference. */
     auto operator*() const -> reference { return *current_; }
+    /** Member access. */
     auto operator->() const -> pointer { return &*current_; }
 
+    /** Pre-increment; skips elements failing `pred`. */
     auto operator++() -> FilteringIterator&
     {
         ++current_;
@@ -119,15 +132,16 @@ public:
         return *this;
     }
 
+    /** Equality. */
     auto operator==(const FilteringIterator& other) const -> bool
     {
         return current_ == other.current_;
     }
+    /** Inequality. */
     auto operator!=(const FilteringIterator& other) const -> bool { return !(*this == other); }
-    /// \endcond
 
 private:
-    /// \cond INTERNAL
+    /** Advance `current_` past elements failing `pred_`. */
     void advance_to_next()
     {
         while (current_ != end_ && !pred_(*current_)) {
@@ -135,10 +149,12 @@ private:
         }
     }
 
+    /** Underlying iterator position. */
     Iter current_{};
+    /** Underlying end iterator. */
     Iter end_{};
+    /** Predicate selecting which elements to visit. */
     Pred pred_{};
-    /// \endcond
 };
 }  // namespace detail
 
@@ -526,7 +542,7 @@ private:
         }
 
     private:
-        /// \cond INTERNAL
+        /** Advance `current_` past boundary edges, wrapping to `nullptr` at end. */
         void advance_to_non_boundary()
         {
             while (current_ && current_->is_boundary()) {
@@ -538,9 +554,10 @@ private:
             }
         }
 
+        /** First edge in the wheel (used to detect wrap-around). */
         EdgePtr head_{};
+        /** Current edge in the wheel; `nullptr` at end. */
         EdgePtr current_{};
-        /// \endcond
     };
 
     /**
@@ -616,7 +633,7 @@ private:
         }
 
     private:
-        /// \cond INTERNAL
+        /** Advance `faceIt_` until a face with remaining edges is found, or the end is reached. */
         void advance_if_face_exhausted()
         {
             while (edgeIt_ == FaceIterator<true>() && faceIt_ != faceEnd_) {
@@ -627,10 +644,12 @@ private:
             }
         }
 
+        /** Current position in the face vector. */
         FaceVecIter faceIt_{};
+        /** End of the face vector. */
         FaceVecIter faceEnd_{};
+        /** Edge iterator within the current face. */
         FaceIterator<true> edgeIt_{};
-        /// \endcond
     };
 
 public:

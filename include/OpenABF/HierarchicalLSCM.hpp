@@ -469,7 +469,7 @@ public:
     }
 
 private:
-    /// \cond INTERNAL
+    /** Recompute per-vertex QEM quadrics from the live faces (Garland-Heckbert). */
     void computeQuadrics_()
     {
         for (auto& q : quadrics_) {
@@ -505,6 +505,7 @@ private:
         }
     }
 
+    /** Rebuild the unique-edge list from the live faces. */
     void buildEdges_()
     {
         edges_.clear();
@@ -561,26 +562,41 @@ private:
         return {u, v, w};
     }
 
+    /** Per-vertex 3D positions, indexed by original vertex index. */
     std::vector<Vec<T, 3>> positions_;
+    /** Per-vertex alive flag; collapses set entries to false. */
     std::vector<bool> alive_;
+    /** Per-vertex boundary flag, copied from the source mesh. */
     std::vector<bool> isBoundary_;
+    /** Per-vertex pinned flag; pinned vertices cannot be removed by collapse. */
     std::vector<bool> isPinned_;
+    /** Per-vertex QEM quadrics accumulated from incident face planes. */
     std::vector<Quadric<T>> quadrics_;
+    /** Face connectivity: each face is three vertex indices into `positions_`. */
     std::vector<std::array<std::size_t, 3>> faces_;
+    /** Per-face alive flag; collapses retire faces by setting entries to false. */
     std::vector<bool> faceAlive_;
+    /** Per-vertex incident face list. */
     std::vector<std::vector<std::size_t>> vertFaces_;
+    /** Count of alive vertices (kept current across collapses). */
     std::size_t numAliveVerts_{0};
+    /** Count of alive faces (kept current across collapses). */
     std::size_t numAliveFaces_{0};
+    /** Unique-edge list, rebuilt on demand by `buildEdges_()`. */
     std::vector<std::pair<std::size_t, std::size_t>> edges_;
 
-    // Scratch storage reused across tryCollapse calls (avoids repeated heap allocation)
+    /** Scratch buffer: neighbor indices shared between two endpoints. */
     std::vector<std::size_t> scratchShared_;
+    /** Scratch buffer: faces to retire on a collapse. */
     std::vector<std::size_t> scratchRemove_;
+    /** Scratch buffer: post-collapse face rewrites. */
     std::vector<std::array<std::size_t, 3>> scratchPostFaces_;
+    /** Scratch buffer: neighbor list of one endpoint. */
     std::vector<std::size_t> scratchNbrsA_;
+    /** Scratch buffer: neighbor list of the other endpoint. */
     std::vector<std::size_t> scratchNbrsB_;
+    /** Scratch buffer: deduplicated union of `scratchNbrsA_` and `scratchNbrsB_`. */
     std::vector<std::size_t> scratchSharedNbrs_;
-    /// \endcond
 };
 
 /**

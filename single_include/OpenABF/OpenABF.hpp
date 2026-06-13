@@ -520,14 +520,18 @@ auto remove_if(ForwardContainer v, UnaryPred p)
  */
 template <typename Iter>
 struct Range {
-    /// \cond INTERNAL
+    /** First iterator in the range. */
     Iter first_;
+    /** One-past-last iterator in the range. */
     Iter last_;
+    /** Range begin iterator. */
     auto begin() const -> Iter { return first_; }
+    /** Range end iterator. */
     auto end() const -> Iter { return last_; }
+    /** True if the range is empty. */
     auto empty() const -> bool { return first_ == last_; }
+    /** First element of the range. */
     auto front() const -> decltype(*first_) { return *first_; }
-    /// \endcond
 };
 
 /**
@@ -540,22 +544,31 @@ template <typename Iter, typename Pred>
 class FilteringIterator
 {
 public:
-    /// \cond INTERNAL
+    /** Difference type. */
     using difference_type = std::ptrdiff_t;
+    /** Value type. */
     using value_type = typename std::iterator_traits<Iter>::value_type;
+    /** Pointer type. */
     using pointer = typename std::iterator_traits<Iter>::pointer;
+    /** Reference type. */
     using reference = typename std::iterator_traits<Iter>::reference;
+    /** Iterator category. */
     using iterator_category = std::input_iterator_tag;
 
+    /** Default constructor. */
     FilteringIterator() = default;
+    /** Construct over `[current, end)` filtering by `pred`. */
     FilteringIterator(Iter current, Iter end, Pred pred) : current_{current}, end_{end}, pred_{pred}
     {
         advance_to_next();
     }
 
+    /** Dereference. */
     auto operator*() const -> reference { return *current_; }
+    /** Member access. */
     auto operator->() const -> pointer { return &*current_; }
 
+    /** Pre-increment; skips elements failing `pred`. */
     auto operator++() -> FilteringIterator&
     {
         ++current_;
@@ -563,15 +576,16 @@ public:
         return *this;
     }
 
+    /** Equality. */
     auto operator==(const FilteringIterator& other) const -> bool
     {
         return current_ == other.current_;
     }
+    /** Inequality. */
     auto operator!=(const FilteringIterator& other) const -> bool { return !(*this == other); }
-    /// \endcond
 
 private:
-    /// \cond INTERNAL
+    /** Advance `current_` past elements failing `pred_`. */
     void advance_to_next()
     {
         while (current_ != end_ && !pred_(*current_)) {
@@ -579,10 +593,12 @@ private:
         }
     }
 
+    /** Underlying iterator position. */
     Iter current_{};
+    /** Underlying end iterator. */
     Iter end_{};
+    /** Predicate selecting which elements to visit. */
     Pred pred_{};
-    /// \endcond
 };
 }  // namespace detail
 
@@ -970,7 +986,7 @@ private:
         }
 
     private:
-        /// \cond INTERNAL
+        /** Advance `current_` past boundary edges, wrapping to `nullptr` at end. */
         void advance_to_non_boundary()
         {
             while (current_ && current_->is_boundary()) {
@@ -982,9 +998,10 @@ private:
             }
         }
 
+        /** First edge in the wheel (used to detect wrap-around). */
         EdgePtr head_{};
+        /** Current edge in the wheel; `nullptr` at end. */
         EdgePtr current_{};
-        /// \endcond
     };
 
     /**
@@ -1060,7 +1077,7 @@ private:
         }
 
     private:
-        /// \cond INTERNAL
+        /** Advance `faceIt_` until a face with remaining edges is found, or the end is reached. */
         void advance_if_face_exhausted()
         {
             while (edgeIt_ == FaceIterator<true>() && faceIt_ != faceEnd_) {
@@ -1071,10 +1088,12 @@ private:
             }
         }
 
+        /** Current position in the face vector. */
         FaceVecIter faceIt_{};
+        /** End of the face vector. */
         FaceVecIter faceEnd_{};
+        /** Edge iterator within the current face. */
         FaceIterator<true> edgeIt_{};
-        /// \endcond
     };
 
 public:
@@ -3879,7 +3898,7 @@ public:
     }
 
 private:
-    /// \cond INTERNAL
+    /** Recompute per-vertex QEM quadrics from the live faces (Garland-Heckbert). */
     void computeQuadrics_()
     {
         for (auto& q : quadrics_) {
@@ -3915,6 +3934,7 @@ private:
         }
     }
 
+    /** Rebuild the unique-edge list from the live faces. */
     void buildEdges_()
     {
         edges_.clear();
@@ -3971,26 +3991,41 @@ private:
         return {u, v, w};
     }
 
+    /** Per-vertex 3D positions, indexed by original vertex index. */
     std::vector<Vec<T, 3>> positions_;
+    /** Per-vertex alive flag; collapses set entries to false. */
     std::vector<bool> alive_;
+    /** Per-vertex boundary flag, copied from the source mesh. */
     std::vector<bool> isBoundary_;
+    /** Per-vertex pinned flag; pinned vertices cannot be removed by collapse. */
     std::vector<bool> isPinned_;
+    /** Per-vertex QEM quadrics accumulated from incident face planes. */
     std::vector<Quadric<T>> quadrics_;
+    /** Face connectivity: each face is three vertex indices into `positions_`. */
     std::vector<std::array<std::size_t, 3>> faces_;
+    /** Per-face alive flag; collapses retire faces by setting entries to false. */
     std::vector<bool> faceAlive_;
+    /** Per-vertex incident face list. */
     std::vector<std::vector<std::size_t>> vertFaces_;
+    /** Count of alive vertices (kept current across collapses). */
     std::size_t numAliveVerts_{0};
+    /** Count of alive faces (kept current across collapses). */
     std::size_t numAliveFaces_{0};
+    /** Unique-edge list, rebuilt on demand by `buildEdges_()`. */
     std::vector<std::pair<std::size_t, std::size_t>> edges_;
 
-    // Scratch storage reused across tryCollapse calls (avoids repeated heap allocation)
+    /** Scratch buffer: neighbor indices shared between two endpoints. */
     std::vector<std::size_t> scratchShared_;
+    /** Scratch buffer: faces to retire on a collapse. */
     std::vector<std::size_t> scratchRemove_;
+    /** Scratch buffer: post-collapse face rewrites. */
     std::vector<std::array<std::size_t, 3>> scratchPostFaces_;
+    /** Scratch buffer: neighbor list of one endpoint. */
     std::vector<std::size_t> scratchNbrsA_;
+    /** Scratch buffer: neighbor list of the other endpoint. */
     std::vector<std::size_t> scratchNbrsB_;
+    /** Scratch buffer: deduplicated union of `scratchNbrsA_` and `scratchNbrsB_`. */
     std::vector<std::size_t> scratchSharedNbrs_;
-    /// \endcond
 };
 
 /**
