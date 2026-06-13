@@ -22,6 +22,12 @@
  *                        (50k, 100k, 200k, 400k, 600k, 800k, 1M faces) up to
  *                        MAX faces (default: 1000000). Mesh files and
  *                        --builtin may be combined.
+ *   --builtin-sphere [MAX]
+ *                        Benchmark the built-in sphere-cap (hemisphere)
+ *                        sequence using the same face-count progression as
+ *                        --builtin. Sphere caps have constant positive
+ *                        Gaussian curvature and exercise ABF+LSCM quality
+ *                        in addition to performance.
  *
  * @note If Eigen was not compiled with OpenMP, all multi-thread columns will
  * report the same time as the 1-thread column.
@@ -168,6 +174,8 @@ auto main(const int argc, char* argv[]) -> int
     fs::path outputDir;
     bool builtinEnabled = false;
     std::size_t builtinMax = 1'000'000;
+    bool builtinSphereEnabled = false;
+    std::size_t builtinSphereMax = 1'000'000;
     std::vector<fs::path> meshFiles;
     std::vector<int> threadCounts;
 
@@ -199,15 +207,25 @@ auto main(const int argc, char* argv[]) -> int
                 } catch (...) {
                 }
             }
+        } else if (arg == "--builtin-sphere") {
+            builtinSphereEnabled = true;
+            if (a + 1 < argc) {
+                try {
+                    builtinSphereMax = std::stoull(argv[a + 1]);
+                    ++a;
+                } catch (...) {
+                }
+            }
         } else {
             meshFiles.emplace_back(argv[a]);
         }
     }
 
-    if (!builtinEnabled && meshFiles.empty()) {
+    if (!builtinEnabled && !builtinSphereEnabled && meshFiles.empty()) {
         std::cerr << "Usage: " << fs::path(argv[0]).filename().string()
                   << " [--threads N [N ...]] [--output-dir DIR]"
-                     " [--builtin [MAX_FACES]] [mesh1.(obj|ply) ...]\n";
+                     " [--builtin [MAX_FACES]] [--builtin-sphere [MAX_FACES]]"
+                     " [mesh1.(obj|ply) ...]\n";
         return EXIT_FAILURE;
     }
 
@@ -261,6 +279,18 @@ auto main(const int argc, char* argv[]) -> int
             }
             auto mesh = buildWavySurface(n);
             auto label = "wavy~" + std::to_string(mesh->num_faces()) + "f";
+            inputs.push_back({label, mesh});
+        }
+    }
+
+    if (builtinSphereEnabled) {
+        for (std::size_t n :
+             {50'000UL, 100'000UL, 200'000UL, 400'000UL, 600'000UL, 800'000UL, 1'000'000UL}) {
+            if (n > builtinSphereMax) {
+                break;
+            }
+            auto mesh = buildSphereCap(n);
+            auto label = "sphere~" + std::to_string(mesh->num_faces()) + "f";
             inputs.push_back({label, mesh});
         }
     }
