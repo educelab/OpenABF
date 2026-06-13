@@ -502,9 +502,9 @@ TEST(HLSCM, InstanceAPILevelRatio)
     // Concretely we expect strict inequality here — if equal, levelRatio is
     // not being applied.
     EXPECT_GT(levelsSmall.size(), levelsLarge.size())
-        << "levelRatio appears to have no effect on hierarchy depth: "
-        << "ratio=2 produced " << levelsSmall.size() << " levels, "
-        << "ratio=8 produced " << levelsLarge.size() << " levels";
+        << "levelRatio appears to have no effect on hierarchy depth: " << "ratio=2 produced "
+        << levelsSmall.size() << " levels, " << "ratio=8 produced " << levelsLarge.size()
+        << " levels";
 }
 
 TEST(HLSCM, MultiLevelHierarchy)
