@@ -1,14 +1,36 @@
 # Tracks Registry
 
+## Next Up
+
+Planned work order (updated 2026-06-13):
+
+1. **A8** — Extract shared LSCM system-building logic. Lands first because it
+   restructures `solveLSCMLevel` / `ComputeImpl` and is on the critical path for
+   any later HLSCM/LSCM perf or feature work.
+2. After A8 merges, the following run **in parallel** (each on its own branch):
+   - **P4** — IncompleteCholesky preconditioner (touches `AngleBasedLSCM` solver
+     dispatch only; independent of HLSCM internals).
+   - **P5** — HLSCM hot-path allocation reduction (touches HLSCM hierarchy data
+     structures and `prolongateUVs` / UV map return type; minimal overlap with A8
+     once shared system-building is extracted).
+   - **P6** — *Blocked on A8.* Before starting, re-evaluate whether the
+     precompute is still worthwhile: A8 may have already reshaped the
+     face-assembly loop in a way that obviates this work, or made the gain too
+     small to justify a separate track. Close as obsolete if so.
+   ⚠ P5 + P6 (if P6 is still needed) are mostly orthogonal — P6 lives in the
+   inner assembly loop; P5 touches UV map / hierarchy code — but both edit
+   `solveLSCMLevel`'s call site, so expect a small merge conflict at
+   integration time.
+
 ## Active Tracks
 
 | Status | Track ID | Title | GitHub | Created | Updated |
 | ------ | -------- | ----- | ------ | ------- | ------- |
+| open | A8 | Extract shared LSCM system-building logic from solveLSCMLevel and ComputeImpl | [#64](https://github.com/educelab/OpenABF/issues/64) | 2026-03-20 | 2026-06-13 |
+| open | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-03-18 | 2026-06-13 |
+| open | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-03-20 | 2026-06-13 |
+| blocked | P6 | Precompute sin/cos values before HLSCM face assembly loop (blocked on A8; re-evaluate necessity after A8 lands) | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-03-20 | 2026-06-13 |
 | open | A7 | Multi-pin UV constraints for LSCM | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-03-16 | 2026-03-16 |
-| open | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-03-18 | 2026-03-18 |
-| open | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-03-20 | 2026-03-20 |
-| open | A8 | Extract shared LSCM system-building logic from solveLSCMLevel and ComputeImpl | [#64](https://github.com/educelab/OpenABF/issues/64) | 2026-03-20 | 2026-03-20 |
-| open | P6 | Precompute sin/cos values before HLSCM face assembly loop | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-03-20 | 2026-03-20 |
 | open | A10 | Add static Compute() overloads accepting levelRatio and minCoarseVertices | [#68](https://github.com/educelab/OpenABF/issues/68) | 2026-03-20 | 2026-03-20 |
 | open | F5 | Implement Hierarchical SLIM (H-SLIM) | [#52](https://github.com/educelab/OpenABF/issues/52) | 2026-03-20 | 2026-03-20 |
 | open | F6 | Migrate to C++20 | [#54](https://github.com/educelab/OpenABF/issues/54) | 2026-03-20 | 2026-03-20 |

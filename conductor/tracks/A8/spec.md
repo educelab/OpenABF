@@ -3,6 +3,11 @@
 ## GitHub Issue
 https://github.com/educelab/OpenABF/issues/64
 
+## Downstream
+- [P6](../P6/spec.md) (#66) is blocked on A8 — its sin/cos precomputation
+  targets the face-assembly loop being extracted here.
+- P4 and P5 are mostly orthogonal and can run in parallel after A8 lands.
+
 ## Problem
 `HierarchicalLSCM::solveLSCMLevel` duplicates approximately 150 lines of
 `AngleBasedLSCM::ComputeImpl`. The duplicated sections are:
