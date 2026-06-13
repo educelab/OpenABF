@@ -155,6 +155,8 @@ public:
     /**
      * @brief Compute the parameterized mesh with explicit pinned vertex indices
      *
+     * @param mesh Triangle mesh whose vertex positions will be overwritten with
+     * computed 2D UV coordinates (z component set to 0).
      * @param pin0Idx Index of the first pinned vertex (placed at the UV origin)
      * @param pin1Idx Index of the second pinned vertex (placed on the nearest axis)
      * @throws SolverException If matrix cannot be decomposed or if solver fails

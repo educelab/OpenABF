@@ -520,11 +520,17 @@ auto remove_if(ForwardContainer v, UnaryPred p)
  */
 template <typename Iter>
 struct Range {
+    /** First iterator in the range. */
     Iter first_;
+    /** One-past-last iterator in the range. */
     Iter last_;
+    /** Range begin iterator. */
     auto begin() const -> Iter { return first_; }
+    /** Range end iterator. */
     auto end() const -> Iter { return last_; }
+    /** True if the range is empty. */
     auto empty() const -> bool { return first_ == last_; }
+    /** First element of the range. */
     auto front() const -> decltype(*first_) { return *first_; }
 };
 
@@ -538,21 +544,31 @@ template <typename Iter, typename Pred>
 class FilteringIterator
 {
 public:
+    /** Difference type. */
     using difference_type = std::ptrdiff_t;
+    /** Value type. */
     using value_type = typename std::iterator_traits<Iter>::value_type;
+    /** Pointer type. */
     using pointer = typename std::iterator_traits<Iter>::pointer;
+    /** Reference type. */
     using reference = typename std::iterator_traits<Iter>::reference;
+    /** Iterator category. */
     using iterator_category = std::input_iterator_tag;
 
+    /** Default constructor. */
     FilteringIterator() = default;
+    /** Construct over `[current, end)` filtering by `pred`. */
     FilteringIterator(Iter current, Iter end, Pred pred) : current_{current}, end_{end}, pred_{pred}
     {
         advance_to_next();
     }
 
+    /** Dereference. */
     auto operator*() const -> reference { return *current_; }
+    /** Member access. */
     auto operator->() const -> pointer { return &*current_; }
 
+    /** Pre-increment; skips elements failing `pred`. */
     auto operator++() -> FilteringIterator&
     {
         ++current_;
@@ -560,13 +576,16 @@ public:
         return *this;
     }
 
+    /** Equality. */
     auto operator==(const FilteringIterator& other) const -> bool
     {
         return current_ == other.current_;
     }
+    /** Inequality. */
     auto operator!=(const FilteringIterator& other) const -> bool { return !(*this == other); }
 
 private:
+    /** Advance `current_` past elements failing `pred_`. */
     void advance_to_next()
     {
         while (current_ != end_ && !pred_(*current_)) {
@@ -574,8 +593,11 @@ private:
         }
     }
 
+    /** Underlying iterator position. */
     Iter current_{};
+    /** Underlying end iterator. */
     Iter end_{};
+    /** Predicate selecting which elements to visit. */
     Pred pred_{};
 };
 }  // namespace detail
@@ -927,12 +949,13 @@ private:
             advance_to_non_boundary();
         }
 
-        /** Dereference */
+        /** Dereference (const overload) */
         template <bool C = Const>
         auto operator*() const -> std::enable_if_t<C, reference>
         {
             return current_;
         }
+        /** Dereference (non-const overload) */
         template <bool C = Const>
         auto operator*() -> std::enable_if_t<!C, reference>
         {
@@ -963,6 +986,7 @@ private:
         }
 
     private:
+        /** Advance `current_` past boundary edges, wrapping to `nullptr` at end. */
         void advance_to_non_boundary()
         {
             while (current_ && current_->is_boundary()) {
@@ -974,7 +998,9 @@ private:
             }
         }
 
+        /** First edge in the wheel (used to detect wrap-around). */
         EdgePtr head_{};
+        /** Current edge in the wheel; `nullptr` at end. */
         EdgePtr current_{};
     };
 
@@ -1002,6 +1028,7 @@ private:
         /** Iterator category */
         using iterator_category = std::input_iterator_tag;
 
+        /** Underlying face-vector iterator type */
         using FaceVecIter = typename std::vector<FacePtr>::const_iterator;
 
         /** Construct at position (begin or end depending on faceIt == faceEnd) */
@@ -1013,12 +1040,13 @@ private:
             }
         }
 
-        /** Dereference */
+        /** Dereference (const overload) */
         template <bool C = Const>
         auto operator*() const -> std::enable_if_t<C, reference>
         {
             return *edgeIt_;
         }
+        /** Dereference (non-const overload) */
         template <bool C = Const>
         auto operator*() -> std::enable_if_t<!C, reference>
         {
@@ -1049,6 +1077,7 @@ private:
         }
 
     private:
+        /** Advance `faceIt_` until a face with remaining edges is found, or the end is reached. */
         void advance_if_face_exhausted()
         {
             while (edgeIt_ == FaceIterator<true>() && faceIt_ != faceEnd_) {
@@ -1059,8 +1088,11 @@ private:
             }
         }
 
+        /** Current position in the face vector. */
         FaceVecIter faceIt_{};
+        /** End of the face vector. */
         FaceVecIter faceEnd_{};
+        /** Edge iterator within the current face. */
         FaceIterator<true> edgeIt_{};
     };
 
@@ -1380,7 +1412,10 @@ public:
     }
 
     /**
-     * @copydoc insert_vertices(const VectorOfVectors&)
+     * @brief Insert new vertices from a brace-enclosed initializer list
+     *
+     * Convenience overload of insert_vertices() accepting nested
+     * `std::initializer_list` syntax, e.g. `{{0,0,0}, {1,0,0}, {0,1,0}}`.
      */
     template <typename ValType>
     auto insert_vertices(std::initializer_list<std::initializer_list<ValType>> v)
@@ -3341,6 +3376,8 @@ public:
     /**
      * @brief Compute the parameterized mesh with explicit pinned vertex indices
      *
+     * @param mesh Triangle mesh whose vertex positions will be overwritten with
+     * computed 2D UV coordinates (z component set to 0).
      * @param pin0Idx Index of the first pinned vertex (placed at the UV origin)
      * @param pin1Idx Index of the second pinned vertex (placed on the nearest axis)
      * @throws SolverException If matrix cannot be decomposed or if solver fails
@@ -3441,6 +3478,7 @@ struct Quadric {
     {
     }
 
+    /** In-place accumulation of another quadric */
     auto operator+=(const Quadric& o) -> Quadric&
     {
         for (std::size_t i = 0; i < 10; ++i) {
@@ -3449,6 +3487,7 @@ struct Quadric {
         return *this;
     }
 
+    /** Quadric addition */
     friend auto operator+(Quadric a, const Quadric& b) -> Quadric { return a += b; }
 
     /** Evaluate quadric error at point (x, y, z) */
@@ -3859,6 +3898,7 @@ public:
     }
 
 private:
+    /** Recompute per-vertex QEM quadrics from the live faces (Garland-Heckbert). */
     void computeQuadrics_()
     {
         for (auto& q : quadrics_) {
@@ -3894,6 +3934,7 @@ private:
         }
     }
 
+    /** Rebuild the unique-edge list from the live faces. */
     void buildEdges_()
     {
         edges_.clear();
@@ -3950,24 +3991,40 @@ private:
         return {u, v, w};
     }
 
+    /** Per-vertex 3D positions, indexed by original vertex index. */
     std::vector<Vec<T, 3>> positions_;
+    /** Per-vertex alive flag; collapses set entries to false. */
     std::vector<bool> alive_;
+    /** Per-vertex boundary flag, copied from the source mesh. */
     std::vector<bool> isBoundary_;
+    /** Per-vertex pinned flag; pinned vertices cannot be removed by collapse. */
     std::vector<bool> isPinned_;
+    /** Per-vertex QEM quadrics accumulated from incident face planes. */
     std::vector<Quadric<T>> quadrics_;
+    /** Face connectivity: each face is three vertex indices into `positions_`. */
     std::vector<std::array<std::size_t, 3>> faces_;
+    /** Per-face alive flag; collapses retire faces by setting entries to false. */
     std::vector<bool> faceAlive_;
+    /** Per-vertex incident face list. */
     std::vector<std::vector<std::size_t>> vertFaces_;
+    /** Count of alive vertices (kept current across collapses). */
     std::size_t numAliveVerts_{0};
+    /** Count of alive faces (kept current across collapses). */
     std::size_t numAliveFaces_{0};
+    /** Unique-edge list, rebuilt on demand by `buildEdges_()`. */
     std::vector<std::pair<std::size_t, std::size_t>> edges_;
 
-    // Scratch storage reused across tryCollapse calls (avoids repeated heap allocation)
+    /** Scratch buffer: neighbor indices shared between two endpoints. */
     std::vector<std::size_t> scratchShared_;
+    /** Scratch buffer: faces to retire on a collapse. */
     std::vector<std::size_t> scratchRemove_;
+    /** Scratch buffer: post-collapse face rewrites. */
     std::vector<std::array<std::size_t, 3>> scratchPostFaces_;
+    /** Scratch buffer: neighbor list of one endpoint. */
     std::vector<std::size_t> scratchNbrsA_;
+    /** Scratch buffer: neighbor list of the other endpoint. */
     std::vector<std::size_t> scratchNbrsB_;
+    /** Scratch buffer: deduplicated union of `scratchNbrsA_` and `scratchNbrsB_`. */
     std::vector<std::size_t> scratchSharedNbrs_;
 };
 
@@ -4410,6 +4467,12 @@ private:
         }
     }
 
+    /**
+     * @brief Core hierarchical LSCM solve given resolved pin indices
+     *
+     * Builds the mesh hierarchy, solves LSCM at the coarsest level, then
+     * prolongates and refines at each finer level.
+     */
     static void ComputeImpl(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx,
                             std::size_t levelRatio = 10, std::size_t minCoarseVerts = 100)
     {
@@ -4465,7 +4528,9 @@ private:
 
     /** Optional explicit pin pair */
     std::optional<std::pair<std::size_t, std::size_t>> pinnedVertices_;
+    /** Ratio of vertices between consecutive hierarchy levels */
     std::size_t levelRatio_{10};
+    /** Minimum vertex count for the coarsest hierarchy level */
     std::size_t minCoarseVertices_{100};
 };
 
