@@ -1,6 +1,6 @@
 # T5 — HLSCM internal component unit tests
 
-**Status:** open
+**Status:** closed
 **Issue:** https://github.com/educelab/OpenABF/issues/65
 **Dependencies:** F1
 
