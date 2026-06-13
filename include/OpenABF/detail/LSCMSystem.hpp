@@ -27,8 +27,11 @@ namespace OpenABF::detail::lscm
  */
 template <typename T>
 struct SystemParts {
+    /** Coefficient matrix of the LSCM least-squares system. Shape `(2·numFaces) × (2·numFree)`. */
     Eigen::SparseMatrix<T> A;
+    /** Right-hand side vector. Shape `(2·numFaces) × 1`. Contains the pin contributions. */
     Eigen::SparseMatrix<T> b;
+    /** Maps mesh vertex `idx` to a row-pair slot in `A`/`x`. Excludes pin vertices. */
     std::unordered_map<std::size_t, std::size_t> freeIdxTable;
 };
 

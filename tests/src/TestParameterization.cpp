@@ -1190,10 +1190,49 @@ TEST(LSCMSystemBuild, PinRowsLandInB)
         << "Expected pin-row contributions to populate b via bFree * bFixed";
 
     // Pin vertex indices must not appear as columns in A — A's columns are
-    // indexed by freeIdxTable slots only. We verify this structurally by
-    // confirming A has exactly 2*numFree columns (already covered by the
-    // dimensions test) and that pin vertices are absent from freeIdxTable
-    // (covered above). The combination is the structural guarantee that
-    // pin-row contributions cannot land in A.
-    SUCCEED();
+    // indexed by freeIdxTable slots only. Walk A's iterator and confirm no
+    // nonzero entry lands in a column that would correspond to a pin slot.
+    const auto numFree = parts.freeIdxTable.size();
+    for (int k = 0; k < parts.A.outerSize(); ++k) {
+        for (Eigen::SparseMatrix<float>::InnerIterator it(parts.A, k); it; ++it) {
+            EXPECT_LT(static_cast<std::size_t>(it.col()), 2 * numFree)
+                << "A nonzero at col " << it.col() << " exceeds free-vertex column range";
+        }
+    }
+}
+
+TEST(LSCMSystemBuild, FreeIdxTable_DeterministicAcrossRuns)
+{
+    // A 4x4 grid yields 16 vertices, 18 faces; with pin0=0, pin1=3 (two
+    // corners on the bottom row) there are 14 free vertices — enough to
+    // detect slot-ordering regressions a 4-vertex pyramid cannot.
+    constexpr std::size_t pin0Idx = 0;
+    constexpr std::size_t pin1Idx = 3;
+
+    auto runOnce = [&]() {
+        auto mesh = ConstructGrid<LSCMSystemMesh>(4, 4);
+        ComputeMeshAngles(mesh);
+        auto p0 = mesh->vertex(pin0Idx);
+        auto p1 = mesh->vertex(pin1Idx);
+        return OpenABF::detail::lscm::buildSystem<float, LSCMSystemMesh>(mesh, p0, p1);
+    };
+
+    auto parts1 = runOnce();
+    auto parts2 = runOnce();
+
+    EXPECT_EQ(parts1.freeIdxTable.size(), 14u);
+    EXPECT_EQ(parts2.freeIdxTable.size(), 14u);
+
+    // Slot assignments must be identical run-to-run.
+    for (const auto& [origIdx, slot] : parts1.freeIdxTable) {
+        ASSERT_TRUE(parts2.freeIdxTable.count(origIdx))
+            << "vertex " << origIdx << " present in run 1, absent in run 2";
+        EXPECT_EQ(parts2.freeIdxTable.at(origIdx), slot)
+            << "vertex " << origIdx << " got slot " << slot << " in run 1 and "
+            << parts2.freeIdxTable.at(origIdx) << " in run 2";
+    }
+
+    // A's column count must equal 2*numFree on both runs.
+    EXPECT_EQ(static_cast<std::size_t>(parts1.A.cols()), 2 * 14);
+    EXPECT_EQ(static_cast<std::size_t>(parts2.A.cols()), 2 * 14);
 }
