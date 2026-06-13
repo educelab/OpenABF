@@ -261,11 +261,17 @@ auto main(const int argc, char* argv[]) -> int
     using Mtx = Eigen::SparseMatrix<FloatT>;
     using ABF = OpenABF::ABFPlusPlus<FloatT, ABFMesh>;
     using LU = Eigen::SparseLU<Mtx>;
-    using CG = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
+    // Diagonal (Jacobi) preconditioner — Eigen's CG default.
+    using CG_Diag = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper>;
+    // IncompleteCholesky preconditioner — typically converges in fewer
+    // iterations than Diagonal on the LSCM normal equations.
+    using CG_IC = Eigen::ConjugateGradient<Mtx, Eigen::Lower | Eigen::Upper,
+                                           Eigen::IncompleteCholesky<FloatT>>;
     using LSCM_LU = OpenABF::AngleBasedLSCM<FloatT, ABFMesh, LU>;
-    using LSCM_CG = OpenABF::AngleBasedLSCM<FloatT, ABFMesh, CG>;
+    using LSCM_CG_Diag = OpenABF::AngleBasedLSCM<FloatT, ABFMesh, CG_Diag>;
+    using LSCM_CG_IC = OpenABF::AngleBasedLSCM<FloatT, ABFMesh, CG_IC>;
     using HLSCM_LSCG = OpenABF::HierarchicalLSCM<FloatT, ABFMesh>;
-    using HLSCM_CG = OpenABF::HierarchicalLSCM<FloatT, ABFMesh, CG>;
+    using HLSCM_CG = OpenABF::HierarchicalLSCM<FloatT, ABFMesh, CG_Diag>;
 
     // Assemble benchmark inputs
     std::vector<BenchInput> inputs;
@@ -302,7 +308,10 @@ auto main(const int argc, char* argv[]) -> int
     // Print table header
     std::cout << "| Mesh | Num. faces | ABF++ (s) | LSCM SparseLU (s)";
     for (int t : actualThreads) {
-        std::cout << " | LSCM CG (" << t << "t) (s)";
+        std::cout << " | LSCM CG-Diag (" << t << "t) (s)";
+    }
+    for (int t : actualThreads) {
+        std::cout << " | LSCM CG-IC (" << t << "t) (s)";
     }
     for (int t : actualThreads) {
         std::cout << " | HLSCM LSCG (" << t << "t) (s)";
@@ -313,7 +322,7 @@ auto main(const int argc, char* argv[]) -> int
     std::cout << " |\n";
 
     std::cout << "|------|-----------|-----------|------------------";
-    for (std::size_t i = 0; i < 3 * actualThreads.size(); ++i) {
+    for (std::size_t i = 0; i < 4 * actualThreads.size(); ++i) {
         std::cout << "-|------------------";
     }
     std::cout << "-|\n";
@@ -362,7 +371,8 @@ auto main(const int argc, char* argv[]) -> int
         // Warmup: one untimed run of each threaded solver to hot-load mesh
         // data into cache, preventing the 1-thread column from being penalized
         // by cold-start effects.
-        runLSCM(1, [](auto& m) { LSCM_CG::Compute(m); });
+        runLSCM(1, [](auto& m) { LSCM_CG_Diag::Compute(m); });
+        runLSCM(1, [](auto& m) { LSCM_CG_IC::Compute(m); });
         runLSCM(1, [](auto& m) { HLSCM_LSCG::Compute(m); });
         runLSCM(1, [](auto& m) { HLSCM_CG::Compute(m); });
 
@@ -379,13 +389,23 @@ auto main(const int argc, char* argv[]) -> int
 
         auto [luTime, luMesh] = runLSCM(1, [](auto& m) { LSCM_LU::Compute(m); });
 
-        std::vector<double> cgTimes;
-        typename ABFMesh::Pointer cgMesh;
+        std::vector<double> cgDiagTimes;
+        typename ABFMesh::Pointer cgDiagMesh;
         for (int t : actualThreads) {
-            auto [time, mesh] = runLSCM(t, [](auto& m) { LSCM_CG::Compute(m); });
-            cgTimes.push_back(time);
+            auto [time, mesh] = runLSCM(t, [](auto& m) { LSCM_CG_Diag::Compute(m); });
+            cgDiagTimes.push_back(time);
             if (t == actualThreads.front()) {
-                cgMesh = mesh;
+                cgDiagMesh = mesh;
+            }
+        }
+
+        std::vector<double> cgIcTimes;
+        typename ABFMesh::Pointer cgIcMesh;
+        for (int t : actualThreads) {
+            auto [time, mesh] = runLSCM(t, [](auto& m) { LSCM_CG_IC::Compute(m); });
+            cgIcTimes.push_back(time);
+            if (t == actualThreads.front()) {
+                cgIcMesh = mesh;
             }
         }
 
@@ -422,8 +442,11 @@ auto main(const int argc, char* argv[]) -> int
             if (luMesh) {
                 OpenABF::WriteMesh(outputDir / (stem + "_lscm_lu.obj"), luMesh);
             }
-            if (cgMesh) {
-                OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg.obj"), cgMesh);
+            if (cgDiagMesh) {
+                OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg_diag.obj"), cgDiagMesh);
+            }
+            if (cgIcMesh) {
+                OpenABF::WriteMesh(outputDir / (stem + "_lscm_cg_ic.obj"), cgIcMesh);
             }
             if (hlscmLscgMesh) {
                 OpenABF::WriteMesh(outputDir / (stem + "_hlscm_lscg.obj"), hlscmLscgMesh);
@@ -435,7 +458,10 @@ auto main(const int argc, char* argv[]) -> int
 
         std::cout << "| " << label << " | " << numFaces << " | " << std::fixed
                   << std::setprecision(2) << abfTime << " | " << fmtTime(luTime);
-        for (double ct : cgTimes) {
+        for (double ct : cgDiagTimes) {
+            std::cout << " | " << fmtTime(ct);
+        }
+        for (double ct : cgIcTimes) {
             std::cout << " | " << fmtTime(ct);
         }
         for (double ht : hlscmLscgTimes) {
