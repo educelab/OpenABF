@@ -520,12 +520,14 @@ auto remove_if(ForwardContainer v, UnaryPred p)
  */
 template <typename Iter>
 struct Range {
+    /// \cond INTERNAL
     Iter first_;
     Iter last_;
     auto begin() const -> Iter { return first_; }
     auto end() const -> Iter { return last_; }
     auto empty() const -> bool { return first_ == last_; }
     auto front() const -> decltype(*first_) { return *first_; }
+    /// \endcond
 };
 
 /**
@@ -538,6 +540,7 @@ template <typename Iter, typename Pred>
 class FilteringIterator
 {
 public:
+    /// \cond INTERNAL
     using difference_type = std::ptrdiff_t;
     using value_type = typename std::iterator_traits<Iter>::value_type;
     using pointer = typename std::iterator_traits<Iter>::pointer;
@@ -565,8 +568,10 @@ public:
         return current_ == other.current_;
     }
     auto operator!=(const FilteringIterator& other) const -> bool { return !(*this == other); }
+    /// \endcond
 
 private:
+    /// \cond INTERNAL
     void advance_to_next()
     {
         while (current_ != end_ && !pred_(*current_)) {
@@ -577,6 +582,7 @@ private:
     Iter current_{};
     Iter end_{};
     Pred pred_{};
+    /// \endcond
 };
 }  // namespace detail
 
@@ -927,12 +933,13 @@ private:
             advance_to_non_boundary();
         }
 
-        /** Dereference */
+        /** Dereference (const overload) */
         template <bool C = Const>
         auto operator*() const -> std::enable_if_t<C, reference>
         {
             return current_;
         }
+        /** Dereference (non-const overload) */
         template <bool C = Const>
         auto operator*() -> std::enable_if_t<!C, reference>
         {
@@ -963,6 +970,7 @@ private:
         }
 
     private:
+        /// \cond INTERNAL
         void advance_to_non_boundary()
         {
             while (current_ && current_->is_boundary()) {
@@ -976,6 +984,7 @@ private:
 
         EdgePtr head_{};
         EdgePtr current_{};
+        /// \endcond
     };
 
     /**
@@ -1002,6 +1011,7 @@ private:
         /** Iterator category */
         using iterator_category = std::input_iterator_tag;
 
+        /** Underlying face-vector iterator type */
         using FaceVecIter = typename std::vector<FacePtr>::const_iterator;
 
         /** Construct at position (begin or end depending on faceIt == faceEnd) */
@@ -1013,12 +1023,13 @@ private:
             }
         }
 
-        /** Dereference */
+        /** Dereference (const overload) */
         template <bool C = Const>
         auto operator*() const -> std::enable_if_t<C, reference>
         {
             return *edgeIt_;
         }
+        /** Dereference (non-const overload) */
         template <bool C = Const>
         auto operator*() -> std::enable_if_t<!C, reference>
         {
@@ -1049,6 +1060,7 @@ private:
         }
 
     private:
+        /// \cond INTERNAL
         void advance_if_face_exhausted()
         {
             while (edgeIt_ == FaceIterator<true>() && faceIt_ != faceEnd_) {
@@ -1062,6 +1074,7 @@ private:
         FaceVecIter faceIt_{};
         FaceVecIter faceEnd_{};
         FaceIterator<true> edgeIt_{};
+        /// \endcond
     };
 
 public:
@@ -1380,7 +1393,10 @@ public:
     }
 
     /**
-     * @copydoc insert_vertices(const VectorOfVectors&)
+     * @brief Insert new vertices from a brace-enclosed initializer list
+     *
+     * Convenience overload of insert_vertices() accepting nested
+     * `std::initializer_list` syntax, e.g. `{{0,0,0}, {1,0,0}, {0,1,0}}`.
      */
     template <typename ValType>
     auto insert_vertices(std::initializer_list<std::initializer_list<ValType>> v)
@@ -3341,6 +3357,8 @@ public:
     /**
      * @brief Compute the parameterized mesh with explicit pinned vertex indices
      *
+     * @param mesh Triangle mesh whose vertex positions will be overwritten with
+     * computed 2D UV coordinates (z component set to 0).
      * @param pin0Idx Index of the first pinned vertex (placed at the UV origin)
      * @param pin1Idx Index of the second pinned vertex (placed on the nearest axis)
      * @throws SolverException If matrix cannot be decomposed or if solver fails
@@ -3441,6 +3459,7 @@ struct Quadric {
     {
     }
 
+    /** In-place accumulation of another quadric */
     auto operator+=(const Quadric& o) -> Quadric&
     {
         for (std::size_t i = 0; i < 10; ++i) {
@@ -3449,6 +3468,7 @@ struct Quadric {
         return *this;
     }
 
+    /** Quadric addition */
     friend auto operator+(Quadric a, const Quadric& b) -> Quadric { return a += b; }
 
     /** Evaluate quadric error at point (x, y, z) */
@@ -3859,6 +3879,7 @@ public:
     }
 
 private:
+    /// \cond INTERNAL
     void computeQuadrics_()
     {
         for (auto& q : quadrics_) {
@@ -3969,6 +3990,7 @@ private:
     std::vector<std::size_t> scratchNbrsA_;
     std::vector<std::size_t> scratchNbrsB_;
     std::vector<std::size_t> scratchSharedNbrs_;
+    /// \endcond
 };
 
 /**
@@ -4410,6 +4432,12 @@ private:
         }
     }
 
+    /**
+     * @brief Core hierarchical LSCM solve given resolved pin indices
+     *
+     * Builds the mesh hierarchy, solves LSCM at the coarsest level, then
+     * prolongates and refines at each finer level.
+     */
     static void ComputeImpl(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx,
                             std::size_t levelRatio = 10, std::size_t minCoarseVerts = 100)
     {
@@ -4465,7 +4493,9 @@ private:
 
     /** Optional explicit pin pair */
     std::optional<std::pair<std::size_t, std::size_t>> pinnedVertices_;
+    /** Ratio of vertices between consecutive hierarchy levels */
     std::size_t levelRatio_{10};
+    /** Minimum vertex count for the coarsest hierarchy level */
     std::size_t minCoarseVertices_{100};
 };
 
