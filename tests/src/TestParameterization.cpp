@@ -909,6 +909,89 @@ TEST(HLSCMInternal, DecimationMesh_RejectsPinnedVertex)
     (void)result2;
 }
 
+TEST(HLSCMInternal, TryCollapse_OutKeepNbrsMatchesVertexNeighbors)
+{
+    // tryCollapse's outKeepNbrs out-param is the production hot-path replacement
+    // for calling vertexNeighbors(vKeep) after every collapse. They must agree
+    // for every successful collapse — that's the invariant the perf optimization
+    // rests on.
+    using namespace OpenABF::detail::hlscm;
+    using DMesh = DecimationMesh<float>;
+    using HLSCM = OpenABF::HierarchicalLSCM<float>;
+
+    auto mesh = ConstructGrid<HLSCM::Mesh>(8, 8);  // 64 verts, plenty of valid collapses
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 7;
+    DMesh dm;
+    dm.build(mesh, pin0, pin1);
+
+    std::vector<std::size_t> outNbrs;
+    std::size_t successful = 0;
+    for (std::size_t v = 1; v < mesh->num_vertices() && successful < 16; ++v) {
+        if (!dm.isCollapsible(v)) {
+            continue;
+        }
+        // Try every available neighbour as the collapse target until one succeeds.
+        auto candidates = dm.vertexNeighbors(v);
+        for (auto target : candidates) {
+            if (!dm.isAlive(target)) {
+                continue;
+            }
+            auto rec = dm.tryCollapse(v, target, &outNbrs);
+            if (!rec) {
+                continue;
+            }
+            // The post-collapse neighbour set computed inside tryCollapse must
+            // equal what the standalone oracle would return on the same state.
+            auto oracle = dm.vertexNeighbors(target);
+            EXPECT_EQ(outNbrs, oracle) << "After collapsing " << v << " into " << target
+                                       << ": outKeepNbrs disagrees with vertexNeighbors(vKeep)";
+            ++successful;
+            break;
+        }
+    }
+    EXPECT_GT(successful, 0u) << "No successful collapses to validate";
+}
+
+TEST(HLSCMInternal, ProlongateUVs_MultiLevelCoverage)
+{
+    // Build a 3+ level hierarchy, seed UVs only at the coarsest level, then
+    // prolongate through every level transition. Every finest-level vertex
+    // must end up with a UV — the invariant that ComputeImpl's final
+    // mesh-write loop depends on (it unwraps unconditionally).
+    using HLSCM = OpenABF::HierarchicalLSCM<float>;
+    auto mesh = ConstructGrid<HLSCM::Mesh>(12, 12);  // 144 verts
+
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 11;
+
+    auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
+        mesh, pin0, pin1, /*levelRatio=*/3, /*minCoarseVerts=*/5);
+    ASSERT_GE(levels.size(), std::size_t(3)) << "Expected at least 3 hierarchy levels";
+
+    // Seed coarsest-level UVs with arbitrary deterministic values.
+    const auto origVertCount = mesh->num_vertices();
+    OpenABF::detail::hlscm::UVVector<float> uvs(origVertCount);
+    const auto& coarsest = levels.back();
+    for (std::size_t li = 0; li < coarsest.localToOriginal.size(); ++li) {
+        auto origIdx = coarsest.localToOriginal[li];
+        uvs[origIdx] =
+            OpenABF::Vec<float, 2>(static_cast<float>(origIdx), -static_cast<float>(origIdx));
+    }
+
+    // Prolongate through every level transition (coarsest → finest).
+    for (std::size_t k = levels.size() - 1; k-- > 0;) {
+        uvs = OpenABF::detail::hlscm::prolongateUVs<float>(std::move(uvs), collapsesByLevel[k]);
+    }
+
+    // Every finest-level vertex must now have a UV — the post-prolongation
+    // invariant ComputeImpl relies on.
+    for (std::size_t v = 0; v < origVertCount; ++v) {
+        ASSERT_TRUE(uvs[v].has_value())
+            << "Finest-level vertex " << v << " has no UV after multi-level prolongation";
+    }
+}
+
 TEST(HLSCMInternal, BuildHierarchy_LevelCount)
 {
     // Directly invoke detail::hlscm::buildHierarchy on a 20×20 wavy surface

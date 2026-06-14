@@ -3872,7 +3872,12 @@ public:
         return alive_[v] && !isPinned_[v];
     }
 
-    /** Get edges incident to vertex v (pairs of (v, neighbor)) */
+    /** Get alive neighbour vertices of `v` (sorted, deduped).
+     *
+     *  Production code path uses `tryCollapse`'s `outKeepNbrs` out-param to
+     *  avoid this method's per-call allocation; this overload is retained
+     *  only as the oracle for the `HLSCMInternal.TryCollapse_*` tests.
+     */
     [[nodiscard]] auto vertexNeighbors(std::size_t v) const -> std::vector<std::size_t>
     {
         std::vector<std::size_t> nbrs;
@@ -4178,36 +4183,31 @@ using UVVector = std::vector<std::optional<Vec<T, 2>>>;
 /**
  * @brief Prolongate UV coordinates from a coarser level to a finer level
  *
- * Surviving vertices get their UVs directly; removed vertices get UVs
- * via barycentric interpolation in their containing post-collapse triangle.
+ * Surviving vertices keep their existing UVs; vertices that were removed by
+ * a collapse get UVs via barycentric interpolation in their containing
+ * post-collapse triangle.
  *
- * @param coarseUVs UV coordinates indexed by original vertex index
- *                  (unset slots are `std::nullopt`).
- * @param collapses Collapse records for this level transition (finest-to-coarsest order)
- * @return UV vector indexed by original vertex index (includes all finer-level vertices
- *         touched by collapses; other slots remain `std::nullopt`).
+ * @param uvs UV coordinates indexed by original vertex index. Unset slots are
+ *            `std::nullopt`. Mutated in place: every vertex removed in
+ *            `collapses` is filled in. Returned by move.
+ * @param collapses Collapse records for this level transition.
  */
 template <typename T>
-auto prolongateUVs(UVVector<T> coarseUVs, const std::vector<CollapseRecord<T>>& collapses)
-    -> UVVector<T>
+auto prolongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collapses) -> UVVector<T>
 {
-    // Start with the coarse-level UVs and fill in vRemoved slots in reverse.
-    auto& fineUVs = coarseUVs;
-
-    // Undo collapses in reverse order (coarsest collapse first was last applied).
-    // All three containing-tri vertices are guaranteed to have UVs by the time
-    // we get here (they survived the collapse we're undoing), so the unwraps
-    // are safe.
+    // Undo collapses in reverse order — the last collapse applied is the first
+    // we need to undo to recover the next-finer level's UVs. All three
+    // containing-tri vertices are guaranteed to have UVs by the time we
+    // dereference them: they survived the collapse we're undoing.
     for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
         auto& rec = *it;
         auto& tri = rec.containingTri;
 
-        fineUVs[rec.vRemoved] = *fineUVs[tri[0]] * rec.bary[0] +
-                                *fineUVs[tri[1]] * rec.bary[1] +
-                                *fineUVs[tri[2]] * rec.bary[2];
+        uvs[rec.vRemoved] = *uvs[tri[0]] * rec.bary[0] + *uvs[tri[1]] * rec.bary[1] +
+                            *uvs[tri[2]] * rec.bary[2];
     }
 
-    return fineUVs;
+    return uvs;
 }
 
 /**
@@ -4251,7 +4251,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     // Build initial guess vector from prolongated UVs.
     // `initialGuess` is indexed by original vertex idx; nullopt entries are
     // vertices not yet solved at any coarser level.
-    bool warmed = initialGuess && !initialGuess->empty();
+    bool warmed = initialGuess != nullptr;
     auto buildInitialGuess = [&]() -> DenseMatrix {
         DenseMatrix x0 = DenseMatrix::Zero(2 * numFree, 1);
         for (const auto& v : levelMesh->vertices()) {
