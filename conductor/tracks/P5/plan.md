@@ -23,15 +23,21 @@ Branch: `p5-hlscm-alloc-reduction` (in `../OpenABF-p5` worktree).
 - [x] 4.1 No new overload needed — `HalfEdgeMesh::insert_faces` is already generic over containers-of-iterables and accepts `vector<array<size_t,3>>` directly.
 - [x] 4.2 `buildLevelMesh` now passes `level.faces` straight to `insert_faces`, eliminating the per-face `vector<vector<size_t>>` heap allocation.
 
-## Phase 5: buildEdges_ incremental — DEFERRED
-Inspection of the call sites shows `buildEdges_()` runs only **once per hierarchy level** (5–7 calls total on a 1M-face mesh), not per collapse. It's not on the hot path; the spec flagged this phase as "optional, largest scope" and the ROI is small relative to the disruption. Re-evaluate after profiling on a 500k+ mesh if needed.
+## Phase 5: buildEdges_ incremental — TRIED AND DROPPED
+Implemented in commit `886f14c` then reverted before review. The implementation maintained `edges_` incrementally inside `tryCollapse` (unordered_set of packed `min(a,b)*N + max(a,b)` keys, with a lazy vector view for the PQ-seed loop) and removed the per-level `buildEdges_` rebuild. Tests passed (44/44 parameterization assertions, including a new invariant test).
+
+Profiled on the wavy built-in series 50k–800k against the phase-1-4 binary (`baf00bb`): HLSCM-LSCG and HLSCM-CG deltas were all within ±2.5%, indistinguishable from run-to-run noise.
+
+Why: `buildEdges_()` runs ~5–7 times per `Compute()` (once per hierarchy level), totalling ~10 ms even on a 1M-face mesh. HLSCM-CG at 1M spends ~459 s in the CG solves at each level. Eliminating buildEdges_ is at most a 0.003% improvement on the overall HLSCM solve — well below the noise floor, while adding a non-trivial invariant for `tryCollapse` to maintain. Not worth the maintenance cost.
+
+If a future profiling pass shows `buildEdges_` becoming a meaningful share of the HLSCM budget (e.g. after the CG solve gets dramatically faster from a different optimization), revisit the experiment from `886f14c` in the git history.
 
 ## Phase 6: Verification — done
 - [x] 6.1 Clean ninja build of P5 worktree (`build/`).
 - [x] 6.2 ctest — 6/6 test binaries pass, 43/43 parameterization assertions pass.
-- [x] 6.3 Smoke timing against P4-branch (post-A8) baseline at 50k/100k wavy: HLSCM-CG drops ~2–3 % at this size (within noise). Phase 1–4 allocator wins are designed to scale with mesh size; expect more on 500k+ meshes — recommend re-profiling once the user runs against real scroll data.
+- [x] 6.3 Profiled phases 1–4 vs the post-A8 baseline on the wavy built-in series 50k–1M at 1 thread. Deltas in the HLSCM columns are within run-to-run noise at every size — the alloc-pressure savings phases 1–4 deliver don't show up against the dominant CG-solve cost on these meshes. Allocator wins should be more visible under memory-pressure workloads (e.g. running many parallel HLSCM Compute()s) or after the per-level CG solve gets faster.
 
-## Phase 7: Conductor & GitHub — pending commits/signing
-- [ ] 7.1 Sign and push the P5 commits (phase 1 already committed; phases 2–4 + amalgamation staged).
-- [ ] 7.2 Open PR against #63 referencing phases done and the phase-5 deferral.
-- [ ] 7.3 Update tracks.md (move P5 to archived once PR lands).
+## Phase 7: Conductor & GitHub
+- [x] 7.1 Commits pushed (phases 1–4 only): `a14d34a`, `baf00bb`.
+- [x] 7.2 PR #92 open against #63.
+- [ ] 7.3 Update `tracks.md` (move P5 to archived once PR lands).
