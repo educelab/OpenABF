@@ -3527,14 +3527,10 @@ struct HierarchyLevel {
     /** Map from level-local vertex index to original (finest) vertex index */
     std::vector<std::size_t> localToOriginal;
     /** Map from original vertex index to level-local index. Sized to the
-     *  finest-mesh vertex count; vertices not present at this level hold the
-     *  sentinel `kAbsent` (`SIZE_MAX`) so callers can distinguish "absent"
-     *  from "level-local idx 0".
+     *  finest-mesh vertex count; vertices not present at this level hold
+     *  `std::nullopt`.
      */
-    std::vector<std::size_t> originalToLocal;
-
-    /** Sentinel marking "no level-local idx for this original vertex". */
-    static constexpr std::size_t kAbsent = std::numeric_limits<std::size_t>::max();
+    std::vector<std::optional<std::size_t>> originalToLocal;
 };
 
 /**
@@ -3897,7 +3893,7 @@ public:
     [[nodiscard]] auto snapshot() const -> HierarchyLevel<T>
     {
         HierarchyLevel<T> level;
-        level.originalToLocal.assign(alive_.size(), HierarchyLevel<T>::kAbsent);
+        level.originalToLocal.assign(alive_.size(), std::nullopt);
 
         // Build mapping from original indices to level-local indices
         std::size_t localIdx = 0;
@@ -3910,14 +3906,15 @@ public:
             }
         }
 
-        // Remap faces
+        // Remap faces. Every alive face references only alive vertices, so
+        // the unwrap is always safe here.
         for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
             if (!faceAlive_[fi]) {
                 continue;
             }
             std::array<std::size_t, 3> localTri;
             for (int j = 0; j < 3; ++j) {
-                localTri[j] = level.originalToLocal[faces_[fi][j]];
+                localTri[j] = *level.originalToLocal[faces_[fi][j]];
             }
             level.faces.push_back(localTri);
         }
@@ -4173,12 +4170,10 @@ auto buildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>:
     return mesh;
 }
 
-/** Sentinel value marking a vertex slot in a UV vector that has not yet been
- *  solved/prolongated. NaN propagates if read by accident, making mistakes
- *  loud. */
+/** UV vector indexed by original (finest-level) vertex idx. Slots for
+ *  vertices not yet solved/prolongated hold `std::nullopt`. */
 template <typename T>
-constexpr auto kUnsetUV =
-    std::array<T, 2>{std::numeric_limits<T>::quiet_NaN(), std::numeric_limits<T>::quiet_NaN()};
+using UVVector = std::vector<std::optional<Vec<T, 2>>>;
 
 /**
  * @brief Prolongate UV coordinates from a coarser level to a finer level
@@ -4187,32 +4182,29 @@ constexpr auto kUnsetUV =
  * via barycentric interpolation in their containing post-collapse triangle.
  *
  * @param coarseUVs UV coordinates indexed by original vertex index
- *                  (unset slots contain `kUnsetUV<T>` / NaN).
+ *                  (unset slots are `std::nullopt`).
  * @param collapses Collapse records for this level transition (finest-to-coarsest order)
  * @return UV vector indexed by original vertex index (includes all finer-level vertices
- *         touched by collapses; other slots remain `kUnsetUV<T>`).
+ *         touched by collapses; other slots remain `std::nullopt`).
  */
 template <typename T>
-auto prolongateUVs(std::vector<std::array<T, 2>> coarseUVs,
-                   const std::vector<CollapseRecord<T>>& collapses) -> std::vector<std::array<T, 2>>
+auto prolongateUVs(UVVector<T> coarseUVs, const std::vector<CollapseRecord<T>>& collapses)
+    -> UVVector<T>
 {
     // Start with the coarse-level UVs and fill in vRemoved slots in reverse.
     auto& fineUVs = coarseUVs;
 
-    // Undo collapses in reverse order (coarsest collapse first was last applied)
+    // Undo collapses in reverse order (coarsest collapse first was last applied).
+    // All three containing-tri vertices are guaranteed to have UVs by the time
+    // we get here (they survived the collapse we're undoing), so the unwraps
+    // are safe.
     for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
         auto& rec = *it;
         auto& tri = rec.containingTri;
 
-        // All three containing-tri vertices should have UVs by now
-        const auto& uv0 = fineUVs[tri[0]];
-        const auto& uv1 = fineUVs[tri[1]];
-        const auto& uv2 = fineUVs[tri[2]];
-
-        std::array<T, 2> newUV;
-        newUV[0] = rec.bary[0] * uv0[0] + rec.bary[1] * uv1[0] + rec.bary[2] * uv2[0];
-        newUV[1] = rec.bary[0] * uv0[1] + rec.bary[1] * uv1[1] + rec.bary[2] * uv2[1];
-        fineUVs[rec.vRemoved] = newUV;
+        fineUVs[rec.vRemoved] = *fineUVs[tri[0]] * rec.bary[0] +
+                                *fineUVs[tri[1]] * rec.bary[1] +
+                                *fineUVs[tri[2]] * rec.bary[2];
     }
 
     return fineUVs;
@@ -4227,14 +4219,13 @@ auto prolongateUVs(std::vector<std::array<T, 2>> coarseUVs,
  * @param origVertCount Original (finest-level) vertex count; sizes the output
  *                      UV vector so it can be indexed by original vertex idx.
  * @return UV coordinates indexed by original vertex index. Slots for vertices
- *         not present at this level remain `kUnsetUV<T>` (NaN).
+ *         not present at this level remain `std::nullopt`.
  */
 template <typename T, class SolverType>
 auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
                     const detail::hlscm::HierarchyLevel<T>& level, std::size_t origPin0,
                     std::size_t origPin1, std::size_t origVertCount,
-                    const std::vector<std::array<T, 2>>* initialGuess)
-    -> std::vector<std::array<T, 2>>
+                    const UVVector<T>* initialGuess) -> UVVector<T>
 {
     using SparseMatrix = Eigen::SparseMatrix<T>;
     using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
@@ -4244,9 +4235,10 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     constexpr std::size_t numFixed = 2;
     auto numFree = numVerts - numFixed;
 
-    // Map original pin indices to level-local indices
-    auto localPin0 = level.originalToLocal[origPin0];
-    auto localPin1 = level.originalToLocal[origPin1];
+    // Map original pin indices to level-local indices. Pins are guaranteed
+    // to survive every decimation level so the unwrap is safe.
+    auto localPin0 = *level.originalToLocal[origPin0];
+    auto localPin1 = *level.originalToLocal[origPin1];
     auto p0 = levelMesh->vertex(localPin0);
     auto p1 = levelMesh->vertex(localPin1);
 
@@ -4257,8 +4249,8 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     auto& freeIdxTable = parts.freeIdxTable;
 
     // Build initial guess vector from prolongated UVs.
-    // `initialGuess` is indexed by original vertex idx; entries with NaN
-    // are vertices not yet solved at any coarser level.
+    // `initialGuess` is indexed by original vertex idx; nullopt entries are
+    // vertices not yet solved at any coarser level.
     bool warmed = initialGuess && !initialGuess->empty();
     auto buildInitialGuess = [&]() -> DenseMatrix {
         DenseMatrix x0 = DenseMatrix::Zero(2 * numFree, 1);
@@ -4268,10 +4260,9 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             }
             auto freeIdx = freeIdxTable.at(v->idx);
             auto origIdx = level.localToOriginal[v->idx];
-            const auto& guess = (*initialGuess)[origIdx];
-            if (!std::isnan(guess[0])) {
-                x0(2 * freeIdx, 0) = guess[0];
-                x0(2 * freeIdx + 1, 0) = guess[1];
+            if (const auto& guess = (*initialGuess)[origIdx]) {
+                x0(2 * freeIdx, 0) = (*guess)[0];
+                x0(2 * freeIdx + 1, 0) = (*guess)[1];
             }
         }
         return x0;
@@ -4332,18 +4323,18 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     }
 
     // Build output UV vector indexed by original vertex idx. Vertices not
-    // present at this level remain `kUnsetUV<T>`; they will be filled in by
+    // present at this level remain nullopt; they will be filled in by
     // prolongation when undoing collapses at finer levels.
-    std::vector<std::array<T, 2>> uvs(origVertCount, kUnsetUV<T>);
-    uvs[level.localToOriginal[p0->idx]] = {p0->pos[0], p0->pos[1]};
-    uvs[level.localToOriginal[p1->idx]] = {p1->pos[0], p1->pos[1]};
+    UVVector<T> uvs(origVertCount);
+    uvs[level.localToOriginal[p0->idx]] = Vec<T, 2>(p0->pos[0], p0->pos[1]);
+    uvs[level.localToOriginal[p1->idx]] = Vec<T, 2>(p1->pos[0], p1->pos[1]);
     for (const auto& v : levelMesh->vertices()) {
         if (v == p0 || v == p1) {
             continue;
         }
         auto freeIdx = 2 * freeIdxTable.at(v->idx);
         auto origIdx = level.localToOriginal[v->idx];
-        uvs[origIdx] = {x(freeIdx, 0), x(freeIdx + 1, 0)};
+        uvs[origIdx] = Vec<T, 2>(x(freeIdx, 0), x(freeIdx + 1, 0));
     }
     return uvs;
 }
@@ -4573,9 +4564,9 @@ private:
         }
 
         // Transfer final UVs back to input mesh.
-        // At the finest level every vertex has a UV (no NaN slots).
+        // At the finest level every vertex has a UV; the unwrap is safe.
         for (const auto& v : mesh->vertices()) {
-            const auto& uv = uvs[v->idx];
+            const auto& uv = *uvs[v->idx];
             v->pos[0] = uv[0];
             v->pos[1] = uv[1];
             v->pos[2] = T(0);

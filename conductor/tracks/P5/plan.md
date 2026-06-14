@@ -3,23 +3,23 @@
 Branch: `p5-hlscm-alloc-reduction` (in `../OpenABF-p5` worktree).
 
 ## Phase 1: UV map → dense vector — committed
-- [x] 1.1 Change `solveLSCMLevel` return type to `vector<array<T,2>>` sized to the finest-mesh vertex count with `kUnsetUV<T>` (NaN) sentinel.
-- [x] 1.2 Update `prolongateUVs` signature accordingly (input vector is moved in, output vector is moved out).
-- [x] 1.3 Update `buildInitialGuess` to dispatch on `std::isnan(uv[0])` instead of `unordered_map::find`.
-- [x] 1.4 Update `ComputeImpl` final UV output loop — every finest-level vertex has a UV so no `find()` is needed.
+- [x] 1.1 Change `solveLSCMLevel` return type to `vector<optional<Vec<T,2>>>` (aliased as `UVVector<T>`) sized to the finest-mesh vertex count; unset slots hold `std::nullopt`.
+- [x] 1.2 Update `prolongateUVs` signature accordingly (input vector is moved in, output vector is moved out). Body uses `Vec<T,2>` arithmetic for the barycentric mix.
+- [x] 1.3 Update `buildInitialGuess` to dispatch on `optional::has_value()`.
+- [x] 1.4 Update `ComputeImpl` final UV output loop — every finest-level vertex has a UV so the unwrap is safe.
 - [x] 1.5 ctest — all 43 parameterization tests pass.
 
-## Phase 2: vertexNeighbors post-collapse — on disk, uncommitted
+## Phase 2: vertexNeighbors post-collapse — committed
 - [x] 2.1 `tryCollapse` accepts optional `std::vector<std::size_t>* outKeepNbrs`; populates it with vKeep's post-collapse neighbors using already-compacted `vertFaces_[vKeep]`.
 - [x] 2.2 `buildHierarchy` reuses a single `nbrs` vector across collapses, passed by pointer to `tryCollapse`; eliminates one heap allocation per successful collapse.
 - [x] 2.3 `vertexNeighbors(v)` retained as a public read-only accessor — still used by the test suite and harmless when not on the hot path.
 
-## Phase 3: HierarchyLevel::originalToLocal — on disk, uncommitted
-- [x] 3.1 Changed `HierarchyLevel::originalToLocal` to `vector<size_t>` with `HierarchyLevel::kAbsent = SIZE_MAX` sentinel.
-- [x] 3.2 `snapshot()` sizes the vector to `alive_.size()` (finest-mesh vertex count) on entry.
-- [x] 3.3 Lookups in `solveLSCMLevel` use `operator[]`; tests updated to use the sentinel-aware `isPresent()` helper.
+## Phase 3: HierarchyLevel::originalToLocal — committed
+- [x] 3.1 Changed `HierarchyLevel::originalToLocal` to `vector<optional<size_t>>`; absent vertices hold `std::nullopt` (type system enforces unwrap rather than reserving a sentinel `size_t` value).
+- [x] 3.2 `snapshot()` sizes the vector to `alive_.size()` (finest-mesh vertex count) on entry and `assign`s `std::nullopt`.
+- [x] 3.3 Lookups in `solveLSCMLevel` use `*operator[]`; tests check `has_value()`.
 
-## Phase 4: buildLevelMesh face conversion — on disk, uncommitted
+## Phase 4: buildLevelMesh face conversion — committed
 - [x] 4.1 No new overload needed — `HalfEdgeMesh::insert_faces` is already generic over containers-of-iterables and accepts `vector<array<size_t,3>>` directly.
 - [x] 4.2 `buildLevelMesh` now passes `level.faces` straight to `insert_faces`, eliminating the per-face `vector<vector<size_t>>` heap allocation.
 
