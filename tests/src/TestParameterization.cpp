@@ -909,6 +909,89 @@ TEST(HLSCMInternal, DecimationMesh_RejectsPinnedVertex)
     (void)result2;
 }
 
+TEST(HLSCMInternal, TryCollapse_OutKeepNbrsMatchesVertexNeighbors)
+{
+    // tryCollapse's outKeepNbrs out-param is the production hot-path replacement
+    // for calling vertexNeighbors(vKeep) after every collapse. They must agree
+    // for every successful collapse — that's the invariant the perf optimization
+    // rests on.
+    using namespace OpenABF::detail::hlscm;
+    using DMesh = DecimationMesh<float>;
+    using HLSCM = OpenABF::HierarchicalLSCM<float>;
+
+    auto mesh = ConstructGrid<HLSCM::Mesh>(8, 8);  // 64 verts, plenty of valid collapses
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 7;
+    DMesh dm;
+    dm.build(mesh, pin0, pin1);
+
+    std::vector<std::size_t> outNbrs;
+    std::size_t successful = 0;
+    for (std::size_t v = 1; v < mesh->num_vertices() && successful < 16; ++v) {
+        if (!dm.isCollapsible(v)) {
+            continue;
+        }
+        // Try every available neighbour as the collapse target until one succeeds.
+        auto candidates = dm.vertexNeighbors(v);
+        for (auto target : candidates) {
+            if (!dm.isAlive(target)) {
+                continue;
+            }
+            auto rec = dm.tryCollapse(v, target, &outNbrs);
+            if (!rec) {
+                continue;
+            }
+            // The post-collapse neighbour set computed inside tryCollapse must
+            // equal what the standalone oracle would return on the same state.
+            auto oracle = dm.vertexNeighbors(target);
+            EXPECT_EQ(outNbrs, oracle) << "After collapsing " << v << " into " << target
+                                       << ": outKeepNbrs disagrees with vertexNeighbors(vKeep)";
+            ++successful;
+            break;
+        }
+    }
+    EXPECT_GT(successful, 0u) << "No successful collapses to validate";
+}
+
+TEST(HLSCMInternal, ProlongateUVs_MultiLevelCoverage)
+{
+    // Build a 3+ level hierarchy, seed UVs only at the coarsest level, then
+    // prolongate through every level transition. Every finest-level vertex
+    // must end up with a UV — the invariant that ComputeImpl's final
+    // mesh-write loop depends on (it unwraps unconditionally).
+    using HLSCM = OpenABF::HierarchicalLSCM<float>;
+    auto mesh = ConstructGrid<HLSCM::Mesh>(12, 12);  // 144 verts
+
+    constexpr std::size_t pin0 = 0;
+    constexpr std::size_t pin1 = 11;
+
+    auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
+        mesh, pin0, pin1, /*levelRatio=*/3, /*minCoarseVerts=*/5);
+    ASSERT_GE(levels.size(), std::size_t(3)) << "Expected at least 3 hierarchy levels";
+
+    // Seed coarsest-level UVs with arbitrary deterministic values.
+    const auto origVertCount = mesh->num_vertices();
+    OpenABF::detail::hlscm::UVVector<float> uvs(origVertCount);
+    const auto& coarsest = levels.back();
+    for (std::size_t li = 0; li < coarsest.localToOriginal.size(); ++li) {
+        auto origIdx = coarsest.localToOriginal[li];
+        uvs[origIdx] =
+            OpenABF::Vec<float, 2>(static_cast<float>(origIdx), -static_cast<float>(origIdx));
+    }
+
+    // Prolongate through every level transition (coarsest → finest).
+    for (std::size_t k = levels.size() - 1; k-- > 0;) {
+        uvs = OpenABF::detail::hlscm::prolongateUVs<float>(std::move(uvs), collapsesByLevel[k]);
+    }
+
+    // Every finest-level vertex must now have a UV — the post-prolongation
+    // invariant ComputeImpl relies on.
+    for (std::size_t v = 0; v < origVertCount; ++v) {
+        ASSERT_TRUE(uvs[v].has_value())
+            << "Finest-level vertex " << v << " has no UV after multi-level prolongation";
+    }
+}
+
 TEST(HLSCMInternal, BuildHierarchy_LevelCount)
 {
     // Directly invoke detail::hlscm::buildHierarchy on a 20×20 wavy surface
@@ -955,27 +1038,30 @@ TEST(HLSCMInternal, BuildHierarchy_LevelCount)
     }
 
     // For each level: localToOriginal and originalToLocal are consistent inverses.
+    using Level = OpenABF::detail::hlscm::HierarchyLevel<float>;
+    auto isPresent = [](const Level& lvl, std::size_t origIdx) {
+        return origIdx < lvl.originalToLocal.size() && lvl.originalToLocal[origIdx].has_value();
+    };
     for (std::size_t k = 0; k < levels.size(); ++k) {
         const auto& lvl = levels[k];
         EXPECT_EQ(lvl.localToOriginal.size(), lvl.positions.size())
             << "Level " << k << ": localToOriginal size != positions size";
-        EXPECT_EQ(lvl.originalToLocal.size(), lvl.localToOriginal.size())
-            << "Level " << k << ": map sizes mismatch";
+        // originalToLocal is sized to the finest-mesh vertex count; check the
+        // round-trip via localToOriginal instead of the raw container size.
         for (std::size_t li = 0; li < lvl.localToOriginal.size(); ++li) {
             auto origIdx = lvl.localToOriginal[li];
-            auto it = lvl.originalToLocal.find(origIdx);
-            ASSERT_NE(it, lvl.originalToLocal.end())
+            ASSERT_TRUE(isPresent(lvl, origIdx))
                 << "Level " << k << ": original idx " << origIdx << " missing from originalToLocal";
-            EXPECT_EQ(it->second, li)
+            EXPECT_EQ(*lvl.originalToLocal[origIdx], li)
                 << "Level " << k << ": originalToLocal[" << origIdx << "] != " << li;
         }
     }
 
     // Pin vertices must appear in every level
     for (std::size_t k = 0; k < levels.size(); ++k) {
-        EXPECT_TRUE(levels[k].originalToLocal.count(pin0))
+        EXPECT_TRUE(isPresent(levels[k], pin0))
             << "Level " << k << " missing pin0 (vertex " << pin0 << ")";
-        EXPECT_TRUE(levels[k].originalToLocal.count(pin1))
+        EXPECT_TRUE(isPresent(levels[k], pin1))
             << "Level " << k << " missing pin1 (vertex " << pin1 << ")";
     }
 }
@@ -1003,19 +1089,23 @@ TEST(HLSCMInternal, ProlongateUVs_BarycentricReconstruction)
 
     // Assign deterministic UVs to coarse-level vertices: U = origIdx, V = -origIdx
     // (anything works as long as we have one UV per surviving vertex)
-    std::unordered_map<std::size_t, std::array<float, 2>> coarseUVs;
+    OpenABF::detail::hlscm::UVVector<float> coarseUVs(mesh->num_vertices());
     for (auto origIdx : levels[1].localToOriginal) {
-        coarseUVs[origIdx] = {static_cast<float>(origIdx), -static_cast<float>(origIdx)};
+        coarseUVs[origIdx] =
+            OpenABF::Vec<float, 2>(static_cast<float>(origIdx), -static_cast<float>(origIdx));
     }
 
     auto fineUVs = OpenABF::detail::hlscm::prolongateUVs<float>(coarseUVs, collapses);
 
     // Coarse UVs must survive untouched
-    for (const auto& [origIdx, uv] : coarseUVs) {
-        ASSERT_TRUE(fineUVs.count(origIdx))
+    for (auto origIdx : levels[1].localToOriginal) {
+        const auto& uv = *coarseUVs[origIdx];
+        ASSERT_TRUE(fineUVs[origIdx].has_value())
             << "Coarse vertex " << origIdx << " missing from prolongated UVs";
-        EXPECT_FLOAT_EQ(fineUVs[origIdx][0], uv[0]) << "Coarse vertex " << origIdx << " U mutated";
-        EXPECT_FLOAT_EQ(fineUVs[origIdx][1], uv[1]) << "Coarse vertex " << origIdx << " V mutated";
+        EXPECT_FLOAT_EQ((*fineUVs[origIdx])[0], uv[0])
+            << "Coarse vertex " << origIdx << " U mutated";
+        EXPECT_FLOAT_EQ((*fineUVs[origIdx])[1], uv[1])
+            << "Coarse vertex " << origIdx << " V mutated";
     }
 
     // Replay barycentric expansion in the same order as prolongateUVs (reverse
@@ -1023,25 +1113,22 @@ TEST(HLSCMInternal, ProlongateUVs_BarycentricReconstruction)
     auto expected = coarseUVs;
     for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
         const auto& rec = *it;
-        ASSERT_TRUE(expected.count(rec.containingTri[0]))
+        ASSERT_TRUE(expected[rec.containingTri[0]].has_value())
             << "containingTri[0] " << rec.containingTri[0] << " UV missing";
-        ASSERT_TRUE(expected.count(rec.containingTri[1]))
+        ASSERT_TRUE(expected[rec.containingTri[1]].has_value())
             << "containingTri[1] " << rec.containingTri[1] << " UV missing";
-        ASSERT_TRUE(expected.count(rec.containingTri[2]))
+        ASSERT_TRUE(expected[rec.containingTri[2]].has_value())
             << "containingTri[2] " << rec.containingTri[2] << " UV missing";
-        auto uv0 = expected.at(rec.containingTri[0]);
-        auto uv1 = expected.at(rec.containingTri[1]);
-        auto uv2 = expected.at(rec.containingTri[2]);
-        std::array<float, 2> exp{
-            rec.bary[0] * uv0[0] + rec.bary[1] * uv1[0] + rec.bary[2] * uv2[0],
-            rec.bary[0] * uv0[1] + rec.bary[1] * uv1[1] + rec.bary[2] * uv2[1]};
+        OpenABF::Vec<float, 2> exp = *expected[rec.containingTri[0]] * rec.bary[0] +
+                                     *expected[rec.containingTri[1]] * rec.bary[1] +
+                                     *expected[rec.containingTri[2]] * rec.bary[2];
         expected[rec.vRemoved] = exp;
 
-        ASSERT_TRUE(fineUVs.count(rec.vRemoved))
+        ASSERT_TRUE(fineUVs[rec.vRemoved].has_value())
             << "Removed vertex " << rec.vRemoved << " missing from prolongated UVs";
-        EXPECT_NEAR(fineUVs[rec.vRemoved][0], exp[0], 1e-5f)
+        EXPECT_NEAR((*fineUVs[rec.vRemoved])[0], exp[0], 1e-5f)
             << "vertex " << rec.vRemoved << " U mismatch";
-        EXPECT_NEAR(fineUVs[rec.vRemoved][1], exp[1], 1e-5f)
+        EXPECT_NEAR((*fineUVs[rec.vRemoved])[1], exp[1], 1e-5f)
             << "vertex " << rec.vRemoved << " V mismatch";
     }
 }
@@ -1072,26 +1159,26 @@ TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
     auto levelMesh = OpenABF::detail::hlscm::buildLevelMesh<float>(level);
     OpenABF::ComputeMeshAngles(levelMesh);
 
+    const auto origVertCount = meshH->num_vertices();
     auto uvs = OpenABF::detail::hlscm::solveLSCMLevel<float, Solver>(levelMesh, level, pin0, pin1,
-                                                                     nullptr);
+                                                                     origVertCount, nullptr);
 
-    // All UVs must be finite (z is implicit 0; solveLSCMLevel only returns 2-vectors)
+    // Pyramid produces a single-level hierarchy, so every vertex must have a UV.
     ASSERT_EQ(uvs.size(), meshH->num_vertices());
-    for (const auto& [origIdx, uv] : uvs) {
-        EXPECT_TRUE(std::isfinite(uv[0])) << "vertex " << origIdx << " U not finite";
-        EXPECT_TRUE(std::isfinite(uv[1])) << "vertex " << origIdx << " V not finite";
+    for (std::size_t origIdx = 0; origIdx < uvs.size(); ++origIdx) {
+        ASSERT_TRUE(uvs[origIdx].has_value()) << "vertex " << origIdx << " missing UV";
+        EXPECT_TRUE(std::isfinite((*uvs[origIdx])[0])) << "vertex " << origIdx << " U not finite";
+        EXPECT_TRUE(std::isfinite((*uvs[origIdx])[1])) << "vertex " << origIdx << " V not finite";
     }
 
     // The pinned vertices use the same placement logic as AngleBasedLSCM:
     // pin0 sits at the origin; pin1 sits on whichever axis its displacement
     // from pin0 has the largest magnitude. For the pyramid (verts 0=(0,0,0)
     // and 1=(2,0,0)), pin1 lies at (2, 0).
-    ASSERT_TRUE(uvs.count(pin0));
-    ASSERT_TRUE(uvs.count(pin1));
-    EXPECT_FLOAT_EQ(uvs[pin0][0], 0.f);
-    EXPECT_FLOAT_EQ(uvs[pin0][1], 0.f);
-    EXPECT_FLOAT_EQ(uvs[pin1][0], 2.f);
-    EXPECT_FLOAT_EQ(uvs[pin1][1], 0.f);
+    EXPECT_FLOAT_EQ((*uvs[pin0])[0], 0.f);
+    EXPECT_FLOAT_EQ((*uvs[pin0])[1], 0.f);
+    EXPECT_FLOAT_EQ((*uvs[pin1])[0], 2.f);
+    EXPECT_FLOAT_EQ((*uvs[pin1])[1], 0.f);
 
     // Compute the reference solution via the top-level AngleBasedLSCM with the
     // same solver and same pin selection; results must match.
@@ -1099,10 +1186,9 @@ TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
     LSCM::Compute(meshL, pin0, pin1);
 
     for (std::size_t v = 0; v < meshL->num_vertices(); ++v) {
-        ASSERT_TRUE(uvs.count(v)) << "vertex " << v << " missing from solveLSCMLevel UVs";
         const auto& ref = meshL->vertex(v)->pos;
-        EXPECT_NEAR(uvs[v][0], ref[0], 1e-4f) << "vertex " << v << " U disagrees with LSCM";
-        EXPECT_NEAR(uvs[v][1], ref[1], 1e-4f) << "vertex " << v << " V disagrees with LSCM";
+        EXPECT_NEAR((*uvs[v])[0], ref[0], 1e-4f) << "vertex " << v << " U disagrees with LSCM";
+        EXPECT_NEAR((*uvs[v])[1], ref[1], 1e-4f) << "vertex " << v << " V disagrees with LSCM";
     }
 }
 

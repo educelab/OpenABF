@@ -97,8 +97,11 @@ struct HierarchyLevel {
     std::vector<std::array<std::size_t, 3>> faces;
     /** Map from level-local vertex index to original (finest) vertex index */
     std::vector<std::size_t> localToOriginal;
-    /** Map from original vertex index to level-local index */
-    std::unordered_map<std::size_t, std::size_t> originalToLocal;
+    /** Map from original vertex index to level-local index. Sized to the
+     *  finest-mesh vertex count; vertices not present at this level hold
+     *  `std::nullopt`.
+     */
+    std::vector<std::optional<std::size_t>> originalToLocal;
 };
 
 /**
@@ -166,8 +169,18 @@ public:
      * @brief Try to collapse edge (vRemove → vKeep), returning a collapse record
      *
      * Returns nullopt if the collapse is invalid.
+     *
+     * @param outKeepNbrs  Optional out-vector. On a successful collapse it is
+     *                     overwritten with vKeep's post-collapse neighbor
+     *                     vertex indices (sorted, unique). Passing a caller-
+     *                     owned vector here lets the PQ-update path reuse the
+     *                     allocation across collapses instead of letting
+     *                     `vertexNeighbors()` allocate a fresh vector each
+     *                     time.
      */
-    auto tryCollapse(std::size_t vRemove, std::size_t vKeep) -> std::optional<CollapseRecord<T>>
+    auto tryCollapse(std::size_t vRemove, std::size_t vKeep,
+                     std::vector<std::size_t>* outKeepNbrs = nullptr)
+        -> std::optional<CollapseRecord<T>>
     {
         if (!alive_[vRemove] || !alive_[vKeep]) {
             return std::nullopt;
@@ -393,6 +406,23 @@ public:
                                      [this](std::size_t fi) { return !faceAlive_[fi]; }),
                       vkFaces.end());
 
+        // Fill caller-owned post-collapse neighbor vector (reusing its
+        // allocation across calls). Equivalent to vertexNeighbors(vKeep) but
+        // without an additional heap allocation.
+        if (outKeepNbrs != nullptr) {
+            outKeepNbrs->clear();
+            for (auto fi : vkFaces) {
+                for (auto vi : faces_[fi]) {
+                    if (vi != vKeep && alive_[vi]) {
+                        outKeepNbrs->push_back(vi);
+                    }
+                }
+            }
+            std::sort(outKeepNbrs->begin(), outKeepNbrs->end());
+            outKeepNbrs->erase(std::unique(outKeepNbrs->begin(), outKeepNbrs->end()),
+                               outKeepNbrs->end());
+        }
+
         return record;
     }
 
@@ -413,7 +443,12 @@ public:
         return alive_[v] && !isPinned_[v];
     }
 
-    /** Get edges incident to vertex v (pairs of (v, neighbor)) */
+    /** Get alive neighbour vertices of `v` (sorted, deduped).
+     *
+     *  Production code path uses `tryCollapse`'s `outKeepNbrs` out-param to
+     *  avoid this method's per-call allocation; this overload is retained
+     *  only as the oracle for the `HLSCMInternal.TryCollapse_*` tests.
+     */
     [[nodiscard]] auto vertexNeighbors(std::size_t v) const -> std::vector<std::size_t>
     {
         std::vector<std::size_t> nbrs;
@@ -434,6 +469,7 @@ public:
     [[nodiscard]] auto snapshot() const -> HierarchyLevel<T>
     {
         HierarchyLevel<T> level;
+        level.originalToLocal.assign(alive_.size(), std::nullopt);
 
         // Build mapping from original indices to level-local indices
         std::size_t localIdx = 0;
@@ -446,14 +482,15 @@ public:
             }
         }
 
-        // Remap faces
+        // Remap faces. Every alive face references only alive vertices, so
+        // the unwrap is always safe here.
         for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
             if (!faceAlive_[fi]) {
                 continue;
             }
             std::array<std::size_t, 3> localTri;
             for (int j = 0; j < 3; ++j) {
-                localTri[j] = level.originalToLocal.at(faces_[fi][j]);
+                localTri[j] = *level.originalToLocal[faces_[fi][j]];
             }
             level.faces.push_back(localTri);
         }
@@ -625,6 +662,10 @@ auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std
         return {levels, collapsesByLevel};
     }
 
+    // Reused across collapses to avoid per-collapse heap allocation; populated
+    // by tryCollapse with vKeep's post-collapse neighbors.
+    std::vector<std::size_t> nbrs;
+
     while (targetVerts > minCoarseVerts) {
         auto nextTarget = std::max(targetVerts / levelRatio, minCoarseVerts);
         std::vector<CollapseRecord<T>> levelCollapses;
@@ -653,15 +694,15 @@ auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std
             if (!dmesh.isAlive(vRemove) || !dmesh.isAlive(vKeep)) {
                 continue;
             }
-            auto record = dmesh.tryCollapse(vRemove, vKeep);
+            auto record = dmesh.tryCollapse(vRemove, vKeep, &nbrs);
             if (!record) {
                 continue;
             }
 
             levelCollapses.push_back(*record);
 
-            // Add new edges involving vKeep to the priority queue
-            auto nbrs = dmesh.vertexNeighbors(vKeep);
+            // Add new edges involving vKeep to the priority queue using the
+            // post-collapse neighbor list populated by tryCollapse.
             for (auto nb : nbrs) {
                 if (dmesh.isCollapsible(nb)) {
                     pq.push({dmesh.collapseCost(nb, vKeep), {nb, vKeep}});
@@ -696,51 +737,48 @@ auto buildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>:
         mesh->insert_vertex(pos[0], pos[1], pos[2]);
     }
 
-    std::vector<std::vector<std::size_t>> faceVec;
-    faceVec.reserve(level.faces.size());
-    for (const auto& tri : level.faces) {
-        faceVec.push_back({tri[0], tri[1], tri[2]});
-    }
-    mesh->insert_faces(faceVec);
+    // level.faces is already `vector<array<size_t,3>>`; insert_faces is generic
+    // over containers-of-iterables so we can pass it directly instead of
+    // copying every face into a `vector<vector<size_t>>` (one heap allocation
+    // per face).
+    mesh->insert_faces(level.faces);
 
     return mesh;
 }
 
+/** UV vector indexed by original (finest-level) vertex idx. Slots for
+ *  vertices not yet solved/prolongated hold `std::nullopt`. */
+template <typename T>
+using UVVector = std::vector<std::optional<Vec<T, 2>>>;
+
 /**
  * @brief Prolongate UV coordinates from a coarser level to a finer level
  *
- * Surviving vertices get their UVs directly; removed vertices get UVs
- * via barycentric interpolation in their containing post-collapse triangle.
+ * Surviving vertices keep their existing UVs; vertices that were removed by
+ * a collapse get UVs via barycentric interpolation in their containing
+ * post-collapse triangle.
  *
- * @param coarseUVs UV coordinates indexed by original vertex index
- * @param collapses Collapse records for this level transition (finest-to-coarsest order)
- * @return UV map indexed by original vertex index (includes all finer-level vertices)
+ * @param uvs UV coordinates indexed by original vertex index. Unset slots are
+ *            `std::nullopt`. Mutated in place: every vertex removed in
+ *            `collapses` is filled in. Returned by move.
+ * @param collapses Collapse records for this level transition.
  */
 template <typename T>
-auto prolongateUVs(const std::unordered_map<std::size_t, std::array<T, 2>>& coarseUVs,
-                   const std::vector<CollapseRecord<T>>& collapses)
-    -> std::unordered_map<std::size_t, std::array<T, 2>>
+auto prolongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collapses) -> UVVector<T>
 {
-    // Start with all coarse-level UVs
-    auto fineUVs = coarseUVs;
-
-    // Undo collapses in reverse order (coarsest collapse first was last applied)
+    // Undo collapses in reverse order — the last collapse applied is the first
+    // we need to undo to recover the next-finer level's UVs. All three
+    // containing-tri vertices are guaranteed to have UVs by the time we
+    // dereference them: they survived the collapse we're undoing.
     for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
         auto& rec = *it;
         auto& tri = rec.containingTri;
 
-        // All three containing-tri vertices should have UVs by now
-        auto uv0 = fineUVs.at(tri[0]);
-        auto uv1 = fineUVs.at(tri[1]);
-        auto uv2 = fineUVs.at(tri[2]);
-
-        std::array<T, 2> newUV;
-        newUV[0] = rec.bary[0] * uv0[0] + rec.bary[1] * uv1[0] + rec.bary[2] * uv2[0];
-        newUV[1] = rec.bary[0] * uv0[1] + rec.bary[1] * uv1[1] + rec.bary[2] * uv2[1];
-        fineUVs[rec.vRemoved] = newUV;
+        uvs[rec.vRemoved] =
+            *uvs[tri[0]] * rec.bary[0] + *uvs[tri[1]] * rec.bary[1] + *uvs[tri[2]] * rec.bary[2];
     }
 
-    return fineUVs;
+    return uvs;
 }
 
 /**
@@ -749,14 +787,16 @@ auto prolongateUVs(const std::unordered_map<std::size_t, std::array<T, 2>>& coar
  * Builds the Lévy et al. Eq. 10 LSCM system on the given level mesh with the
  * given pin vertices. If an initial guess is provided, uses solveWithGuess.
  *
- * @return UV coordinates indexed by original vertex index
+ * @param origVertCount Original (finest-level) vertex count; sizes the output
+ *                      UV vector so it can be indexed by original vertex idx.
+ * @return UV coordinates indexed by original vertex index. Slots for vertices
+ *         not present at this level remain `std::nullopt`.
  */
 template <typename T, class SolverType>
 auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
                     const detail::hlscm::HierarchyLevel<T>& level, std::size_t origPin0,
-                    std::size_t origPin1,
-                    const std::unordered_map<std::size_t, std::array<T, 2>>* initialGuess)
-    -> std::unordered_map<std::size_t, std::array<T, 2>>
+                    std::size_t origPin1, std::size_t origVertCount,
+                    const UVVector<T>* initialGuess) -> UVVector<T>
 {
     using SparseMatrix = Eigen::SparseMatrix<T>;
     using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
@@ -766,9 +806,10 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     constexpr std::size_t numFixed = 2;
     auto numFree = numVerts - numFixed;
 
-    // Map original pin indices to level-local indices
-    auto localPin0 = level.originalToLocal.at(origPin0);
-    auto localPin1 = level.originalToLocal.at(origPin1);
+    // Map original pin indices to level-local indices. Pins are guaranteed
+    // to survive every decimation level so the unwrap is safe.
+    auto localPin0 = *level.originalToLocal[origPin0];
+    auto localPin1 = *level.originalToLocal[origPin1];
     auto p0 = levelMesh->vertex(localPin0);
     auto p1 = levelMesh->vertex(localPin1);
 
@@ -778,8 +819,10 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     auto& b = parts.b;
     auto& freeIdxTable = parts.freeIdxTable;
 
-    // Build initial guess vector from prolongated UVs
-    bool warmed = initialGuess && !initialGuess->empty();
+    // Build initial guess vector from prolongated UVs.
+    // `initialGuess` is indexed by original vertex idx; nullopt entries are
+    // vertices not yet solved at any coarser level.
+    bool warmed = initialGuess != nullptr;
     auto buildInitialGuess = [&]() -> DenseMatrix {
         DenseMatrix x0 = DenseMatrix::Zero(2 * numFree, 1);
         for (const auto& v : levelMesh->vertices()) {
@@ -788,10 +831,9 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             }
             auto freeIdx = freeIdxTable.at(v->idx);
             auto origIdx = level.localToOriginal[v->idx];
-            auto guessIt = initialGuess->find(origIdx);
-            if (guessIt != initialGuess->end()) {
-                x0(2 * freeIdx, 0) = guessIt->second[0];
-                x0(2 * freeIdx + 1, 0) = guessIt->second[1];
+            if (const auto& guess = (*initialGuess)[origIdx]) {
+                x0(2 * freeIdx, 0) = (*guess)[0];
+                x0(2 * freeIdx + 1, 0) = (*guess)[1];
             }
         }
         return x0;
@@ -851,17 +893,19 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
         x = solver.solve(Atb);
     }
 
-    // Build output UV map (original vertex indices → UV)
-    std::unordered_map<std::size_t, std::array<T, 2>> uvs;
-    uvs[level.localToOriginal[p0->idx]] = {p0->pos[0], p0->pos[1]};
-    uvs[level.localToOriginal[p1->idx]] = {p1->pos[0], p1->pos[1]};
+    // Build output UV vector indexed by original vertex idx. Vertices not
+    // present at this level remain nullopt; they will be filled in by
+    // prolongation when undoing collapses at finer levels.
+    UVVector<T> uvs(origVertCount);
+    uvs[level.localToOriginal[p0->idx]] = Vec<T, 2>(p0->pos[0], p0->pos[1]);
+    uvs[level.localToOriginal[p1->idx]] = Vec<T, 2>(p1->pos[0], p1->pos[1]);
     for (const auto& v : levelMesh->vertices()) {
         if (v == p0 || v == p1) {
             continue;
         }
         auto freeIdx = 2 * freeIdxTable.at(v->idx);
         auto origIdx = level.localToOriginal[v->idx];
-        uvs[origIdx] = {x(freeIdx, 0), x(freeIdx + 1, 0)};
+        uvs[origIdx] = Vec<T, 2>(x(freeIdx, 0), x(freeIdx + 1, 0));
     }
     return uvs;
 }
@@ -1058,17 +1102,21 @@ private:
             return;
         }
 
+        // UV vectors are sized to the original (finest-level) vertex count
+        // so they can be indexed by `original vertex idx` at every level.
+        const auto origVertCount = mesh->num_vertices();
+
         // Solve coarsest level (last in the array)
         auto coarsestIdx = levels.size() - 1;
         auto coarseMesh = detail::hlscm::buildLevelMesh<T>(levels[coarsestIdx]);
         ComputeMeshAngles(coarseMesh);
-        auto uvs = detail::hlscm::solveLSCMLevel<T, Solver>(coarseMesh, levels[coarsestIdx],
-                                                            pin0Idx, pin1Idx, nullptr);
+        auto uvs = detail::hlscm::solveLSCMLevel<T, Solver>(
+            coarseMesh, levels[coarsestIdx], pin0Idx, pin1Idx, origVertCount, nullptr);
 
         // Prolongate and refine at each finer level
         for (std::size_t k = coarsestIdx; k-- > 0;) {
             // Prolongate UVs from level k+1 to level k
-            uvs = detail::hlscm::prolongateUVs<T>(uvs, collapsesByLevel[k]);
+            uvs = detail::hlscm::prolongateUVs<T>(std::move(uvs), collapsesByLevel[k]);
 
             // Build level mesh
             auto levelMesh = detail::hlscm::buildLevelMesh<T>(levels[k]);
@@ -1083,17 +1131,16 @@ private:
 
             // Solve with initial guess
             uvs = detail::hlscm::solveLSCMLevel<T, Solver>(levelMesh, levels[k], pin0Idx, pin1Idx,
-                                                           &uvs);
+                                                           origVertCount, &uvs);
         }
 
-        // Transfer final UVs back to input mesh
+        // Transfer final UVs back to input mesh.
+        // At the finest level every vertex has a UV; the unwrap is safe.
         for (const auto& v : mesh->vertices()) {
-            auto it = uvs.find(v->idx);
-            if (it != uvs.end()) {
-                v->pos[0] = it->second[0];
-                v->pos[1] = it->second[1];
-                v->pos[2] = T(0);
-            }
+            const auto& uv = *uvs[v->idx];
+            v->pos[0] = uv[0];
+            v->pos[1] = uv[1];
+            v->pos[2] = T(0);
         }
     }
 
