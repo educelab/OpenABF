@@ -4216,8 +4216,8 @@ auto prolongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collap
         auto& rec = *it;
         auto& tri = rec.containingTri;
 
-        uvs[rec.vRemoved] = *uvs[tri[0]] * rec.bary[0] + *uvs[tri[1]] * rec.bary[1] +
-                            *uvs[tri[2]] * rec.bary[2];
+        uvs[rec.vRemoved] =
+            *uvs[tri[0]] * rec.bary[0] + *uvs[tri[1]] * rec.bary[1] + *uvs[tri[2]] * rec.bary[2];
     }
 
     return uvs;
