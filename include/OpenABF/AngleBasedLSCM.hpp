@@ -89,8 +89,13 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * @tparam Solver A solver implementing the
  * [Eigen Sparse solver
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
- * and templated on Eigen::SparseMatrix<T>. The default SparseLU is robust but
- * slow for large meshes. For iterative solving, prefer
+ * and templated on Eigen::SparseMatrix<T>. The default SparseLU is robust and
+ * the fastest option we have benchmarked on the LSCM normal equations across
+ * 50k–200k-face meshes (see `examples/src/BenchmarkFlattening.cpp`); for very
+ * large meshes where SparseLU exhausts memory, switch to an iterative solver
+ * via this template parameter.
+ *
+ * For iterative solving, prefer
  * `Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower|Eigen::Upper>`
  * over the default `Lower`-only variant: the `Lower|Upper` template argument
  * enables Eigen's full-matrix SpMV code path, which is faster and — when
@@ -98,6 +103,14 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * default) routes through `selfadjointView<Lower>`, which is a different
  * internal code path that is never OpenMP-parallelized regardless of
  * `Eigen::setNbThreads()`.
+ *
+ * `IncompleteCholesky` is also available as a preconditioner via
+ * `Eigen::ConjugateGradient<..., Eigen::IncompleteCholesky<T>>`, but in our
+ * benchmarks the per-iteration overhead of applying IC on the LSCM normal
+ * equations dwarfs the iteration-count savings it provides over the default
+ * `DiagonalPreconditioner` (Jacobi), and both are much slower than SparseLU
+ * at the mesh sizes we target. Use IC only if you have profiled it favorably
+ * against Diagonal for your specific mesh class.
  */
 template <typename T, class MeshType = HalfEdgeMesh<T>,
           class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
