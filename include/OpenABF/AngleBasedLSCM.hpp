@@ -141,7 +141,7 @@ public:
      * The PinMap must contain at least two unique, in-range vertex indices;
      * `compute()` rejects malformed inputs at solve time.
      */
-    void setPins(PinMap pins)
+    void set_pins(PinMap pins)
     {
         pins_ = std::move(pins);
         legacyPinIndices_.reset();
@@ -151,10 +151,10 @@ public:
      * @brief Deprecated: set a pin pair by index using the LSCM axis-snap
      * convention at compute time.
      *
-     * @deprecated Prefer `setPins(PinMap)`. This overload will be removed in
+     * @deprecated Prefer `set_pins(PinMap)`. This overload will be removed in
      * version 3.0.
      */
-    [[deprecated("Use setPins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
+    [[deprecated("Use set_pins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
         std::size_t pin0Idx, std::size_t pin1Idx)
     {
         legacyPinIndices_ = {pin0Idx, pin1Idx};
@@ -167,7 +167,7 @@ public:
         if (pins_) {
             Compute(mesh, *pins_);
         } else if (legacyPinIndices_) {
-            ComputeImpl(mesh, detail::lscm::autoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
+            ComputeImpl(mesh, detail::lscm::AutoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
                                                                    legacyPinIndices_->second));
         } else {
             Compute(mesh);
@@ -185,7 +185,10 @@ public:
      * @throws SolverException If matrix cannot be decomposed or if solver fails
      * to find a solution.
      */
-    static void Compute(typename Mesh::Pointer& mesh) { ComputeImpl(mesh, autoSelectPins(mesh)); }
+    static void Compute(typename Mesh::Pointer& mesh)
+    {
+        ComputeImpl(mesh, detail::lscm::AutoSelectPins<T, Mesh>(mesh));
+    }
 
     /**
      * @brief Compute the parameterized mesh with caller-specified pin UVs
@@ -202,7 +205,7 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh, const PinMap& pins)
     {
-        detail::lscm::validatePins<T, Mesh>(mesh, pins);
+        detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
         ComputeImpl(mesh, pins);
     }
 
@@ -219,44 +222,14 @@ public:
     [[deprecated("Use Compute(mesh, PinMap); will be removed in 3.0")]] static void Compute(
         typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
     {
-        ComputeImpl(mesh, detail::lscm::autoPlacePair<T, Mesh>(mesh, pin0Idx, pin1Idx));
+        ComputeImpl(mesh, detail::lscm::AutoPlacePair<T, Mesh>(mesh, pin0Idx, pin1Idx));
     }
 
 private:
-    /** Optional explicit pin set configured via `setPins()`. */
+    /** Optional explicit pin set configured via `set_pins()`. */
     std::optional<PinMap> pins_;
     /** Deprecated: legacy two-pin index pair set via `setPinnedVertices`. */
     std::optional<std::pair<std::size_t, std::size_t>> legacyPinIndices_;
-
-    /** Walk the boundary to pick the default pin pair. */
-    static auto selectBoundaryPair(const typename Mesh::Pointer& mesh)
-        -> std::pair<typename Mesh::VertPtr, typename Mesh::VertPtr>
-    {
-        auto boundary = mesh->vertices_boundary();
-        if (boundary.empty()) {
-            throw MeshException("AngleBasedLSCM: mesh has no boundary vertices");
-        }
-        auto p0 = boundary.front();
-        auto e = p0->edge;
-        do {
-            if (e->pair->is_boundary()) {
-                break;
-            }
-            e = e->pair->next;
-        } while (e != p0->edge);
-        if (e == p0->edge and not e->pair->is_boundary()) {
-            throw MeshException("Pinned vertex not on boundary");
-        }
-        auto p1 = e->next->vertex;
-        return {p0, p1};
-    }
-
-    /** Auto-select two boundary pins and place them via the LSCM axis-snap convention. */
-    static auto autoSelectPins(const typename Mesh::Pointer& mesh) -> PinMap
-    {
-        auto [p0, p1] = selectBoundaryPair(mesh);
-        return detail::lscm::autoPlacePair<T, Mesh>(mesh, p0->idx, p1->idx);
-    }
 
     /**
      * @brief Core solver: build the LSCM system from the PinMap, solve for free

@@ -1372,7 +1372,7 @@ TEST(Parameterization, AngleBasedLSCM_MultiPin_Pyramid)
 
 TEST(Parameterization, AngleBasedLSCM_SetPins_MatchesStatic)
 {
-    // The instance setPins() form must produce identical output to the static
+    // The instance set_pins() form must produce identical output to the static
     // Compute(mesh, PinMap) overload for the same pins.
     using LSCM = AngleBasedLSCM<float>;
     using PinMap = typename LSCM::PinMap;
@@ -1388,7 +1388,7 @@ TEST(Parameterization, AngleBasedLSCM_SetPins_MatchesStatic)
 
     auto mesh_instance = ConstructPyramid<LSCM::Mesh>();
     LSCM lscm;
-    lscm.setPins(pins);
+    lscm.set_pins(pins);
     lscm.compute(mesh_instance);
 
     for (std::size_t v = 0; v < mesh_static->num_vertices(); ++v) {
@@ -1480,7 +1480,8 @@ TEST(Parameterization, AngleBasedLSCM_PinMap_Rejects_Duplicate)
 
     auto mesh = ConstructPyramid<LSCM::Mesh>();
     PinMap pins{
-        {0u, Vec<float, 2>{0.f, 0.f}}, {0u, Vec<float, 2>{2.f, 0.f}},  // same index repeated
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {0u, Vec<float, 2>{2.f, 0.f}},  // same index repeated
     };
     EXPECT_THROW(LSCM::Compute(mesh, pins), std::invalid_argument);
 }
@@ -1492,7 +1493,8 @@ TEST(Parameterization, AngleBasedLSCM_PinMap_Rejects_OutOfRange)
 
     auto mesh = ConstructPyramid<LSCM::Mesh>();  // 4 vertices
     PinMap pins{
-        {0u, Vec<float, 2>{0.f, 0.f}}, {99u, Vec<float, 2>{2.f, 0.f}},  // out of range
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {99u, Vec<float, 2>{2.f, 0.f}},  // out of range
     };
     EXPECT_THROW(LSCM::Compute(mesh, pins), std::invalid_argument);
 }
@@ -1522,7 +1524,7 @@ TEST(Parameterization, AngleBasedLSCM_MultiPin_FourPins_Grid)
 
 TEST(Parameterization, AngleBasedLSCM_SetPins_OverridesSetPinnedVertices)
 {
-    // setPins() called after the deprecated setPinnedVertices() must win.
+    // set_pins() called after the deprecated setPinnedVertices() must win.
     using LSCM = AngleBasedLSCM<float>;
     using PinMap = typename LSCM::PinMap;
 
@@ -1534,7 +1536,7 @@ TEST(Parameterization, AngleBasedLSCM_SetPins_OverridesSetPinnedVertices)
     };
 
     LSCM lscm;
-    // Configure the deprecated path first; setPins() must clear it.
+    // Configure the deprecated path first; set_pins() must clear it.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #pragma clang diagnostic push
@@ -1542,7 +1544,7 @@ TEST(Parameterization, AngleBasedLSCM_SetPins_OverridesSetPinnedVertices)
     lscm.setPinnedVertices(0, 1);
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop
-    lscm.setPins(pins);
+    lscm.set_pins(pins);
     lscm.compute(mesh);
 
     // All three pins must land exactly — the 2-pin legacy path would not
@@ -1604,7 +1606,7 @@ TEST(HLSCM, Instance_PinMap_Rejects_OutOfRange)
         {99u, Vec<float, 2>{2.f, 0.f}},
     };
     HLSCM hlscm;
-    hlscm.setPins(pins);
+    hlscm.set_pins(pins);
     EXPECT_THROW(hlscm.compute(mesh), std::invalid_argument);
 }
 
@@ -1624,7 +1626,7 @@ TEST(HLSCM, MultiPin_FourPins_Grid)
     };
     HLSCM hlscm;
     hlscm.setMinCoarseVertices(10);  // force at least one decimation level
-    hlscm.setPins(pins);
+    hlscm.set_pins(pins);
     hlscm.compute(mesh);
 
     for (const auto& [vIdx, uv] : pins) {
@@ -1637,7 +1639,7 @@ TEST(HLSCM, MultiPin_FourPins_Grid)
 
 TEST(HLSCM, SetPins_MatchesStatic)
 {
-    // Instance setPins() must produce identical output to the static
+    // Instance set_pins() must produce identical output to the static
     // Compute(mesh, PinMap) overload.
     using HLSCM = HierarchicalLSCM<float>;
     using PinMap = typename HLSCM::PinMap;
@@ -1653,7 +1655,7 @@ TEST(HLSCM, SetPins_MatchesStatic)
 
     auto mesh_instance = ConstructPyramid<HLSCM::Mesh>();
     HLSCM hlscm;
-    hlscm.setPins(pins);
+    hlscm.set_pins(pins);
     hlscm.compute(mesh_instance);
 
     for (std::size_t v = 0; v < mesh_static->num_vertices(); ++v) {

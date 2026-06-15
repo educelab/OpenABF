@@ -13,6 +13,7 @@
 
 #include <Eigen/SparseCore>
 
+#include "OpenABF/Exceptions.hpp"
 #include "OpenABF/Math.hpp"
 #include "OpenABF/Vec.hpp"
 
@@ -36,7 +37,7 @@ using PinMap = std::vector<std::pair<std::size_t, OpenABF::Vec<T, 2>>>;
  * boundary.
  */
 template <typename T, class MeshType>
-void validatePins(const typename MeshType::Pointer& mesh, const PinMap<T>& pins)
+void ValidatePins(const typename MeshType::Pointer& mesh, const PinMap<T>& pins)
 {
     if (pins.size() < 2) {
         throw std::invalid_argument("LSCM: PinMap requires at least 2 pins");
@@ -67,8 +68,8 @@ void validatePins(const typename MeshType::Pointer& mesh, const PinMap<T>& pins)
  * either index is out of range.
  */
 template <typename T, class MeshType>
-auto autoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx,
-                   std::size_t p1Idx) -> PinMap<T>
+auto AutoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx, std::size_t p1Idx)
+    -> PinMap<T>
 {
     const auto numVerts = mesh->num_vertices();
     if (p0Idx >= numVerts || p1Idx >= numVerts) {
@@ -88,6 +89,39 @@ auto autoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx,
     Vec<T, 2> uv0{T(0), T(0)};
     Vec<T, 2> uv1 = (maxAxis == 0) ? Vec<T, 2>{dist, T(0)} : Vec<T, 2>{T(0), dist};
     return PinMap<T>{{p0Idx, uv0}, {p1Idx, uv1}};
+}
+
+/**
+ * @brief Auto-select two boundary pins and place them via the LSCM
+ * axis-snap convention.
+ *
+ * Picks the first boundary vertex returned by `mesh->vertices_boundary()` as
+ * pin0 and walks the boundary to find an adjacent boundary vertex as pin1.
+ * UVs follow the axis-snap convention applied by `AutoPlacePair`.
+ *
+ * @throws MeshException if the mesh has no boundary vertices, or if no
+ *         boundary-adjacent neighbor is found for the first boundary vertex.
+ */
+template <typename T, class MeshType>
+auto AutoSelectPins(const typename MeshType::Pointer& mesh) -> PinMap<T>
+{
+    auto boundary = mesh->vertices_boundary();
+    if (boundary.empty()) {
+        throw MeshException("LSCM: mesh has no boundary vertices");
+    }
+    auto p0 = boundary.front();
+    auto e = p0->edge;
+    do {
+        if (e->pair->is_boundary()) {
+            break;
+        }
+        e = e->pair->next;
+    } while (e != p0->edge);
+    if (e == p0->edge && !e->pair->is_boundary()) {
+        throw MeshException("LSCM: pinned vertex not on boundary");
+    }
+    auto p1 = e->next->vertex;
+    return AutoPlacePair<T, MeshType>(mesh, p0->idx, p1->idx);
 }
 
 /**
@@ -121,7 +155,7 @@ struct SystemParts {
  * The function does NOT auto-place pins — UVs are taken verbatim from the
  * PinMap. Callers that want the LSCM axis-snap convention (origin +
  * dominant-axis placement for an auto-selected pair) compute those UVs
- * themselves via `autoPlacePair` before calling this helper.
+ * themselves via `AutoPlacePair` before calling this helper.
  *
  * Assembly follows Lévy et al. 2002 Eq. 10 using the per-edge `alpha` angles
  * already stored on the mesh.

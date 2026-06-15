@@ -990,7 +990,7 @@ public:
     /**
      * @brief Set the explicit pin set used by `compute()`
      */
-    void setPins(PinMap pins)
+    void set_pins(PinMap pins)
     {
         pins_ = std::move(pins);
         legacyPinIndices_.reset();
@@ -1000,10 +1000,10 @@ public:
      * @brief Deprecated: set a pin pair by index using the LSCM axis-snap
      * convention at compute time.
      *
-     * @deprecated Prefer `setPins(PinMap)`. This overload will be removed in
+     * @deprecated Prefer `set_pins(PinMap)`. This overload will be removed in
      * version 3.0.
      */
-    [[deprecated("Use setPins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
+    [[deprecated("Use set_pins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
         std::size_t pin0Idx, std::size_t pin1Idx)
     {
         legacyPinIndices_ = {pin0Idx, pin1Idx};
@@ -1031,7 +1031,7 @@ public:
     /**
      * @brief Compute parameterization using instance configuration
      *
-     * If `setPins()` was called, uses the supplied PinMap. Otherwise, if the
+     * If `set_pins()` was called, uses the supplied PinMap. Otherwise, if the
      * deprecated `setPinnedVertices()` was called, builds a PinMap from those
      * indices via the LSCM axis-snap convention. Otherwise auto-selects two
      * boundary vertices using the same logic as `Compute(mesh)`.
@@ -1044,12 +1044,12 @@ public:
         PinMap pins;
         if (pins_) {
             pins = *pins_;
-            detail::lscm::validatePins<T, Mesh>(mesh, pins);
+            detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
         } else if (legacyPinIndices_) {
-            pins = detail::lscm::autoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
+            pins = detail::lscm::AutoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
                                                         legacyPinIndices_->second);
         } else {
-            pins = autoSelectPins(mesh);
+            pins = detail::lscm::AutoSelectPins<T, Mesh>(mesh);
         }
         ComputeImpl(mesh, pins, levelRatio_, minCoarseVertices_);
     }
@@ -1064,7 +1064,10 @@ public:
      *         fails) or the mesh is otherwise invalid
      * @throws SolverException if any hierarchy level fails to solve
      */
-    static void Compute(typename Mesh::Pointer& mesh) { ComputeImpl(mesh, autoSelectPins(mesh)); }
+    static void Compute(typename Mesh::Pointer& mesh)
+    {
+        ComputeImpl(mesh, detail::lscm::AutoSelectPins<T, Mesh>(mesh));
+    }
 
     /**
      * @brief Compute with caller-specified pin UVs
@@ -1075,7 +1078,7 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh, const PinMap& pins)
     {
-        detail::lscm::validatePins<T, Mesh>(mesh, pins);
+        detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
         ComputeImpl(mesh, pins);
     }
 
@@ -1091,39 +1094,10 @@ public:
     [[deprecated("Use Compute(mesh, PinMap); will be removed in 3.0")]] static void Compute(
         typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
     {
-        ComputeImpl(mesh, detail::lscm::autoPlacePair<T, Mesh>(mesh, pin0Idx, pin1Idx));
+        ComputeImpl(mesh, detail::lscm::AutoPlacePair<T, Mesh>(mesh, pin0Idx, pin1Idx));
     }
 
 private:
-    /** Walk the boundary to pick the default pin pair as (idx, idx). */
-    static auto selectBoundaryPair(const typename Mesh::Pointer& mesh)
-        -> std::pair<std::size_t, std::size_t>
-    {
-        auto boundary = mesh->vertices_boundary();
-        if (boundary.empty()) {
-            throw MeshException("HierarchicalLSCM: mesh has no boundary vertices");
-        }
-        auto v0 = boundary.front();
-        auto e = v0->edge;
-        do {
-            if (e->pair->is_boundary()) {
-                break;
-            }
-            e = e->pair->next;
-        } while (e != v0->edge);
-        if (e == v0->edge && !e->pair->is_boundary()) {
-            throw MeshException("Pinned vertex not on boundary");
-        }
-        return {v0->idx, e->next->vertex->idx};
-    }
-
-    /** Auto-select two boundary pins and place them via axis-snap. */
-    static auto autoSelectPins(const typename Mesh::Pointer& mesh) -> PinMap
-    {
-        auto [p0Idx, p1Idx] = selectBoundaryPair(mesh);
-        return detail::lscm::autoPlacePair<T, Mesh>(mesh, p0Idx, p1Idx);
-    }
-
     /**
      * @brief Copy edge angles from the original mesh to a level mesh
      *
@@ -1218,7 +1192,7 @@ private:
         }
     }
 
-    /** Optional explicit pin set configured via `setPins()`. */
+    /** Optional explicit pin set configured via `set_pins()`. */
     std::optional<PinMap> pins_;
     /** Deprecated: legacy two-pin index pair set via `setPinnedVertices`. */
     std::optional<std::pair<std::size_t, std::size_t>> legacyPinIndices_;
