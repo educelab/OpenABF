@@ -808,13 +808,21 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     auto numFree = numVerts - numFixed;
 
     // Map each original pin idx to its level-local idx. Pins are guaranteed
-    // to survive every decimation level so the unwrap is safe.
+    // to survive every decimation level (DecimationMesh::tryCollapse rejects
+    // collapses of pinned vertices), so this unwrap is expected to succeed.
+    // Throw a meaningful exception rather than std::bad_optional_access if a
+    // future refactor ever breaks the invariant.
     detail::lscm::PinMap<T> localPins;
     localPins.reserve(numFixed);
     std::unordered_set<std::size_t> localPinIdx;
     localPinIdx.reserve(numFixed);
     for (const auto& [origIdx, uv] : origPins) {
-        auto localIdx = *level.originalToLocal[origIdx];
+        const auto& localOpt = level.originalToLocal[origIdx];
+        if (!localOpt.has_value()) {
+            throw SolverException(
+                "HLSCM: pinned vertex was removed during decimation (invariant violated)");
+        }
+        auto localIdx = *localOpt;
         localPins.emplace_back(localIdx, uv);
         localPinIdx.insert(localIdx);
     }
@@ -1036,8 +1044,10 @@ public:
         PinMap pins;
         if (pins_) {
             pins = *pins_;
+            detail::lscm::validatePins<T, Mesh>(mesh, pins);
         } else if (legacyPinIndices_) {
-            pins = autoPlacePair(mesh, legacyPinIndices_->first, legacyPinIndices_->second);
+            pins = detail::lscm::autoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
+                                                        legacyPinIndices_->second);
         } else {
             pins = autoSelectPins(mesh);
         }
@@ -1065,7 +1075,7 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh, const PinMap& pins)
     {
-        validatePins(mesh, pins);
+        detail::lscm::validatePins<T, Mesh>(mesh, pins);
         ComputeImpl(mesh, pins);
     }
 
@@ -1081,7 +1091,7 @@ public:
     [[deprecated("Use Compute(mesh, PinMap); will be removed in 3.0")]] static void Compute(
         typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
     {
-        ComputeImpl(mesh, autoPlacePair(mesh, pin0Idx, pin1Idx));
+        ComputeImpl(mesh, detail::lscm::autoPlacePair<T, Mesh>(mesh, pin0Idx, pin1Idx));
     }
 
 private:
@@ -1107,51 +1117,11 @@ private:
         return {v0->idx, e->next->vertex->idx};
     }
 
-    /**
-     * @brief Build a 2-entry PinMap from explicit indices using the LSCM
-     * axis-snap convention (pin0 at the UV origin, pin1 on the dominant
-     * world-axis of `(p1 - p0)`).
-     */
-    static auto autoPlacePair(const typename Mesh::Pointer& mesh, std::size_t p0Idx,
-                              std::size_t p1Idx) -> PinMap
-    {
-        auto p0 = mesh->vertex(p0Idx);
-        auto p1 = mesh->vertex(p1Idx);
-        auto pinVec = p1->pos - p0->pos;
-        auto dist = norm(pinVec);
-        pinVec /= dist;
-        auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
-        auto maxAxis = std::distance(pinVec.begin(), maxElem);
-        dist = std::copysign(dist, *maxElem);
-        Vec<T, 2> uv0{T(0), T(0)};
-        Vec<T, 2> uv1 = (maxAxis == 0) ? Vec<T, 2>{dist, T(0)} : Vec<T, 2>{T(0), dist};
-        return PinMap{{p0Idx, uv0}, {p1Idx, uv1}};
-    }
-
     /** Auto-select two boundary pins and place them via axis-snap. */
     static auto autoSelectPins(const typename Mesh::Pointer& mesh) -> PinMap
     {
         auto [p0Idx, p1Idx] = selectBoundaryPair(mesh);
-        return autoPlacePair(mesh, p0Idx, p1Idx);
-    }
-
-    /** Validate the user-supplied PinMap against `mesh`. */
-    static void validatePins(const typename Mesh::Pointer& mesh, const PinMap& pins)
-    {
-        if (pins.size() < 2) {
-            throw std::invalid_argument("HierarchicalLSCM: PinMap requires at least 2 pins");
-        }
-        auto numVerts = mesh->num_vertices();
-        std::unordered_set<std::size_t> seen;
-        seen.reserve(pins.size());
-        for (const auto& [vIdx, uv] : pins) {
-            if (vIdx >= numVerts) {
-                throw std::invalid_argument("HierarchicalLSCM: PinMap vertex index out of range");
-            }
-            if (!seen.insert(vIdx).second) {
-                throw std::invalid_argument("HierarchicalLSCM: PinMap has duplicate vertex index");
-            }
-        }
+        return detail::lscm::autoPlacePair<T, Mesh>(mesh, p0Idx, p1Idx);
     }
 
     /**
