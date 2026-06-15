@@ -20,9 +20,11 @@ set(DOXYGEN_EXAMPLE_PATH ${PROJECT_SOURCE_DIR}/examples/src/)
 set(EXAMPLE_FILES
     ${PROJECT_SOURCE_DIR}/examples/src/BasicFlattening.cpp
     ${PROJECT_SOURCE_DIR}/examples/src/SplitPath.cpp
+    ${PROJECT_SOURCE_DIR}/examples/src/MultiChartFlatten.cpp
     ${PROJECT_SOURCE_DIR}/examples/src/FlattenTool.cpp
     ${PROJECT_SOURCE_DIR}/examples/src/CloneMesh.cpp
     ${PROJECT_SOURCE_DIR}/examples/src/AlternativeSolvers.cpp
+    ${PROJECT_SOURCE_DIR}/examples/src/BenchmarkFlattening.cpp
 )
 
 set(DOXYGEN_PROJECT_NAME "OpenABF")
