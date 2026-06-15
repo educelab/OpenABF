@@ -49,6 +49,10 @@ for (const auto& v : mesh->vertices()) {
     std::cout << v->idx << ": " << v->pos << std::endl;
 }
 ```
+> [!NOTE]
+> The `HalfEdgeMesh` class assumes that the surface has a boundary, 
+is manifold, and that the winding order of all faces is the same. Care should be 
+taken that this assumption is not violated when constructing your mesh.
 
 ### Hierarchical LSCM
 
@@ -71,18 +75,14 @@ ABF::Compute(mesh);
 HLSCM::Compute(mesh);  // same API as AngleBasedLSCM
 ```
 
-On meshes below `minCoarseVertices` (default: 100 vertices), `HierarchicalLSCM`
-automatically falls back to a single-level LSCM solve with no hierarchy overhead.
+On meshes below the minimum coarse vertices (`set_min_coarse_vertices` 
+default: 100 vertices), `HierarchicalLSCM` automatically falls back to 
+a single-level LSCM solve with no hierarchy overhead.
 
-**Note:** `HierarchicalLSCM` defaults to `ConjugateGradient` rather than
+> [!TIP]
+> `HierarchicalLSCM` defaults to `ConjugateGradient` rather than
 `SparseLU`. For very small meshes or debugging, you can pass `SparseLU` explicitly
 as the `Solver` template parameter.
-
-**Note:** The `HalfEdgeMesh` class 
-[currently assumes](https://gitlab.com/educelab/OpenABF/-/issues/4) that the 
-surface has a boundary, is manifold, and that the winding order of all faces is 
-the same. Care should be taken that this assumption is not violated when 
-constructing your mesh.
 
 ## Documentation
 Visit our full library documentation [here](https://educelab.github.io/OpenABF/).
@@ -109,7 +109,8 @@ add_executable(MyTarget main.cpp)
 target_link_libraries(MyTarget OpenABF::OpenABF)
 ```
   
-**Note:** For best performance, configure your CMake project with the 
+> [!IMPORTANT]
+> For best runtime performance, configure your CMake project with the 
 `-DCMAKE_BUILD_TYPE=Release` flag.
 
 #### Configuration
@@ -156,7 +157,8 @@ Eigen headers to your include path:
 g++ -I /path/to/eigen/ -std=c++17 -DNDEBUG -O3 main.cpp -o main
 ```
 
-**Note:** For best performance, compile your application with the `-DNDEBUG -03`
+> [!IMPORTANT]
+> For best runtime performance, compile your application with the `-DNDEBUG -03`
 preprocessor definitions.
 
 ### Compilation on Windows
@@ -165,7 +167,8 @@ For many legacy reasons, the Microsoft Visual C++ compiler (MSVC) is not
 automatically conformant with the C++ standard in all cases. This may lead to 
 the following issues when compiling against OpenABF.
 
-**Note:** As this project only supports C++17 and up, you should always compile 
+> [!NOTE]
+> As this project only supports C++17 and up, you should always compile 
 with at least `/std:c++17`.
 
 #### Undeclared identifier errors
