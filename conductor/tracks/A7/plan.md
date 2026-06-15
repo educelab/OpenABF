@@ -85,6 +85,6 @@ Per user direction 2026-06-14: retain `Compute(mesh, p0, p1)` and
 - [x] 5.3 Run `git clang-format`; regenerate amalgamated header.
 
 ## Phase 6: Conductor & GitHub
-- [ ] 6.1 Open PR against issue #42; note expanded scope (HLSCM included) in PR
-  description.
+- [x] 6.1 PR #93 opened against #42; PR description notes expanded scope
+  (HLSCM included) and the deprecated-shim plan for 3.0 removal.
 - [ ] 6.2 Update `tracks.md` (move A7 to archived once PR lands).
