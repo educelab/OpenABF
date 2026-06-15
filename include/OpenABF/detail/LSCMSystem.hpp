@@ -5,19 +5,128 @@
 #include <cmath>
 #include <cstddef>
 #include <iterator>
+#include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Eigen/SparseCore>
+
+#include "OpenABF/Exceptions.hpp"
+#include "OpenABF/Math.hpp"
+#include "OpenABF/Vec.hpp"
 
 namespace OpenABF::detail::lscm
 {
 
 /**
- * @brief Outputs of `buildSystem`: the LSCM least-squares system for a mesh
- *        with two pinned vertices.
+ * @brief Per-pin entry: (mesh vertex index, target UV).
  *
- * @tparam T Floating-point type
+ * Shared by `AngleBasedLSCM::PinMap` and `HierarchicalLSCM::PinMap`.
+ */
+template <typename T>
+using PinMap = std::vector<std::pair<std::size_t, OpenABF::Vec<T, 2>>>;
+
+/**
+ * @brief Validate a user-supplied PinMap against `mesh`.
+ *
+ * Throws `std::invalid_argument` if the PinMap has fewer than two pins, a
+ * duplicate vertex index, or an out-of-range vertex index. Shared by
+ * `AngleBasedLSCM` and `HierarchicalLSCM` so behavior matches at the public
+ * boundary.
+ */
+template <typename T, class MeshType>
+void ValidatePins(const typename MeshType::Pointer& mesh, const PinMap<T>& pins)
+{
+    if (pins.size() < 2) {
+        throw std::invalid_argument("LSCM: PinMap requires at least 2 pins");
+    }
+    const auto numVerts = mesh->num_vertices();
+    std::unordered_set<std::size_t> seen;
+    seen.reserve(pins.size());
+    for (const auto& [vIdx, uv] : pins) {
+        if (vIdx >= numVerts) {
+            throw std::invalid_argument("LSCM: PinMap vertex index out of range");
+        }
+        if (!seen.insert(vIdx).second) {
+            throw std::invalid_argument("LSCM: PinMap has duplicate vertex index");
+        }
+    }
+}
+
+/**
+ * @brief Build a 2-entry PinMap from explicit vertex indices using the LSCM
+ * axis-snap convention.
+ *
+ * pin0 lands at `{0, 0}`; pin1 lands at signed distance `|p1 - p0|` on
+ * whichever world-axis the `(p1 - p0)` vector has the largest magnitude.
+ * Used by the auto-pin path and by the deprecated 2-pin shims.
+ *
+ * Throws `std::invalid_argument` if `p0Idx == p1Idx` (the resulting
+ * zero-length axis-snap would divide by zero and produce NaN UVs) or if
+ * either index is out of range.
+ */
+template <typename T, class MeshType>
+auto AutoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx,
+                   std::size_t p1Idx) -> PinMap<T>
+{
+    const auto numVerts = mesh->num_vertices();
+    if (p0Idx >= numVerts || p1Idx >= numVerts) {
+        throw std::invalid_argument("LSCM: pin vertex index out of range");
+    }
+    if (p0Idx == p1Idx) {
+        throw std::invalid_argument("LSCM: pin pair must be two distinct vertices");
+    }
+    auto p0 = mesh->vertex(p0Idx);
+    auto p1 = mesh->vertex(p1Idx);
+    auto pinVec = p1->pos - p0->pos;
+    auto dist = norm(pinVec);
+    pinVec /= dist;
+    auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
+    auto maxAxis = std::distance(pinVec.begin(), maxElem);
+    dist = std::copysign(dist, *maxElem);
+    Vec<T, 2> uv0{T(0), T(0)};
+    Vec<T, 2> uv1 = (maxAxis == 0) ? Vec<T, 2>{dist, T(0)} : Vec<T, 2>{T(0), dist};
+    return PinMap<T>{{p0Idx, uv0}, {p1Idx, uv1}};
+}
+
+/**
+ * @brief Auto-select two boundary pins and place them via the LSCM
+ * axis-snap convention.
+ *
+ * Picks the first boundary vertex returned by `mesh->vertices_boundary()` as
+ * pin0 and walks the boundary to find an adjacent boundary vertex as pin1.
+ * UVs follow the axis-snap convention applied by `AutoPlacePair`.
+ *
+ * @throws MeshException if the mesh has no boundary vertices, or if no
+ *         boundary-adjacent neighbor is found for the first boundary vertex.
+ */
+template <typename T, class MeshType>
+auto AutoSelectPins(const typename MeshType::Pointer& mesh) -> PinMap<T>
+{
+    auto boundary = mesh->vertices_boundary();
+    if (boundary.empty()) {
+        throw MeshException("LSCM: mesh has no boundary vertices");
+    }
+    auto p0 = boundary.front();
+    auto e = p0->edge;
+    do {
+        if (e->pair->is_boundary()) {
+            break;
+        }
+        e = e->pair->next;
+    } while (e != p0->edge);
+    if (e == p0->edge && !e->pair->is_boundary()) {
+        throw MeshException("LSCM: pinned vertex not on boundary");
+    }
+    auto p1 = e->next->vertex;
+    return AutoPlacePair<T, MeshType>(mesh, p0->idx, p1->idx);
+}
+
+/**
+ * @brief Outputs of `buildSystem`: the LSCM least-squares system for a mesh
+ *        with N pinned vertices (N ≥ 2).
  *
  * Layout: `A` is `(2·numFaces) × (2·numFree)`, `b` is `(2·numFaces) × 1`,
  * `freeIdxTable` maps `vertex->idx` to a row-pair index in `A`/`x` (so a free
@@ -35,62 +144,62 @@ struct SystemParts {
 };
 
 /**
- * @brief Build the LSCM sparse system for a mesh with two pinned vertices.
+ * @brief Build the LSCM sparse system for a mesh with N pinned vertices.
  *
- * Mutates the mesh: places `p0` at the UV origin and `p1` on whichever XY
- * axis its displacement from `p0` has the largest magnitude — same pin
- * placement convention used by `AngleBasedLSCM::ComputeImpl` and
- * `HierarchicalLSCM::solveLSCMLevel`.
+ * Pure with respect to the mesh — only reads `alpha` and connectivity. Pin
+ * UVs are taken verbatim from the PinMap into `bFixed`; the mesh's vertex
+ * positions are NOT mutated. Callers that need pin UVs reflected on the mesh
+ * (e.g., `AngleBasedLSCM::ComputeImpl`'s output writeback) must do that
+ * themselves.
+ *
+ * The function does NOT auto-place pins — UVs are taken verbatim from the
+ * PinMap. Callers that want the LSCM axis-snap convention (origin +
+ * dominant-axis placement for an auto-selected pair) compute those UVs
+ * themselves via `AutoPlacePair` before calling this helper.
  *
  * Assembly follows Lévy et al. 2002 Eq. 10 using the per-edge `alpha` angles
  * already stored on the mesh.
  */
 template <typename T, class MeshType>
-auto buildSystem(const typename MeshType::Pointer& mesh, const typename MeshType::VertPtr& p0,
-                 const typename MeshType::VertPtr& p1) -> SystemParts<T>
+auto buildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) -> SystemParts<T>
 {
     using Triplet = Eigen::Triplet<T>;
     using SparseMatrix = Eigen::SparseMatrix<T>;
 
-    // Map selected edge to closest XY axis. Use sign to select direction.
-    auto pinVec = p1->pos - p0->pos;
-    auto dist = norm(pinVec);
-    pinVec /= dist;
-    p0->pos = {T(0), T(0), T(0)};
-    auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
-    auto maxAxis = std::distance(pinVec.begin(), maxElem);
-    dist = std::copysign(dist, *maxElem);
-    if (maxAxis == 0) {
-        p1->pos = {dist, T(0), T(0)};
-    } else {
-        p1->pos = {T(0), dist, T(0)};
-    }
-
     const auto numFaces = mesh->num_faces();
     const auto numVerts = mesh->num_vertices();
-    constexpr std::size_t numFixed = 2;
+    const auto numFixed = pins.size();
     const auto numFree = numVerts - numFixed;
+
+    // Pin index → slot (0-based position within the PinMap).
+    std::unordered_map<std::size_t, std::size_t> pinSlot;
+    pinSlot.reserve(numFixed);
+    for (std::size_t s = 0; s < numFixed; ++s) {
+        pinSlot.emplace(pins[s].first, s);
+    }
+
+    // Populate bFixed from PinMap UVs (verbatim).
+    std::vector<Triplet> tripletsB;
+    tripletsB.reserve(2 * numFixed);
+    for (std::size_t s = 0; s < numFixed; ++s) {
+        const auto& uv = pins[s].second;
+        tripletsB.emplace_back(2 * s, 0, uv[0]);
+        tripletsB.emplace_back(2 * s + 1, 0, uv[1]);
+    }
+    SparseMatrix bFixed(2 * numFixed, 1);
+    bFixed.reserve(tripletsB.size());
+    bFixed.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     // Permutation for free vertices: maps mesh vertex idx → row-pair slot in A.
     std::unordered_map<std::size_t, std::size_t> freeIdxTable;
     freeIdxTable.reserve(numFree);
     for (const auto& v : mesh->vertices()) {
-        if (v == p0 or v == p1) {
+        if (pinSlot.count(v->idx)) {
             continue;
         }
         auto newIdx = freeIdxTable.size();
         freeIdxTable[v->idx] = newIdx;
     }
-
-    // Setup pinned bFixed.
-    std::vector<Triplet> tripletsB;
-    tripletsB.emplace_back(0, 0, p0->pos[0]);
-    tripletsB.emplace_back(1, 0, p0->pos[1]);
-    tripletsB.emplace_back(2, 0, p1->pos[0]);
-    tripletsB.emplace_back(3, 0, p1->pos[1]);
-    SparseMatrix bFixed(2 * numFixed, 1);
-    bFixed.reserve(tripletsB.size());
-    bFixed.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     // Setup variables matrix. Only solving for free vertices, so pins go in
     // a special matrix.
@@ -99,19 +208,16 @@ auto buildSystem(const typename MeshType::Pointer& mesh, const typename MeshType
 
     // Per-vertex contribution helper (Lévy et al. 2002, Eq. 10).
     // Each vertex contributes a 2×2 conformal block [c, -s; s, c] at its
-    // column. Fixed pins (p0, p1) go into tripletsB; free vertices into
-    // tripletsA.
+    // column. Pin vertices go into tripletsB at columns 2*slot and 2*slot+1;
+    // free vertices into tripletsA.
     auto addContrib = [&](std::size_t row, const auto& e, T c, T s) {
-        if (e->vertex == p0) {
-            tripletsB.emplace_back(row, 0, c);
-            tripletsB.emplace_back(row, 1, -s);
-            tripletsB.emplace_back(row + 1, 0, s);
-            tripletsB.emplace_back(row + 1, 1, c);
-        } else if (e->vertex == p1) {
-            tripletsB.emplace_back(row, 2, c);
-            tripletsB.emplace_back(row, 3, -s);
-            tripletsB.emplace_back(row + 1, 2, s);
-            tripletsB.emplace_back(row + 1, 3, c);
+        auto it = pinSlot.find(e->vertex->idx);
+        if (it != pinSlot.end()) {
+            auto col = 2 * it->second;
+            tripletsB.emplace_back(row, col, c);
+            tripletsB.emplace_back(row, col + 1, -s);
+            tripletsB.emplace_back(row + 1, col, s);
+            tripletsB.emplace_back(row + 1, col + 1, c);
         } else {
             auto freeIdx = freeIdxTable.at(e->vertex->idx);
             tripletsA.emplace_back(row, 2 * freeIdx, c);

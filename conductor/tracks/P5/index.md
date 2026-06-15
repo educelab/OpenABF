@@ -1,6 +1,6 @@
 # P5 — HLSCM hot-path allocation reduction
 
-**Status:** open
+**Status:** closed (PR #92 merged)
 **Issue:** https://github.com/educelab/OpenABF/issues/63
 **Dependencies:** F1
 

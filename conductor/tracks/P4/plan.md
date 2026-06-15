@@ -27,6 +27,6 @@ The gap *widens* with mesh size: IC-CG is being dominated by IncompleteCholesky'
 - [x] 2.5 Regenerate amalgamated header — single_include updated.
 
 ## Phase 3: Conductor & GitHub
-- [ ] 3.1 Commit and push (waiting on signing availability)
-- [ ] 3.2 Open PR against #47 describing the benchmark, the conclusion, and the doc update; close issue #47 as "investigated, default unchanged"
-- [ ] 3.3 Update tracks.md (move P4 to archived once PR lands)
+- [x] 3.1 Commit and push.
+- [x] 3.2 PR #91 opened and merged against #47; benchmark/conclusion/doc update recorded; issue #47 closed as "investigated, default unchanged".
+- [x] 3.3 Update tracks.md (P4 moved to archived).

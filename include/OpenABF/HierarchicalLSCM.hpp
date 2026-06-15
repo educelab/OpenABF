@@ -116,7 +116,7 @@ class DecimationMesh
 public:
     /** Build from a HalfEdgeMesh */
     template <class MeshPtr>
-    void build(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1)
+    void build(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndices)
     {
         auto nv = mesh->num_vertices();
         auto nf = mesh->num_faces();
@@ -127,8 +127,9 @@ public:
         isPinned_.assign(nv, false);
         quadrics_.resize(nv);
 
-        isPinned_[pin0] = true;
-        isPinned_[pin1] = true;
+        for (auto idx : pinIndices) {
+            isPinned_[idx] = true;
+        }
 
         for (const auto& v : mesh->vertices()) {
             positions_[v->idx] = v->pos;
@@ -643,12 +644,12 @@ private:
  * the collapse records needed for prolongation (ordered from finest to coarsest).
  */
 template <typename T, class MeshPtr>
-auto buildHierarchy(const MeshPtr& mesh, std::size_t pin0, std::size_t pin1, std::size_t levelRatio,
-                    std::size_t minCoarseVerts)
+auto buildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndices,
+                    std::size_t levelRatio, std::size_t minCoarseVerts)
     -> std::pair<std::vector<HierarchyLevel<T>>, std::vector<std::vector<CollapseRecord<T>>>>
 {
     DecimationMesh<T> dmesh;
-    dmesh.build(mesh, pin0, pin1);
+    dmesh.build(mesh, pinIndices);
 
     // Finest level snapshot
     std::vector<HierarchyLevel<T>> levels;
@@ -794,8 +795,8 @@ auto prolongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collap
  */
 template <typename T, class SolverType>
 auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
-                    const detail::hlscm::HierarchyLevel<T>& level, std::size_t origPin0,
-                    std::size_t origPin1, std::size_t origVertCount,
+                    const detail::hlscm::HierarchyLevel<T>& level,
+                    const detail::lscm::PinMap<T>& origPins, std::size_t origVertCount,
                     const UVVector<T>* initialGuess) -> UVVector<T>
 {
     using SparseMatrix = Eigen::SparseMatrix<T>;
@@ -803,18 +804,31 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     using Mesh = HalfEdgeMesh<T>;
 
     auto numVerts = levelMesh->num_vertices();
-    constexpr std::size_t numFixed = 2;
+    auto numFixed = origPins.size();
     auto numFree = numVerts - numFixed;
 
-    // Map original pin indices to level-local indices. Pins are guaranteed
-    // to survive every decimation level so the unwrap is safe.
-    auto localPin0 = *level.originalToLocal[origPin0];
-    auto localPin1 = *level.originalToLocal[origPin1];
-    auto p0 = levelMesh->vertex(localPin0);
-    auto p1 = levelMesh->vertex(localPin1);
+    // Map each original pin idx to its level-local idx. Pins are guaranteed
+    // to survive every decimation level (DecimationMesh::tryCollapse rejects
+    // collapses of pinned vertices), so this unwrap is expected to succeed.
+    // Throw a meaningful exception rather than std::bad_optional_access if a
+    // future refactor ever breaks the invariant.
+    detail::lscm::PinMap<T> localPins;
+    localPins.reserve(numFixed);
+    std::unordered_set<std::size_t> localPinIdx;
+    localPinIdx.reserve(numFixed);
+    for (const auto& [origIdx, uv] : origPins) {
+        const auto& localOpt = level.originalToLocal[origIdx];
+        if (!localOpt.has_value()) {
+            throw SolverException(
+                "HLSCM: pinned vertex was removed during decimation (invariant violated)");
+        }
+        auto localIdx = *localOpt;
+        localPins.emplace_back(localIdx, uv);
+        localPinIdx.insert(localIdx);
+    }
 
     // Pin placement + LSCM system assembly (shared with AngleBasedLSCM)
-    auto parts = detail::lscm::buildSystem<T, Mesh>(levelMesh, p0, p1);
+    auto parts = detail::lscm::buildSystem<T, Mesh>(levelMesh, localPins);
     auto& A = parts.A;
     auto& b = parts.b;
     auto& freeIdxTable = parts.freeIdxTable;
@@ -826,7 +840,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     auto buildInitialGuess = [&]() -> DenseMatrix {
         DenseMatrix x0 = DenseMatrix::Zero(2 * numFree, 1);
         for (const auto& v : levelMesh->vertices()) {
-            if (v == p0 || v == p1) {
+            if (localPinIdx.count(v->idx)) {
                 continue;
             }
             auto freeIdx = freeIdxTable.at(v->idx);
@@ -897,10 +911,11 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     // present at this level remain nullopt; they will be filled in by
     // prolongation when undoing collapses at finer levels.
     UVVector<T> uvs(origVertCount);
-    uvs[level.localToOriginal[p0->idx]] = Vec<T, 2>(p0->pos[0], p0->pos[1]);
-    uvs[level.localToOriginal[p1->idx]] = Vec<T, 2>(p1->pos[0], p1->pos[1]);
+    for (const auto& [origIdx, uv] : origPins) {
+        uvs[origIdx] = uv;
+    }
     for (const auto& v : levelMesh->vertices()) {
-        if (v == p0 || v == p1) {
+        if (localPinIdx.count(v->idx)) {
             continue;
         }
         auto freeIdx = 2 * freeIdxTable.at(v->idx);
@@ -963,10 +978,36 @@ public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
 
-    /** @brief Set the pinned vertex indices used by compute() */
-    void setPinnedVertices(std::size_t pin0Idx, std::size_t pin1Idx)
+    /**
+     * @brief Per-pin entry: (mesh vertex index, target UV).
+     *
+     * A PinMap of size N ≥ 2 specifies an explicit LSCM pin set. Each pin
+     * survives every decimation level — `DecimationMesh::tryCollapse` rejects
+     * any collapse that would remove a pinned vertex.
+     */
+    using PinMap = detail::lscm::PinMap<T>;
+
+    /**
+     * @brief Set the explicit pin set used by `compute()`
+     */
+    void set_pins(PinMap pins)
     {
-        pinnedVertices_ = {pin0Idx, pin1Idx};
+        pins_ = std::move(pins);
+        legacyPinIndices_.reset();
+    }
+
+    /**
+     * @brief Deprecated: set a pin pair by index using the LSCM axis-snap
+     * convention at compute time.
+     *
+     * @deprecated Prefer `set_pins(PinMap)`. This overload will be removed in
+     * version 3.0.
+     */
+    [[deprecated("Use set_pins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
+        std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        legacyPinIndices_ = {pin0Idx, pin1Idx};
+        pins_.reset();
     }
 
     /** @brief Set the vertex ratio between consecutive hierarchy levels (default: 10) */
@@ -990,30 +1031,34 @@ public:
     /**
      * @brief Compute parameterization using instance configuration
      *
-     * Uses the pinned vertices, level ratio, and minimum coarse vertices
-     * configured via `setPinnedVertices()`, `setLevelRatio()`, and
-     * `setMinCoarseVertices()`. If no pins are set, selects them automatically
-     * using the same boundary-walk logic as `Compute(mesh)`.
+     * If `set_pins()` was called, uses the supplied PinMap. Otherwise, if the
+     * deprecated `setPinnedVertices()` was called, builds a PinMap from those
+     * indices via the LSCM axis-snap convention. Otherwise auto-selects two
+     * boundary vertices using the same logic as `Compute(mesh)`.
      *
      * @throws MeshException if pin selection fails (no boundary vertices)
      * @throws SolverException if any hierarchy level fails to solve
      */
     void compute(typename Mesh::Pointer& mesh) const
     {
-        std::size_t p0, p1;
-        if (pinnedVertices_) {
-            p0 = pinnedVertices_->first;
-            p1 = pinnedVertices_->second;
+        PinMap pins;
+        if (pins_) {
+            pins = *pins_;
+            detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
+        } else if (legacyPinIndices_) {
+            pins = detail::lscm::AutoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
+                                                        legacyPinIndices_->second);
         } else {
-            AutoSelectPins(mesh, p0, p1);
+            pins = detail::lscm::AutoSelectPins<T, Mesh>(mesh);
         }
-        ComputeImpl(mesh, p0, p1, levelRatio_, minCoarseVertices_);
+        ComputeImpl(mesh, pins, levelRatio_, minCoarseVertices_);
     }
 
     /**
      * @brief Compute with automatic pin selection
      *
-     * Selects pins identically to AngleBasedLSCM::Compute().
+     * Selects pins identically to AngleBasedLSCM::Compute() — first boundary
+     * vertex and its boundary-edge neighbor, placed via LSCM axis-snap.
      *
      * @throws MeshException if the mesh has no boundary vertices (pin selection
      *         fails) or the mesh is otherwise invalid
@@ -1021,44 +1066,38 @@ public:
      */
     static void Compute(typename Mesh::Pointer& mesh)
     {
-        std::size_t p0, p1;
-        AutoSelectPins(mesh, p0, p1);
-        ComputeImpl(mesh, p0, p1);
+        ComputeImpl(mesh, detail::lscm::AutoSelectPins<T, Mesh>(mesh));
     }
 
     /**
-     * @brief Compute with explicit pinned vertex indices
+     * @brief Compute with caller-specified pin UVs
      *
-     * @throws SolverException if any hierarchy level fails to solve
+     * @throws std::invalid_argument If `pins` has fewer than two entries, a
+     * duplicate index, or an out-of-range index.
+     * @throws SolverException If any hierarchy level fails to solve.
      */
-    static void Compute(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
+    static void Compute(typename Mesh::Pointer& mesh, const PinMap& pins)
     {
-        ComputeImpl(mesh, pin0Idx, pin1Idx);
+        detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
+        ComputeImpl(mesh, pins);
+    }
+
+    /**
+     * @brief Deprecated: compute with an explicit pin pair by index.
+     *
+     * Builds a 2-entry PinMap using the LSCM axis-snap convention and
+     * dispatches to the PinMap path.
+     *
+     * @deprecated Prefer `Compute(mesh, PinMap)`. This overload will be
+     * removed in version 3.0.
+     */
+    [[deprecated("Use Compute(mesh, PinMap); will be removed in 3.0")]] static void Compute(
+        typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        ComputeImpl(mesh, detail::lscm::AutoPlacePair<T, Mesh>(mesh, pin0Idx, pin1Idx));
     }
 
 private:
-    /** Select two pinned boundary vertices (same logic as AngleBasedLSCM) */
-    static void AutoSelectPins(const typename Mesh::Pointer& mesh, std::size_t& p0, std::size_t& p1)
-    {
-        auto boundary = mesh->vertices_boundary();
-        if (boundary.empty()) {
-            throw MeshException("HierarchicalLSCM: mesh has no boundary vertices");
-        }
-        auto v0 = boundary.front();
-        auto e = v0->edge;
-        do {
-            if (e->pair->is_boundary()) {
-                break;
-            }
-            e = e->pair->next;
-        } while (e != v0->edge);
-        if (e == v0->edge && !e->pair->is_boundary()) {
-            throw MeshException("Pinned vertex not on boundary");
-        }
-        p0 = v0->idx;
-        p1 = e->next->vertex->idx;
-    }
-
     /**
      * @brief Copy edge angles from the original mesh to a level mesh
      *
@@ -1083,22 +1122,31 @@ private:
     }
 
     /**
-     * @brief Core hierarchical LSCM solve given resolved pin indices
+     * @brief Core hierarchical LSCM solve given a resolved PinMap
      *
-     * Builds the mesh hierarchy, solves LSCM at the coarsest level, then
-     * prolongates and refines at each finer level.
+     * Builds the mesh hierarchy with each pinned vertex flagged as
+     * non-collapsible, solves LSCM at the coarsest level, then prolongates and
+     * refines at each finer level. Pin UVs come from the PinMap verbatim;
+     * non-pin vertex UVs are written by the solve.
      */
-    static void ComputeImpl(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx,
+    static void ComputeImpl(typename Mesh::Pointer& mesh, const PinMap& pins,
                             std::size_t levelRatio = 10, std::size_t minCoarseVerts = 100)
     {
+        // Extract just the indices for the hierarchy's non-collapsible set.
+        std::vector<std::size_t> pinIndices;
+        pinIndices.reserve(pins.size());
+        for (const auto& [vIdx, uv] : pins) {
+            pinIndices.push_back(vIdx);
+        }
+
         // Build mesh hierarchy
         auto [levels, collapsesByLevel] =
-            detail::hlscm::buildHierarchy<T>(mesh, pin0Idx, pin1Idx, levelRatio, minCoarseVerts);
+            detail::hlscm::buildHierarchy<T>(mesh, pinIndices, levelRatio, minCoarseVerts);
 
         if (levels.size() <= 1) {
-            // Mesh too small for hierarchy — single-level LSCM solve
-            // Use AngleBasedLSCM for exact equivalence on small meshes
-            AngleBasedLSCM<T, MeshType, Solver>::Compute(mesh, pin0Idx, pin1Idx);
+            // Mesh too small for hierarchy — single-level LSCM solve.
+            // Delegate to AngleBasedLSCM with the same pins.
+            AngleBasedLSCM<T, MeshType, Solver>::Compute(mesh, pins);
             return;
         }
 
@@ -1110,8 +1158,8 @@ private:
         auto coarsestIdx = levels.size() - 1;
         auto coarseMesh = detail::hlscm::buildLevelMesh<T>(levels[coarsestIdx]);
         ComputeMeshAngles(coarseMesh);
-        auto uvs = detail::hlscm::solveLSCMLevel<T, Solver>(
-            coarseMesh, levels[coarsestIdx], pin0Idx, pin1Idx, origVertCount, nullptr);
+        auto uvs = detail::hlscm::solveLSCMLevel<T, Solver>(coarseMesh, levels[coarsestIdx], pins,
+                                                            origVertCount, nullptr);
 
         // Prolongate and refine at each finer level
         for (std::size_t k = coarsestIdx; k-- > 0;) {
@@ -1130,7 +1178,7 @@ private:
             }
 
             // Solve with initial guess
-            uvs = detail::hlscm::solveLSCMLevel<T, Solver>(levelMesh, levels[k], pin0Idx, pin1Idx,
+            uvs = detail::hlscm::solveLSCMLevel<T, Solver>(levelMesh, levels[k], pins,
                                                            origVertCount, &uvs);
         }
 
@@ -1144,8 +1192,10 @@ private:
         }
     }
 
-    /** Optional explicit pin pair */
-    std::optional<std::pair<std::size_t, std::size_t>> pinnedVertices_;
+    /** Optional explicit pin set configured via `set_pins()`. */
+    std::optional<PinMap> pins_;
+    /** Deprecated: legacy two-pin index pair set via `setPinnedVertices`. */
+    std::optional<std::pair<std::size_t, std::size_t>> legacyPinIndices_;
     /** Ratio of vertices between consecutive hierarchy levels */
     std::size_t levelRatio_{10};
     /** Minimum vertex count for the coarsest hierarchy level */
