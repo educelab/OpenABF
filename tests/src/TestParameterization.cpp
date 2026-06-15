@@ -1322,3 +1322,159 @@ TEST(LSCMSystemBuild, FreeIdxTable_DeterministicAcrossRuns)
     EXPECT_EQ(static_cast<std::size_t>(parts1.A.cols()), 2 * 14);
     EXPECT_EQ(static_cast<std::size_t>(parts2.A.cols()), 2 * 14);
 }
+
+// ============================================================================
+// A7 — Multi-pin (≥3 pins) tests for ABLSCM and HLSCM
+// ============================================================================
+
+TEST(Parameterization, AngleBasedLSCM_MultiPin_Pyramid)
+{
+    // Pin all three base vertices of the pyramid to a known equilateral
+    // triangle in UV space.  The apex (v3) is the only free vertex.
+    using LSCM = AngleBasedLSCM<float>;
+    using PinMap = typename LSCM::PinMap;
+
+    auto mesh = ConstructPyramid<LSCM::Mesh>();
+    PinMap pins{
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {1u, Vec<float, 2>{2.f, 0.f}},
+        {2u, Vec<float, 2>{1.f, std::sqrt(3.f)}},
+    };
+    LSCM::Compute(mesh, pins);
+
+    // Pinned vertices must land exactly at the specified UVs (z = 0).
+    for (const auto& [vIdx, uv] : pins) {
+        const auto& p = mesh->vertex(vIdx)->pos;
+        EXPECT_FLOAT_EQ(p[0], uv[0]) << "pin v" << vIdx << " u";
+        EXPECT_FLOAT_EQ(p[1], uv[1]) << "pin v" << vIdx << " v";
+        EXPECT_FLOAT_EQ(p[2], 0.f) << "pin v" << vIdx << " z";
+    }
+    // The free apex must be finite and in the z=0 plane.
+    const auto& apex = mesh->vertex(3)->pos;
+    EXPECT_TRUE(std::isfinite(apex[0]));
+    EXPECT_TRUE(std::isfinite(apex[1]));
+    EXPECT_FLOAT_EQ(apex[2], 0.f);
+}
+
+TEST(Parameterization, AngleBasedLSCM_SetPins_MatchesStatic)
+{
+    // The instance setPins() form must produce identical output to the static
+    // Compute(mesh, PinMap) overload for the same pins.
+    using LSCM = AngleBasedLSCM<float>;
+    using PinMap = typename LSCM::PinMap;
+
+    PinMap pins{
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {1u, Vec<float, 2>{2.f, 0.f}},
+        {2u, Vec<float, 2>{1.f, std::sqrt(3.f)}},
+    };
+
+    auto mesh_static = ConstructPyramid<LSCM::Mesh>();
+    LSCM::Compute(mesh_static, pins);
+
+    auto mesh_instance = ConstructPyramid<LSCM::Mesh>();
+    LSCM lscm;
+    lscm.setPins(pins);
+    lscm.compute(mesh_instance);
+
+    for (std::size_t v = 0; v < mesh_static->num_vertices(); ++v) {
+        const auto& vs = mesh_static->vertex(v)->pos;
+        const auto& vi = mesh_instance->vertex(v)->pos;
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(vi[i], vs[i]) << "vertex " << v << " comp " << i;
+        }
+    }
+}
+
+TEST(HLSCM, MultiPin_Pyramid)
+{
+    // 4-vertex mesh: HLSCM falls back to single-level LSCM internally.  Pins
+    // must still land exactly at the requested UVs.
+    using HLSCM = HierarchicalLSCM<float>;
+    using PinMap = typename HLSCM::PinMap;
+
+    auto mesh = ConstructPyramid<HLSCM::Mesh>();
+    PinMap pins{
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {1u, Vec<float, 2>{2.f, 0.f}},
+        {2u, Vec<float, 2>{1.f, std::sqrt(3.f)}},
+    };
+    HLSCM::Compute(mesh, pins);
+
+    for (const auto& [vIdx, uv] : pins) {
+        const auto& p = mesh->vertex(vIdx)->pos;
+        EXPECT_FLOAT_EQ(p[0], uv[0]) << "pin v" << vIdx << " u";
+        EXPECT_FLOAT_EQ(p[1], uv[1]) << "pin v" << vIdx << " v";
+        EXPECT_FLOAT_EQ(p[2], 0.f) << "pin v" << vIdx << " z";
+    }
+    const auto& apex = mesh->vertex(3)->pos;
+    EXPECT_TRUE(std::isfinite(apex[0]));
+    EXPECT_TRUE(std::isfinite(apex[1]));
+    EXPECT_FLOAT_EQ(apex[2], 0.f);
+}
+
+TEST(HLSCM, MultiPin_Hemisphere)
+{
+    // 289-vertex mesh: exercises the multi-level hierarchy path.  Pin three
+    // equator vertices at chosen UVs and verify each lands exactly.  Pins
+    // must survive every decimation level (the isPinned_ flag protects them).
+    using HLSCM = HierarchicalLSCM<float>;
+    using PinMap = typename HLSCM::PinMap;
+
+    constexpr std::size_t rings = 12;
+    constexpr std::size_t sectors = 24;
+    auto mesh = ConstructHemisphere<HLSCM::Mesh>(rings, sectors);
+
+    // Equator ring indices: 1 + (rings-1)*sectors .. 1 + rings*sectors - 1
+    const std::size_t equatorBase = 1 + (rings - 1) * sectors;
+    PinMap pins{
+        {equatorBase + 0, Vec<float, 2>{0.f, 0.f}},
+        {equatorBase + sectors / 3, Vec<float, 2>{1.f, 0.f}},
+        {equatorBase + (2 * sectors) / 3, Vec<float, 2>{0.5f, 0.8660254f}},
+    };
+    HLSCM::Compute(mesh, pins);
+
+    for (const auto& [vIdx, uv] : pins) {
+        const auto& p = mesh->vertex(vIdx)->pos;
+        EXPECT_FLOAT_EQ(p[0], uv[0]) << "pin v" << vIdx << " u";
+        EXPECT_FLOAT_EQ(p[1], uv[1]) << "pin v" << vIdx << " v";
+        EXPECT_FLOAT_EQ(p[2], 0.f) << "pin v" << vIdx << " z";
+    }
+    // Every non-pinned vertex must have produced a finite UV in z=0 plane.
+    for (std::size_t v = 0; v < mesh->num_vertices(); ++v) {
+        const auto& pos = mesh->vertex(v)->pos;
+        EXPECT_TRUE(std::isfinite(pos[0])) << "vertex " << v << " u not finite";
+        EXPECT_TRUE(std::isfinite(pos[1])) << "vertex " << v << " v not finite";
+        EXPECT_FLOAT_EQ(pos[2], 0.f) << "vertex " << v << " z != 0";
+    }
+}
+
+TEST(HLSCM, SetPins_MatchesStatic)
+{
+    // Instance setPins() must produce identical output to the static
+    // Compute(mesh, PinMap) overload.
+    using HLSCM = HierarchicalLSCM<float>;
+    using PinMap = typename HLSCM::PinMap;
+
+    PinMap pins{
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {1u, Vec<float, 2>{2.f, 0.f}},
+        {2u, Vec<float, 2>{1.f, std::sqrt(3.f)}},
+    };
+
+    auto mesh_static = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM::Compute(mesh_static, pins);
+
+    auto mesh_instance = ConstructPyramid<HLSCM::Mesh>();
+    HLSCM hlscm;
+    hlscm.setPins(pins);
+    hlscm.compute(mesh_instance);
+
+    for (std::size_t v = 0; v < mesh_static->num_vertices(); ++v) {
+        const auto& vs = mesh_static->vertex(v)->pos;
+        const auto& vi = mesh_instance->vertex(v)->pos;
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(vi[i], vs[i]) << "vertex " << v << " comp " << i;
+        }
+    }
+}

@@ -6,16 +6,20 @@ Scope expanded 2026-06-14: multi-pin now covers both `AngleBasedLSCM` and
 `HierarchicalLSCM`. Most of the work lives in a shared `detail::lscm`
 assembly helper used by both solvers.
 
-## Phase 1: Tests (Red)
-- [ ] 1.1 ABLSCM: 3-pin pyramid test — pin three vertices with explicit UV
+## Phase 1: Tests (Red) — done
+- [x] 1.1 ABLSCM: 3-pin pyramid test — pin three vertices with explicit UV
   coordinates; verify each lands exactly at its specified UV.
-- [ ] 1.2 ABLSCM: instance-form test — `setPins(PinMap)` + `compute()` produces
+- [x] 1.2 ABLSCM: instance-form test — `setPins(PinMap)` + `compute()` produces
   the same result as the static `Compute(mesh, PinMap)` overload.
-- [ ] 1.3 HLSCM: 3-pin pyramid test (single-level fallback path) — verify each
+- [x] 1.3 HLSCM: 3-pin pyramid test (single-level fallback path) — verify each
   pin lands at its specified UV.
-- [ ] 1.4 HLSCM: 3-pin hemisphere test (multi-level path) — verify pins survive
+- [x] 1.4 HLSCM: 3-pin hemisphere test (multi-level path) — verify pins survive
   every hierarchy level and land at the specified UVs.
-- [ ] 1.5 HLSCM: instance-form test — `setPins(PinMap)` + `compute()`.
+- [x] 1.5 HLSCM: instance-form test — `setPins(PinMap)` + `compute()`.
+
+Confirmed Red: `cmake --build . --target OpenABF_TestParameterization` fails
+with 12 unknown-symbol errors (`PinMap`, `setPins`); no regressions in
+existing tests.
 
 ## Phase 2: Shared assembly helper
 - [ ] 2.1 Add `detail::lscm::buildSystemMultiPin(mesh, pins)` in
