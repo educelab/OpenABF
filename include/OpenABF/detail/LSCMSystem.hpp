@@ -125,7 +125,7 @@ auto AutoSelectPins(const typename MeshType::Pointer& mesh) -> PinMap<T>
 }
 
 /**
- * @brief Outputs of `buildSystem`: the LSCM least-squares system for a mesh
+ * @brief Outputs of `BuildSystem`: the LSCM least-squares system for a mesh
  *        with N pinned vertices (N ≥ 2).
  *
  * Layout: `A` is `(2·numFaces) × (2·numFree)`, `b` is `(2·numFaces) × 1`,
@@ -161,7 +161,7 @@ struct SystemParts {
  * already stored on the mesh.
  */
 template <typename T, class MeshType>
-auto buildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) -> SystemParts<T>
+auto BuildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) -> SystemParts<T>
 {
     using Triplet = Eigen::Triplet<T>;
     using SparseMatrix = Eigen::SparseMatrix<T>;
