@@ -4757,13 +4757,16 @@ public:
     static void Compute(typename Mesh::Pointer& mesh, const PinMap& pins, std::size_t levelRatio,
                         std::size_t minCoarseVerts)
     {
+        // Validate in argument-declaration order so a bad-pins-and-bad-tuning
+        // call reports the pin error first, matching the existing
+        // Compute(mesh, PinMap) overload's behavior.
+        detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
         if (levelRatio < 2) {
             throw std::invalid_argument("HierarchicalLSCM: level_ratio must be >= 2");
         }
         if (minCoarseVerts < 3) {
             throw std::invalid_argument("HierarchicalLSCM: min_coarse_vertices must be >= 3");
         }
-        detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
         ComputeImpl(mesh, pins, levelRatio, minCoarseVerts);
     }
 

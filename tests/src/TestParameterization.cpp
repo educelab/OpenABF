@@ -1683,6 +1683,19 @@ TEST(HLSCM, StaticTuning_MatchesInstance)
         {399u, Vec<float, 2>{1.f, 1.f}},
     };
 
+    // Verify the chosen tuning actually drives a multi-level hierarchy at this
+    // mesh size — otherwise both call paths fall back to single-level LSCM and
+    // the static-vs-instance comparison below would be trivially equal even if
+    // the overload silently dropped levelRatio/minCoarseVerts.
+    {
+        auto probe = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+        const std::vector<std::size_t> pinIndices{0u, 19u, 399u};
+        auto [levels, _] = OpenABF::detail::hlscm::BuildHierarchy<float>(
+            probe, pinIndices, levelRatio, minCoarseVerts);
+        ASSERT_GE(levels.size(), std::size_t(2))
+            << "test setup expected >=2 hierarchy levels; got " << levels.size();
+    }
+
     auto mesh_static = ConstructWavySurface<HLSCM::Mesh>(20, 20);
     HLSCM::Compute(mesh_static, pins, levelRatio, minCoarseVerts);
 
