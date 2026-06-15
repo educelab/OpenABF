@@ -33,7 +33,7 @@ jobs:
             install_deps: dnf install -y cmake ninja-build gcc-c++ eigen3-devel
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Dependencies
         run: ${{ matrix.install_deps }}
