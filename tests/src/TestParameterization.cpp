@@ -1665,3 +1665,88 @@ TEST(HLSCM, SetPins_MatchesStatic)
         }
     }
 }
+
+TEST(HLSCM, StaticTuning_MatchesInstance)
+{
+    // Static Compute(mesh, pins, levelRatio, minCoarseVerts) must produce
+    // identical output to the equivalent instance API configuration. Uses a
+    // wavy 20x20 grid so the hierarchy parameters actually drive multi-level
+    // decimation (defaults would yield a single-level fallback).
+    using HLSCM = HierarchicalLSCM<float>;
+    using PinMap = typename HLSCM::PinMap;
+
+    constexpr std::size_t levelRatio = 4;
+    constexpr std::size_t minCoarseVerts = 25;
+    PinMap pins{
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {19u, Vec<float, 2>{1.f, 0.f}},
+        {399u, Vec<float, 2>{1.f, 1.f}},
+    };
+
+    // Verify the chosen tuning actually drives a multi-level hierarchy at this
+    // mesh size — otherwise both call paths fall back to single-level LSCM and
+    // the static-vs-instance comparison below would be trivially equal even if
+    // the overload silently dropped levelRatio/minCoarseVerts.
+    {
+        auto probe = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+        const std::vector<std::size_t> pinIndices{0u, 19u, 399u};
+        auto [levels, _] = OpenABF::detail::hlscm::BuildHierarchy<float>(
+            probe, pinIndices, levelRatio, minCoarseVerts);
+        ASSERT_GE(levels.size(), std::size_t(2))
+            << "test setup expected >=2 hierarchy levels; got " << levels.size();
+    }
+
+    auto mesh_static = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+    HLSCM::Compute(mesh_static, pins, levelRatio, minCoarseVerts);
+
+    auto mesh_instance = ConstructWavySurface<HLSCM::Mesh>(20, 20);
+    HLSCM hlscm;
+    hlscm.set_pins(pins);
+    hlscm.set_level_ratio(levelRatio);
+    hlscm.set_min_coarse_vertices(minCoarseVerts);
+    hlscm.compute(mesh_instance);
+
+    for (std::size_t v = 0; v < mesh_static->num_vertices(); ++v) {
+        const auto& vs = mesh_static->vertex(v)->pos;
+        const auto& vi = mesh_instance->vertex(v)->pos;
+        for (auto i = 0; i < 3; i++) {
+            EXPECT_FLOAT_EQ(vi[i], vs[i]) << "vertex " << v << " comp " << i;
+        }
+    }
+
+    // Pins must land exactly at the requested UVs.
+    for (const auto& [vIdx, uv] : pins) {
+        const auto& p = mesh_static->vertex(vIdx)->pos;
+        EXPECT_FLOAT_EQ(p[0], uv[0]) << "pin v" << vIdx << " u";
+        EXPECT_FLOAT_EQ(p[1], uv[1]) << "pin v" << vIdx << " v";
+        EXPECT_FLOAT_EQ(p[2], 0.f) << "pin v" << vIdx << " z";
+    }
+}
+
+TEST(HLSCM, StaticTuning_RejectsBadParameters)
+{
+    // Validation must match the instance setters: level_ratio < 2 and
+    // min_coarse_vertices < 3 both throw std::invalid_argument.
+    using HLSCM = HierarchicalLSCM<float>;
+    using PinMap = typename HLSCM::PinMap;
+
+    auto mesh = ConstructPyramid<HLSCM::Mesh>();
+    PinMap pins{
+        {0u, Vec<float, 2>{0.f, 0.f}},
+        {1u, Vec<float, 2>{2.f, 0.f}},
+    };
+
+    EXPECT_THROW(HLSCM::Compute(mesh, pins, /*levelRatio=*/1, /*minCoarseVerts=*/10),
+                 std::invalid_argument);
+    EXPECT_THROW(HLSCM::Compute(mesh, pins, /*levelRatio=*/0, /*minCoarseVerts=*/10),
+                 std::invalid_argument);
+    EXPECT_THROW(HLSCM::Compute(mesh, pins, /*levelRatio=*/4, /*minCoarseVerts=*/2),
+                 std::invalid_argument);
+    EXPECT_THROW(HLSCM::Compute(mesh, pins, /*levelRatio=*/4, /*minCoarseVerts=*/0),
+                 std::invalid_argument);
+
+    // PinMap validation must still apply through the tuning overload.
+    PinMap badPins{{0u, Vec<float, 2>{0.f, 0.f}}};  // only one pin
+    EXPECT_THROW(HLSCM::Compute(mesh, badPins, /*levelRatio=*/4, /*minCoarseVerts=*/10),
+                 std::invalid_argument);
+}

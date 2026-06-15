@@ -4734,6 +4734,43 @@ public:
     }
 
     /**
+     * @brief Compute with caller-specified pin UVs and hierarchy tuning
+     *
+     * Static counterpart to configuring `set_level_ratio()` and
+     * `set_min_coarse_vertices()` on an instance.
+     *
+     * @param levelRatio Target vertex ratio between consecutive hierarchy
+     *        levels. Must be >= 2.
+     * @param minCoarseVerts Minimum vertex count at the coarsest level. Must
+     *        be >= 3.
+     *
+     * @throws std::invalid_argument If `pins` is invalid (see PinMap overload),
+     *         or if `levelRatio < 2`, or if `minCoarseVerts < 3`.
+     * @throws SolverException If any hierarchy level fails to solve.
+     *
+     * @note An auto-pin counterpart `Compute(mesh, levelRatio, minCoarseVerts)`
+     *       is not provided because its signature would collide with the
+     *       deprecated `Compute(mesh, pin0Idx, pin1Idx)` overload. It will be
+     *       added when that overload is removed in 3.0; until then, use the
+     *       instance API for auto-pin selection with custom tuning.
+     */
+    static void Compute(typename Mesh::Pointer& mesh, const PinMap& pins, std::size_t levelRatio,
+                        std::size_t minCoarseVerts)
+    {
+        // Validate in argument-declaration order so a bad-pins-and-bad-tuning
+        // call reports the pin error first, matching the existing
+        // Compute(mesh, PinMap) overload's behavior.
+        detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
+        if (levelRatio < 2) {
+            throw std::invalid_argument("HierarchicalLSCM: level_ratio must be >= 2");
+        }
+        if (minCoarseVerts < 3) {
+            throw std::invalid_argument("HierarchicalLSCM: min_coarse_vertices must be >= 3");
+        }
+        ComputeImpl(mesh, pins, levelRatio, minCoarseVerts);
+    }
+
+    /**
      * @brief Deprecated: compute with an explicit pin pair by index.
      *
      * Builds a 2-entry PinMap using the LSCM axis-snap convention and
