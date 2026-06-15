@@ -77,12 +77,12 @@ struct Quadric {
 template <typename T>
 struct CollapseRecord {
     /** Index of the removed vertex (in the original/fine mesh) */
-    std::size_t vRemoved;
+    std::size_t v_removed;
     /** Index of the kept vertex (in the original/fine mesh) */
-    std::size_t vKept;
-    /** Post-collapse triangle containing vRemoved (original vertex indices) */
-    std::array<std::size_t, 3> containingTri;
-    /** Barycentric coordinates of vRemoved in containingTri */
+    std::size_t v_kept;
+    /** Post-collapse triangle containing v_removed (original vertex indices) */
+    std::array<std::size_t, 3> containing_tri;
+    /** Barycentric coordinates of v_removed in containing_tri */
     std::array<T, 3> bary;
 };
 
@@ -96,12 +96,12 @@ struct HierarchyLevel {
     /** Face connectivity (each face is 3 level-local indices) */
     std::vector<std::array<std::size_t, 3>> faces;
     /** Map from level-local vertex index to original (finest) vertex index */
-    std::vector<std::size_t> localToOriginal;
+    std::vector<std::size_t> local_to_original;
     /** Map from original vertex index to level-local index. Sized to the
      *  finest-mesh vertex count; vertices not present at this level hold
      *  `std::nullopt`.
      */
-    std::vector<std::optional<std::size_t>> originalToLocal;
+    std::vector<std::optional<std::size_t>> original_to_local;
 };
 
 /**
@@ -123,22 +123,22 @@ public:
 
         positions_.resize(nv);
         alive_.assign(nv, true);
-        isBoundary_.assign(nv, false);
-        isPinned_.assign(nv, false);
+        is_boundary_.assign(nv, false);
+        is_pinned_.assign(nv, false);
         quadrics_.resize(nv);
 
         for (auto idx : pinIndices) {
-            isPinned_[idx] = true;
+            is_pinned_[idx] = true;
         }
 
         for (const auto& v : mesh->vertices()) {
             positions_[v->idx] = v->pos;
-            isBoundary_[v->idx] = v->is_boundary();
+            is_boundary_[v->idx] = v->is_boundary();
         }
 
         faces_.reserve(nf);
-        faceAlive_.reserve(nf);
-        vertFaces_.resize(nv);
+        face_alive_.reserve(nf);
+        vert_faces_.resize(nv);
 
         for (const auto& f : mesh->faces()) {
             auto e0 = f->head;
@@ -147,24 +147,24 @@ public:
             std::array<std::size_t, 3> tri{e0->vertex->idx, e1->vertex->idx, e2->vertex->idx};
             auto fi = faces_.size();
             faces_.push_back(tri);
-            faceAlive_.push_back(true);
-            vertFaces_[tri[0]].push_back(fi);
-            vertFaces_[tri[1]].push_back(fi);
-            vertFaces_[tri[2]].push_back(fi);
+            face_alive_.push_back(true);
+            vert_faces_[tri[0]].push_back(fi);
+            vert_faces_[tri[1]].push_back(fi);
+            vert_faces_[tri[2]].push_back(fi);
         }
 
-        numAliveVerts_ = nv;
-        numAliveFaces_ = nf;
+        num_alive_verts_ = nv;
+        num_alive_faces_ = nf;
 
-        computeQuadrics_();
-        buildEdges_();
+        compute_quadrics_();
+        build_edges_();
     }
 
     /** Get number of alive vertices */
-    [[nodiscard]] auto numAliveVerts() const -> std::size_t { return numAliveVerts_; }
+    [[nodiscard]] auto num_alive_verts() const -> std::size_t { return num_alive_verts_; }
 
     /** Get number of alive faces */
-    [[nodiscard]] auto numAliveFaces() const -> std::size_t { return numAliveFaces_; }
+    [[nodiscard]] auto num_alive_faces() const -> std::size_t { return num_alive_faces_; }
 
     /**
      * @brief Try to collapse edge (vRemove → vKeep), returning a collapse record
@@ -176,29 +176,29 @@ public:
      *                     vertex indices (sorted, unique). Passing a caller-
      *                     owned vector here lets the PQ-update path reuse the
      *                     allocation across collapses instead of letting
-     *                     `vertexNeighbors()` allocate a fresh vector each
+     *                     `vertex_neighbors()` allocate a fresh vector each
      *                     time.
      */
-    auto tryCollapse(std::size_t vRemove, std::size_t vKeep,
-                     std::vector<std::size_t>* outKeepNbrs = nullptr)
+    auto try_collapse(std::size_t vRemove, std::size_t vKeep,
+                      std::vector<std::size_t>* outKeepNbrs = nullptr)
         -> std::optional<CollapseRecord<T>>
     {
         if (!alive_[vRemove] || !alive_[vKeep]) {
             return std::nullopt;
         }
-        if (isPinned_[vRemove]) {
+        if (is_pinned_[vRemove]) {
             return std::nullopt;
         }
 
         // Find shared faces (will be removed) and vRemove-only faces (will be updated)
         // Reuse scratch storage
-        auto& sharedFaces = scratchShared_;
-        auto& removeFaces = scratchRemove_;
+        auto& sharedFaces = scratch_shared_;
+        auto& removeFaces = scratch_remove_;
         sharedFaces.clear();
         removeFaces.clear();
 
-        for (auto fi : vertFaces_[vRemove]) {
-            if (!faceAlive_[fi])
+        for (auto fi : vert_faces_[vRemove]) {
+            if (!face_alive_[fi])
                 continue;
             bool hasKeep = false;
             for (auto vi : faces_[fi]) {
@@ -219,15 +219,15 @@ public:
 
         // Reject collapse of two boundary vertices via an interior edge:
         // vKeep would inherit two disconnected boundary fans → non-manifold.
-        if (isBoundary_[vRemove] && isBoundary_[vKeep] && sharedFaces.size() == 2) {
+        if (is_boundary_[vRemove] && is_boundary_[vKeep] && sharedFaces.size() == 2) {
             return std::nullopt;
         }
 
         // Link condition: collect sorted unique neighbors of vRemove and vKeep
         auto fillSortedNeighbors = [&](std::size_t v, std::vector<std::size_t>& out) {
             out.clear();
-            for (auto fi : vertFaces_[v]) {
-                if (!faceAlive_[fi])
+            for (auto fi : vert_faces_[v]) {
+                if (!face_alive_[fi])
                     continue;
                 for (auto vi : faces_[fi]) {
                     if (vi != v)
@@ -238,17 +238,18 @@ public:
             out.erase(std::unique(out.begin(), out.end()), out.end());
         };
 
-        fillSortedNeighbors(vRemove, scratchNbrsA_);
-        fillSortedNeighbors(vKeep, scratchNbrsB_);
+        fillSortedNeighbors(vRemove, scratch_nbrs_a_);
+        fillSortedNeighbors(vKeep, scratch_nbrs_b_);
 
         // Shared neighbors (excluding vKeep/vRemove from each other's sets)
-        scratchSharedNbrs_.clear();
-        for (auto v : scratchNbrsA_) {
-            if (v != vKeep && std::binary_search(scratchNbrsB_.begin(), scratchNbrsB_.end(), v)) {
-                scratchSharedNbrs_.push_back(v);
+        scratch_shared_nbrs_.clear();
+        for (auto v : scratch_nbrs_a_) {
+            if (v != vKeep &&
+                std::binary_search(scratch_nbrs_b_.begin(), scratch_nbrs_b_.end(), v)) {
+                scratch_shared_nbrs_.push_back(v);
             }
         }
-        // scratchSharedNbrs_ is already sorted since scratchNbrsA_ is sorted
+        // scratch_shared_nbrs_ is already sorted since scratch_nbrs_a_ is sorted
 
         // Expected shared: opposite vertices of the shared faces (at most 2 entries)
         std::array<std::size_t, 2> expectedShared{};
@@ -262,10 +263,10 @@ public:
         if (numExpected > 1 && expectedShared[0] > expectedShared[1])
             std::swap(expectedShared[0], expectedShared[1]);
 
-        if (scratchSharedNbrs_.size() != numExpected)
+        if (scratch_shared_nbrs_.size() != numExpected)
             return std::nullopt;
         for (std::size_t i = 0; i < numExpected; ++i) {
-            if (scratchSharedNbrs_[i] != expectedShared[i])
+            if (scratch_shared_nbrs_[i] != expectedShared[i])
                 return std::nullopt;
         }
 
@@ -279,14 +280,14 @@ public:
         // maintain a minimum angle above the threshold.
         //
         // Collect the full set of post-collapse faces incident to vKeep.
-        auto& postFaces = scratchPostFaces_;
+        auto& postFaces = scratch_post_faces_;
         postFaces.clear();
         // Existing vKeep faces (excluding shared faces which will be removed)
         auto isInShared = [&](std::size_t fi) {
             return std::find(sharedFaces.begin(), sharedFaces.end(), fi) != sharedFaces.end();
         };
-        for (auto fi : vertFaces_[vKeep]) {
-            if (!faceAlive_[fi] || isInShared(fi)) {
+        for (auto fi : vert_faces_[vKeep]) {
+            if (!face_alive_[fi] || isInShared(fi)) {
                 continue;
             }
             postFaces.push_back(faces_[fi]);
@@ -345,10 +346,10 @@ public:
 
         // Build collapse record with barycentric coordinates
         // After collapse, face (vRemove, vA, vB) becomes (vKeep, vA, vB).
-        // Store bary coords of vRemoved's position in the post-collapse triangle.
+        // Store bary coords of v_removed's position in the post-collapse triangle.
         CollapseRecord<T> record;
-        record.vRemoved = vRemove;
-        record.vKept = vKeep;
+        record.v_removed = vRemove;
+        record.v_kept = vKeep;
 
         if (!removeFaces.empty()) {
             // Use the first surviving face; its post-collapse vertices are
@@ -362,20 +363,20 @@ public:
                     postTri[slot++] = vi;
                 }
             }
-            record.containingTri = postTri;
+            record.containing_tri = postTri;
             record.bary = computeBarycentric_(positions_[postTri[0]], positions_[postTri[1]],
                                               positions_[postTri[2]], positions_[vRemove]);
         } else {
             // Edge case: all faces are shared — vertex collapses directly onto vKeep
-            record.containingTri = {vKeep, vKeep, vKeep};
+            record.containing_tri = {vKeep, vKeep, vKeep};
             record.bary = {T(1), T(0), T(0)};
         }
 
         // Execute collapse
         // Kill shared faces
         for (auto fi : sharedFaces) {
-            faceAlive_[fi] = false;
-            numAliveFaces_--;
+            face_alive_[fi] = false;
+            num_alive_faces_--;
         }
 
         // Update removeFaces: replace vRemove with vKeep
@@ -385,30 +386,30 @@ public:
                     vi = vKeep;
                 }
             }
-            vertFaces_[vKeep].push_back(fi);
+            vert_faces_[vKeep].push_back(fi);
         }
 
         // Mark vRemove as dead
         alive_[vRemove] = false;
-        numAliveVerts_--;
+        num_alive_verts_--;
 
         // Propagate boundary status: if vRemove was on the boundary,
         // vKeep inherits it (it now sits on the mesh boundary).
-        if (isBoundary_[vRemove]) {
-            isBoundary_[vKeep] = true;
+        if (is_boundary_[vRemove]) {
+            is_boundary_[vKeep] = true;
         }
 
         // Merge quadrics
         quadrics_[vKeep] += quadrics_[vRemove];
 
         // Compact dead face indices from vKeep's adjacency list
-        auto& vkFaces = vertFaces_[vKeep];
+        auto& vkFaces = vert_faces_[vKeep];
         vkFaces.erase(std::remove_if(vkFaces.begin(), vkFaces.end(),
-                                     [this](std::size_t fi) { return !faceAlive_[fi]; }),
+                                     [this](std::size_t fi) { return !face_alive_[fi]; }),
                       vkFaces.end());
 
         // Fill caller-owned post-collapse neighbor vector (reusing its
-        // allocation across calls). Equivalent to vertexNeighbors(vKeep) but
+        // allocation across calls). Equivalent to vertex_neighbors(vKeep) but
         // without an additional heap allocation.
         if (outKeepNbrs != nullptr) {
             outKeepNbrs->clear();
@@ -428,7 +429,7 @@ public:
     }
 
     /** Compute collapse cost for edge (v0 → v1): Q_merged evaluated at v1 */
-    [[nodiscard]] auto collapseCost(std::size_t v0, std::size_t v1) const -> T
+    [[nodiscard]] auto collapse_cost(std::size_t v0, std::size_t v1) const -> T
     {
         auto Q = quadrics_[v0] + quadrics_[v1];
         auto& p = positions_[v1];
@@ -436,25 +437,25 @@ public:
     }
 
     /** Check if a vertex is alive */
-    [[nodiscard]] auto isAlive(std::size_t v) const -> bool { return alive_[v]; }
+    [[nodiscard]] auto is_alive(std::size_t v) const -> bool { return alive_[v]; }
 
     /** Check if a vertex is collapsible (not pinned, alive) */
-    [[nodiscard]] auto isCollapsible(std::size_t v) const -> bool
+    [[nodiscard]] auto is_collapsible(std::size_t v) const -> bool
     {
-        return alive_[v] && !isPinned_[v];
+        return alive_[v] && !is_pinned_[v];
     }
 
     /** Get alive neighbour vertices of `v` (sorted, deduped).
      *
-     *  Production code path uses `tryCollapse`'s `outKeepNbrs` out-param to
+     *  Production code path uses `try_collapse`'s `outKeepNbrs` out-param to
      *  avoid this method's per-call allocation; this overload is retained
      *  only as the oracle for the `HLSCMInternal.TryCollapse_*` tests.
      */
-    [[nodiscard]] auto vertexNeighbors(std::size_t v) const -> std::vector<std::size_t>
+    [[nodiscard]] auto vertex_neighbors(std::size_t v) const -> std::vector<std::size_t>
     {
         std::vector<std::size_t> nbrs;
-        for (auto fi : vertFaces_[v]) {
-            if (!faceAlive_[fi])
+        for (auto fi : vert_faces_[v]) {
+            if (!face_alive_[fi])
                 continue;
             for (auto vi : faces_[fi]) {
                 if (vi != v && alive_[vi])
@@ -470,14 +471,14 @@ public:
     [[nodiscard]] auto snapshot() const -> HierarchyLevel<T>
     {
         HierarchyLevel<T> level;
-        level.originalToLocal.assign(alive_.size(), std::nullopt);
+        level.original_to_local.assign(alive_.size(), std::nullopt);
 
         // Build mapping from original indices to level-local indices
         std::size_t localIdx = 0;
         for (std::size_t i = 0; i < alive_.size(); ++i) {
             if (alive_[i]) {
-                level.originalToLocal[i] = localIdx;
-                level.localToOriginal.push_back(i);
+                level.original_to_local[i] = localIdx;
+                level.local_to_original.push_back(i);
                 level.positions.push_back(positions_[i]);
                 localIdx++;
             }
@@ -486,12 +487,12 @@ public:
         // Remap faces. Every alive face references only alive vertices, so
         // the unwrap is always safe here.
         for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
-            if (!faceAlive_[fi]) {
+            if (!face_alive_[fi]) {
                 continue;
             }
             std::array<std::size_t, 3> localTri;
             for (int j = 0; j < 3; ++j) {
-                localTri[j] = *level.originalToLocal[faces_[fi][j]];
+                localTri[j] = *level.original_to_local[faces_[fi][j]];
             }
             level.faces.push_back(localTri);
         }
@@ -500,22 +501,22 @@ public:
     }
 
     /** Rebuild the edge list from alive faces and return it */
-    auto rebuildAndGetEdges() -> const std::vector<std::pair<std::size_t, std::size_t>>&
+    auto rebuild_and_get_edges() -> const std::vector<std::pair<std::size_t, std::size_t>>&
     {
-        buildEdges_();
+        build_edges_();
         return edges_;
     }
 
 private:
     /** Recompute per-vertex QEM quadrics from the live faces (Garland-Heckbert). */
-    void computeQuadrics_()
+    void compute_quadrics_()
     {
         for (auto& q : quadrics_) {
             q = Quadric<T>();
         }
 
         for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
-            if (!faceAlive_[fi]) {
+            if (!face_alive_[fi]) {
                 continue;
             }
             auto& tri = faces_[fi];
@@ -544,7 +545,7 @@ private:
     }
 
     /** Rebuild the unique-edge list from the live faces. */
-    void buildEdges_()
+    void build_edges_()
     {
         edges_.clear();
         std::unordered_set<std::uint64_t> seen;
@@ -555,7 +556,7 @@ private:
         };
 
         for (std::size_t fi = 0; fi < faces_.size(); ++fi) {
-            if (!faceAlive_[fi]) {
+            if (!face_alive_[fi]) {
                 continue;
             }
             auto& tri = faces_[fi];
@@ -605,36 +606,36 @@ private:
     /** Per-vertex alive flag; collapses set entries to false. */
     std::vector<bool> alive_;
     /** Per-vertex boundary flag, copied from the source mesh. */
-    std::vector<bool> isBoundary_;
+    std::vector<bool> is_boundary_;
     /** Per-vertex pinned flag; pinned vertices cannot be removed by collapse. */
-    std::vector<bool> isPinned_;
+    std::vector<bool> is_pinned_;
     /** Per-vertex QEM quadrics accumulated from incident face planes. */
     std::vector<Quadric<T>> quadrics_;
     /** Face connectivity: each face is three vertex indices into `positions_`. */
     std::vector<std::array<std::size_t, 3>> faces_;
     /** Per-face alive flag; collapses retire faces by setting entries to false. */
-    std::vector<bool> faceAlive_;
+    std::vector<bool> face_alive_;
     /** Per-vertex incident face list. */
-    std::vector<std::vector<std::size_t>> vertFaces_;
+    std::vector<std::vector<std::size_t>> vert_faces_;
     /** Count of alive vertices (kept current across collapses). */
-    std::size_t numAliveVerts_{0};
+    std::size_t num_alive_verts_{0};
     /** Count of alive faces (kept current across collapses). */
-    std::size_t numAliveFaces_{0};
-    /** Unique-edge list, rebuilt on demand by `buildEdges_()`. */
+    std::size_t num_alive_faces_{0};
+    /** Unique-edge list, rebuilt on demand by `build_edges_()`. */
     std::vector<std::pair<std::size_t, std::size_t>> edges_;
 
     /** Scratch buffer: neighbor indices shared between two endpoints. */
-    std::vector<std::size_t> scratchShared_;
+    std::vector<std::size_t> scratch_shared_;
     /** Scratch buffer: faces to retire on a collapse. */
-    std::vector<std::size_t> scratchRemove_;
+    std::vector<std::size_t> scratch_remove_;
     /** Scratch buffer: post-collapse face rewrites. */
-    std::vector<std::array<std::size_t, 3>> scratchPostFaces_;
+    std::vector<std::array<std::size_t, 3>> scratch_post_faces_;
     /** Scratch buffer: neighbor list of one endpoint. */
-    std::vector<std::size_t> scratchNbrsA_;
+    std::vector<std::size_t> scratch_nbrs_a_;
     /** Scratch buffer: neighbor list of the other endpoint. */
-    std::vector<std::size_t> scratchNbrsB_;
-    /** Scratch buffer: deduplicated union of `scratchNbrsA_` and `scratchNbrsB_`. */
-    std::vector<std::size_t> scratchSharedNbrs_;
+    std::vector<std::size_t> scratch_nbrs_b_;
+    /** Scratch buffer: deduplicated union of `scratch_nbrs_a_` and `scratch_nbrs_b_`. */
+    std::vector<std::size_t> scratch_shared_nbrs_;
 };
 
 /**
@@ -644,7 +645,7 @@ private:
  * the collapse records needed for prolongation (ordered from finest to coarsest).
  */
 template <typename T, class MeshPtr>
-auto buildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndices,
+auto BuildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndices,
                     std::size_t levelRatio, std::size_t minCoarseVerts)
     -> std::pair<std::vector<HierarchyLevel<T>>, std::vector<std::vector<CollapseRecord<T>>>>
 {
@@ -657,14 +658,14 @@ auto buildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndi
 
     std::vector<std::vector<CollapseRecord<T>>> collapsesByLevel;
 
-    auto targetVerts = dmesh.numAliveVerts();
+    auto targetVerts = dmesh.num_alive_verts();
     if (targetVerts <= minCoarseVerts) {
         // Mesh is already small enough — single level
         return {levels, collapsesByLevel};
     }
 
     // Reused across collapses to avoid per-collapse heap allocation; populated
-    // by tryCollapse with vKeep's post-collapse neighbors.
+    // by try_collapse with vKeep's post-collapse neighbors.
     std::vector<std::size_t> nbrs;
 
     while (targetVerts > minCoarseVerts) {
@@ -675,27 +676,27 @@ auto buildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndi
         using CostEdge = std::pair<T, std::pair<std::size_t, std::size_t>>;
         std::priority_queue<CostEdge, std::vector<CostEdge>, std::greater<CostEdge>> pq;
 
-        const auto& edges = dmesh.rebuildAndGetEdges();
+        const auto& edges = dmesh.rebuild_and_get_edges();
         for (auto& [a, b] : edges) {
             // Try collapsing the collapsible vertex towards the other
-            if (dmesh.isCollapsible(a)) {
-                pq.push({dmesh.collapseCost(a, b), {a, b}});
+            if (dmesh.is_collapsible(a)) {
+                pq.push({dmesh.collapse_cost(a, b), {a, b}});
             }
-            if (dmesh.isCollapsible(b)) {
-                pq.push({dmesh.collapseCost(b, a), {b, a}});
+            if (dmesh.is_collapsible(b)) {
+                pq.push({dmesh.collapse_cost(b, a), {b, a}});
             }
         }
 
-        while (dmesh.numAliveVerts() > nextTarget && !pq.empty()) {
+        while (dmesh.num_alive_verts() > nextTarget && !pq.empty()) {
             auto [cost, edge] = pq.top();
             pq.pop();
 
             auto [vRemove, vKeep] = edge;
             // Skip stale entries whose endpoints have already been collapsed
-            if (!dmesh.isAlive(vRemove) || !dmesh.isAlive(vKeep)) {
+            if (!dmesh.is_alive(vRemove) || !dmesh.is_alive(vKeep)) {
                 continue;
             }
-            auto record = dmesh.tryCollapse(vRemove, vKeep, &nbrs);
+            auto record = dmesh.try_collapse(vRemove, vKeep, &nbrs);
             if (!record) {
                 continue;
             }
@@ -703,13 +704,13 @@ auto buildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndi
             levelCollapses.push_back(*record);
 
             // Add new edges involving vKeep to the priority queue using the
-            // post-collapse neighbor list populated by tryCollapse.
+            // post-collapse neighbor list populated by try_collapse.
             for (auto nb : nbrs) {
-                if (dmesh.isCollapsible(nb)) {
-                    pq.push({dmesh.collapseCost(nb, vKeep), {nb, vKeep}});
+                if (dmesh.is_collapsible(nb)) {
+                    pq.push({dmesh.collapse_cost(nb, vKeep), {nb, vKeep}});
                 }
-                if (dmesh.isCollapsible(vKeep)) {
-                    pq.push({dmesh.collapseCost(vKeep, nb), {vKeep, nb}});
+                if (dmesh.is_collapsible(vKeep)) {
+                    pq.push({dmesh.collapse_cost(vKeep, nb), {vKeep, nb}});
                 }
             }
         }
@@ -720,7 +721,7 @@ auto buildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndi
 
         collapsesByLevel.push_back(std::move(levelCollapses));
         levels.push_back(dmesh.snapshot());
-        targetVerts = dmesh.numAliveVerts();
+        targetVerts = dmesh.num_alive_verts();
     }
 
     return {levels, collapsesByLevel};
@@ -730,7 +731,7 @@ auto buildHierarchy(const MeshPtr& mesh, const std::vector<std::size_t>& pinIndi
  * @brief Build a HalfEdgeMesh from a hierarchy level
  */
 template <typename T>
-auto buildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>::Pointer
+auto BuildLevelMesh(const HierarchyLevel<T>& level) -> typename HalfEdgeMesh<T>::Pointer
 {
     auto mesh = HalfEdgeMesh<T>::New();
 
@@ -765,7 +766,7 @@ using UVVector = std::vector<std::optional<Vec<T, 2>>>;
  * @param collapses Collapse records for this level transition.
  */
 template <typename T>
-auto prolongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collapses) -> UVVector<T>
+auto ProlongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collapses) -> UVVector<T>
 {
     // Undo collapses in reverse order — the last collapse applied is the first
     // we need to undo to recover the next-finer level's UVs. All three
@@ -773,9 +774,9 @@ auto prolongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collap
     // dereference them: they survived the collapse we're undoing.
     for (auto it = collapses.rbegin(); it != collapses.rend(); ++it) {
         auto& rec = *it;
-        auto& tri = rec.containingTri;
+        auto& tri = rec.containing_tri;
 
-        uvs[rec.vRemoved] =
+        uvs[rec.v_removed] =
             *uvs[tri[0]] * rec.bary[0] + *uvs[tri[1]] * rec.bary[1] + *uvs[tri[2]] * rec.bary[2];
     }
 
@@ -794,7 +795,7 @@ auto prolongateUVs(UVVector<T> uvs, const std::vector<CollapseRecord<T>>& collap
  *         not present at this level remain `std::nullopt`.
  */
 template <typename T, class SolverType>
-auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
+auto SolveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
                     const detail::hlscm::HierarchyLevel<T>& level,
                     const detail::lscm::PinMap<T>& origPins, std::size_t origVertCount,
                     const UVVector<T>* initialGuess) -> UVVector<T>
@@ -808,7 +809,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     auto numFree = numVerts - numFixed;
 
     // Map each original pin idx to its level-local idx. Pins are guaranteed
-    // to survive every decimation level (DecimationMesh::tryCollapse rejects
+    // to survive every decimation level (DecimationMesh::try_collapse rejects
     // collapses of pinned vertices), so this unwrap is expected to succeed.
     // Throw a meaningful exception rather than std::bad_optional_access if a
     // future refactor ever breaks the invariant.
@@ -817,7 +818,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     std::unordered_set<std::size_t> localPinIdx;
     localPinIdx.reserve(numFixed);
     for (const auto& [origIdx, uv] : origPins) {
-        const auto& localOpt = level.originalToLocal[origIdx];
+        const auto& localOpt = level.original_to_local[origIdx];
         if (!localOpt.has_value()) {
             throw SolverException(
                 "HLSCM: pinned vertex was removed during decimation (invariant violated)");
@@ -828,7 +829,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
     }
 
     // Pin placement + LSCM system assembly (shared with AngleBasedLSCM)
-    auto parts = detail::lscm::buildSystem<T, Mesh>(levelMesh, localPins);
+    auto parts = detail::lscm::BuildSystem<T, Mesh>(levelMesh, localPins);
     auto& A = parts.A;
     auto& b = parts.b;
     auto& freeIdxTable = parts.freeIdxTable;
@@ -844,7 +845,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
                 continue;
             }
             auto freeIdx = freeIdxTable.at(v->idx);
-            auto origIdx = level.localToOriginal[v->idx];
+            auto origIdx = level.local_to_original[v->idx];
             if (const auto& guess = (*initialGuess)[origIdx]) {
                 x0(2 * freeIdx, 0) = (*guess)[0];
                 x0(2 * freeIdx + 1, 0) = (*guess)[1];
@@ -919,7 +920,7 @@ auto solveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
             continue;
         }
         auto freeIdx = 2 * freeIdxTable.at(v->idx);
-        auto origIdx = level.localToOriginal[v->idx];
+        auto origIdx = level.local_to_original[v->idx];
         uvs[origIdx] = Vec<T, 2>(x(freeIdx, 0), x(freeIdx + 1, 0));
     }
     return uvs;
@@ -982,7 +983,7 @@ public:
      * @brief Per-pin entry: (mesh vertex index, target UV).
      *
      * A PinMap of size N ≥ 2 specifies an explicit LSCM pin set. Each pin
-     * survives every decimation level — `DecimationMesh::tryCollapse` rejects
+     * survives every decimation level — `DecimationMesh::try_collapse` rejects
      * any collapse that would remove a pinned vertex.
      */
     using PinMap = detail::lscm::PinMap<T>;
@@ -993,7 +994,7 @@ public:
     void set_pins(PinMap pins)
     {
         pins_ = std::move(pins);
-        legacyPinIndices_.reset();
+        legacy_pin_indices_.reset();
     }
 
     /**
@@ -1006,26 +1007,40 @@ public:
     [[deprecated("Use set_pins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
         std::size_t pin0Idx, std::size_t pin1Idx)
     {
-        legacyPinIndices_ = {pin0Idx, pin1Idx};
+        legacy_pin_indices_ = {pin0Idx, pin1Idx};
         pins_.reset();
     }
 
     /** @brief Set the vertex ratio between consecutive hierarchy levels (default: 10) */
-    void setLevelRatio(std::size_t ratio)
+    void set_level_ratio(std::size_t ratio)
     {
         if (ratio < 2) {
-            throw std::invalid_argument("HierarchicalLSCM: levelRatio must be >= 2");
+            throw std::invalid_argument("HierarchicalLSCM: level_ratio must be >= 2");
         }
-        levelRatio_ = ratio;
+        level_ratio_ = ratio;
     }
 
     /** @brief Set the minimum vertex count at the coarsest level (default: 100) */
-    void setMinCoarseVertices(std::size_t count)
+    void set_min_coarse_vertices(std::size_t count)
     {
         if (count < 3) {
-            throw std::invalid_argument("HierarchicalLSCM: minCoarseVertices must be >= 3");
+            throw std::invalid_argument("HierarchicalLSCM: min_coarse_vertices must be >= 3");
         }
-        minCoarseVertices_ = count;
+        min_coarse_vertices_ = count;
+    }
+
+    /** @deprecated Use `set_level_ratio`; will be removed in 3.0. */
+    [[deprecated("Use set_level_ratio; will be removed in 3.0")]] void setLevelRatio(
+        std::size_t ratio)
+    {
+        set_level_ratio(ratio);
+    }
+
+    /** @deprecated Use `set_min_coarse_vertices`; will be removed in 3.0. */
+    [[deprecated("Use set_min_coarse_vertices; will be removed in 3.0")]] void setMinCoarseVertices(
+        std::size_t count)
+    {
+        set_min_coarse_vertices(count);
     }
 
     /**
@@ -1045,13 +1060,13 @@ public:
         if (pins_) {
             pins = *pins_;
             detail::lscm::ValidatePins<T, Mesh>(mesh, pins);
-        } else if (legacyPinIndices_) {
-            pins = detail::lscm::AutoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
-                                                        legacyPinIndices_->second);
+        } else if (legacy_pin_indices_) {
+            pins = detail::lscm::AutoPlacePair<T, Mesh>(mesh, legacy_pin_indices_->first,
+                                                        legacy_pin_indices_->second);
         } else {
             pins = detail::lscm::AutoSelectPins<T, Mesh>(mesh);
         }
-        ComputeImpl(mesh, pins, levelRatio_, minCoarseVertices_);
+        ComputeImpl(mesh, pins, level_ratio_, min_coarse_vertices_);
     }
 
     /**
@@ -1141,7 +1156,7 @@ private:
 
         // Build mesh hierarchy
         auto [levels, collapsesByLevel] =
-            detail::hlscm::buildHierarchy<T>(mesh, pinIndices, levelRatio, minCoarseVerts);
+            detail::hlscm::BuildHierarchy<T>(mesh, pinIndices, levelRatio, minCoarseVerts);
 
         if (levels.size() <= 1) {
             // Mesh too small for hierarchy — single-level LSCM solve.
@@ -1156,18 +1171,18 @@ private:
 
         // Solve coarsest level (last in the array)
         auto coarsestIdx = levels.size() - 1;
-        auto coarseMesh = detail::hlscm::buildLevelMesh<T>(levels[coarsestIdx]);
+        auto coarseMesh = detail::hlscm::BuildLevelMesh<T>(levels[coarsestIdx]);
         ComputeMeshAngles(coarseMesh);
-        auto uvs = detail::hlscm::solveLSCMLevel<T, Solver>(coarseMesh, levels[coarsestIdx], pins,
+        auto uvs = detail::hlscm::SolveLSCMLevel<T, Solver>(coarseMesh, levels[coarsestIdx], pins,
                                                             origVertCount, nullptr);
 
         // Prolongate and refine at each finer level
         for (std::size_t k = coarsestIdx; k-- > 0;) {
             // Prolongate UVs from level k+1 to level k
-            uvs = detail::hlscm::prolongateUVs<T>(std::move(uvs), collapsesByLevel[k]);
+            uvs = detail::hlscm::ProlongateUVs<T>(std::move(uvs), collapsesByLevel[k]);
 
             // Build level mesh
-            auto levelMesh = detail::hlscm::buildLevelMesh<T>(levels[k]);
+            auto levelMesh = detail::hlscm::BuildLevelMesh<T>(levels[k]);
 
             if (k == 0) {
                 // Finest level: use original mesh angles (may be ABF-optimized)
@@ -1178,7 +1193,7 @@ private:
             }
 
             // Solve with initial guess
-            uvs = detail::hlscm::solveLSCMLevel<T, Solver>(levelMesh, levels[k], pins,
+            uvs = detail::hlscm::SolveLSCMLevel<T, Solver>(levelMesh, levels[k], pins,
                                                            origVertCount, &uvs);
         }
 
@@ -1195,11 +1210,11 @@ private:
     /** Optional explicit pin set configured via `set_pins()`. */
     std::optional<PinMap> pins_;
     /** Deprecated: legacy two-pin index pair set via `setPinnedVertices`. */
-    std::optional<std::pair<std::size_t, std::size_t>> legacyPinIndices_;
+    std::optional<std::pair<std::size_t, std::size_t>> legacy_pin_indices_;
     /** Ratio of vertices between consecutive hierarchy levels */
-    std::size_t levelRatio_{10};
+    std::size_t level_ratio_{10};
     /** Minimum vertex count for the coarsest hierarchy level */
-    std::size_t minCoarseVertices_{100};
+    std::size_t min_coarse_vertices_{100};
 };
 
 }  // namespace OpenABF

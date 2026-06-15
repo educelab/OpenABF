@@ -144,7 +144,7 @@ public:
     void set_pins(PinMap pins)
     {
         pins_ = std::move(pins);
-        legacyPinIndices_.reset();
+        legacy_pin_indices_.reset();
     }
 
     /**
@@ -157,7 +157,7 @@ public:
     [[deprecated("Use set_pins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
         std::size_t pin0Idx, std::size_t pin1Idx)
     {
-        legacyPinIndices_ = {pin0Idx, pin1Idx};
+        legacy_pin_indices_ = {pin0Idx, pin1Idx};
         pins_.reset();
     }
 
@@ -166,9 +166,9 @@ public:
     {
         if (pins_) {
             Compute(mesh, *pins_);
-        } else if (legacyPinIndices_) {
-            ComputeImpl(mesh, detail::lscm::AutoPlacePair<T, Mesh>(mesh, legacyPinIndices_->first,
-                                                                   legacyPinIndices_->second));
+        } else if (legacy_pin_indices_) {
+            ComputeImpl(mesh, detail::lscm::AutoPlacePair<T, Mesh>(mesh, legacy_pin_indices_->first,
+                                                                   legacy_pin_indices_->second));
         } else {
             Compute(mesh);
         }
@@ -229,7 +229,7 @@ private:
     /** Optional explicit pin set configured via `set_pins()`. */
     std::optional<PinMap> pins_;
     /** Deprecated: legacy two-pin index pair set via `setPinnedVertices`. */
-    std::optional<std::pair<std::size_t, std::size_t>> legacyPinIndices_;
+    std::optional<std::pair<std::size_t, std::size_t>> legacy_pin_indices_;
 
     /**
      * @brief Core solver: build the LSCM system from the PinMap, solve for free
@@ -240,9 +240,9 @@ private:
         using SparseMatrix = Eigen::SparseMatrix<T>;
         using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
-        // LSCM system assembly (shared with HierarchicalLSCM). buildSystem
+        // LSCM system assembly (shared with HierarchicalLSCM). BuildSystem
         // does not mutate the mesh; pin UVs are written below.
-        auto parts = detail::lscm::buildSystem<T, Mesh>(mesh, pins);
+        auto parts = detail::lscm::BuildSystem<T, Mesh>(mesh, pins);
 
         // Solve for x
         auto x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(parts.A, parts.b);

@@ -48,10 +48,24 @@ public:
     using Mesh = MeshType;
 
     /** @brief Set the maximum number of iterations */
-    void setMaxIterations(std::size_t it) { maxIters_ = it; }
+    void set_max_iterations(std::size_t it) { max_iters_ = it; }
 
     /** @brief Set the gradient convergence threshold */
-    void setGradientThreshold(T t) { gradThreshold_ = t; }
+    void set_gradient_threshold(T t) { grad_threshold_ = t; }
+
+    /** @deprecated Use `set_max_iterations`; will be removed in 3.0. */
+    [[deprecated("Use set_max_iterations; will be removed in 3.0")]] void setMaxIterations(
+        std::size_t it)
+    {
+        set_max_iterations(it);
+    }
+
+    /** @deprecated Use `set_gradient_threshold`; will be removed in 3.0. */
+    [[deprecated("Use set_gradient_threshold; will be removed in 3.0")]] void setGradientThreshold(
+        T t)
+    {
+        set_gradient_threshold(t);
+    }
 
     /**
      * @brief Get the mesh gradient
@@ -70,7 +84,7 @@ public:
     /** @copydoc ABFPlusPlus::Compute */
     void compute(typename Mesh::Pointer& mesh)
     {
-        Compute(mesh, iters_, grad_, maxIters_, gradThreshold_);
+        Compute(mesh, iters_, grad_, max_iters_, grad_threshold_);
     }
 
     /**
@@ -273,9 +287,9 @@ private:
     /** Number of executed iterations */
     std::size_t iters_{0};
     /** Max iterations */
-    std::size_t maxIters_{10};
+    std::size_t max_iters_{10};
     /** Gradient convergence threshold */
-    T gradThreshold_{0.001};
+    T grad_threshold_{0.001};
 };
 
 }  // namespace OpenABF
