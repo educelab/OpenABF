@@ -2,22 +2,16 @@
 
 ## Next Up
 
-Planned work order (updated 2026-06-13; A8 landed in PR #88, P6 closed as obsolete):
+Planned work order (updated 2026-06-14; P4 landed in PR #91, P5 landed in PR #92):
 
-1. The following run **in parallel** (each on its own branch):
-   - **P4** — IncompleteCholesky preconditioner (touches `AngleBasedLSCM` solver
-     dispatch only; independent of HLSCM internals).
-   - **P5** — HLSCM hot-path allocation reduction (touches HLSCM hierarchy data
-     structures and `prolongateUVs` / UV map return type; minimal overlap with
-     A8's `detail::lscm::buildSystem` extraction).
+No parallel pair currently scheduled. Next pick from the active list — A7,
+A10, F2, or F5–F11 — based on priority at the time of starting.
 
 ## Active Tracks
 
 | Status | Track ID | Title | GitHub | Created | Updated |
 | ------ | -------- | ----- | ------ | ------- | ------- |
-| open | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-03-18 | 2026-06-13 |
-| open | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-03-20 | 2026-06-13 |
-| open | A7 | Multi-pin UV constraints for LSCM | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-03-16 | 2026-03-16 |
+| in_progress | A7 | Multi-pin UV constraints for LSCM and Hierarchical LSCM | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-03-16 | 2026-06-14 |
 | open | A10 | Add static Compute() overloads accepting levelRatio and minCoarseVertices | [#68](https://github.com/educelab/OpenABF/issues/68) | 2026-03-20 | 2026-03-20 |
 | open | F5 | Implement Hierarchical SLIM (H-SLIM) | [#52](https://github.com/educelab/OpenABF/issues/52) | 2026-03-20 | 2026-03-20 |
 | open | F6 | Migrate to C++20 | [#54](https://github.com/educelab/OpenABF/issues/54) | 2026-03-20 | 2026-03-20 |
@@ -32,6 +26,8 @@ Planned work order (updated 2026-06-13; A8 landed in PR #88, P6 closed as obsole
 
 | Status | Track ID | Title | GitHub | Archived |
 | ------ | -------- | ----- | ------ | -------- |
+| closed | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) — PR #92 | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-06-14 |
+| closed | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM (benchmarked; SparseLU stays default) — PR #91 | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-06-14 |
 | closed | P6 | Precompute sin/cos values before HLSCM face assembly loop (obsolete — post-A8 loop has no trig redundancy to eliminate) | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-06-13 |
 | closed | A8 | Extract shared LSCM system-building logic from solveLSCMLevel and ComputeImpl (PR #88) | [#64](https://github.com/educelab/OpenABF/issues/64) | 2026-06-13 |
 | closed | E2 | Add sphere cap built-in mesh generator to benchmark | [#48](https://github.com/educelab/OpenABF/issues/48) | 2026-06-12 |

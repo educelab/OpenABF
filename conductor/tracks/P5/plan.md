@@ -40,4 +40,4 @@ If a future profiling pass shows `buildEdges_` becoming a meaningful share of th
 ## Phase 7: Conductor & GitHub
 - [x] 7.1 Commits pushed (phases 1–4 only): `a14d34a`, `baf00bb`.
 - [x] 7.2 PR #92 open against #63.
-- [ ] 7.3 Update `tracks.md` (move P5 to archived once PR lands).
+- [x] 7.3 Update `tracks.md` (move P5 to archived once PR lands).
