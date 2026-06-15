@@ -3161,8 +3161,8 @@ void ValidatePins(const typename MeshType::Pointer& mesh, const PinMap<T>& pins)
  * either index is out of range.
  */
 template <typename T, class MeshType>
-auto AutoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx, std::size_t p1Idx)
-    -> PinMap<T>
+auto AutoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx,
+                   std::size_t p1Idx) -> PinMap<T>
 {
     const auto numVerts = mesh->num_vertices();
     if (p0Idx >= numVerts || p1Idx >= numVerts) {
@@ -3792,8 +3792,8 @@ public:
         num_alive_verts_ = nv;
         num_alive_faces_ = nf;
 
-        computeQuadrics_();
-        buildEdges_();
+        compute_quadrics_();
+        build_edges_();
     }
 
     /** Get number of alive vertices */
@@ -4139,13 +4139,13 @@ public:
     /** Rebuild the edge list from alive faces and return it */
     auto rebuild_and_get_edges() -> const std::vector<std::pair<std::size_t, std::size_t>>&
     {
-        buildEdges_();
+        build_edges_();
         return edges_;
     }
 
 private:
     /** Recompute per-vertex QEM quadrics from the live faces (Garland-Heckbert). */
-    void computeQuadrics_()
+    void compute_quadrics_()
     {
         for (auto& q : quadrics_) {
             q = Quadric<T>();
@@ -4181,7 +4181,7 @@ private:
     }
 
     /** Rebuild the unique-edge list from the live faces. */
-    void buildEdges_()
+    void build_edges_()
     {
         edges_.clear();
         std::unordered_set<std::uint64_t> seen;
@@ -4257,7 +4257,7 @@ private:
     std::size_t num_alive_verts_{0};
     /** Count of alive faces (kept current across collapses). */
     std::size_t num_alive_faces_{0};
-    /** Unique-edge list, rebuilt on demand by `buildEdges_()`. */
+    /** Unique-edge list, rebuilt on demand by `build_edges_()`. */
     std::vector<std::pair<std::size_t, std::size_t>> edges_;
 
     /** Scratch buffer: neighbor indices shared between two endpoints. */
