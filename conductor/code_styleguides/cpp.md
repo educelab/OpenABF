@@ -15,12 +15,31 @@ The `thirdparty/` directory is excluded from formatting — it contains external
 - **Include sorting**: Enabled; priority order: standard library, C headers, third-party, project headers
 
 ## Naming Conventions
-- **Types / classes**: `PascalCase`
-- **Functions / methods**: `camelCase` or `snake_case` — be consistent within a class
-- **Member variables**: `camelCase` or `snake_case_` with trailing underscore for private members
-- **Constants / enums**: `kPascalCase` or `ALL_CAPS`
-- **Namespaces**: `lowercase`
-- **Template parameters**: `PascalCase` (e.g. `typename Scalar`)
+
+| Identifier kind | Style | Examples |
+|---|---|---|
+| Types, classes, structs, type aliases, enum classes | `PascalCase` | `HalfEdgeMesh`, `PinMap`, `SolverException`, `DefaultVertexTraits` |
+| Static class methods (factories, public algorithms exposed on a class) | `PascalCase` | `HalfEdgeMesh::New`, `ABF::Compute`, `MeshIO::Read` |
+| Instance methods | `lower_snake_case` | `insert_vertex`, `is_boundary`, `set_pins`, `compute` |
+| Free-function **algorithms** (named computational steps) | `PascalCase` | `ComputeMeshAngles`, `FindEdgePath`, `IsManifold` |
+| Free-function **utilities** (small helpers, string/container ops) | `lower_snake_case` | `vec_to_string`, `remove_if`, `trim`, `icase_compare` |
+| `detail::` namespace types | `PascalCase` | `detail::lscm::PinMap`, `detail::hlscm::DecimationMesh` |
+| `detail::` namespace free functions | Follow the algorithm/utility split above | `detail::lscm::BuildSystem` (algorithm), `detail::trim` (utility) |
+| `detail::` internal class methods | `lower_snake_case` | `DecimationMesh::try_collapse`, `DecimationMesh::is_alive` |
+| Constants and enum values | `kPascalCase`, `ALL_CAPS`, or lowercase template constants — consistent within an enum/namespace | `PI<T>`, `Norm::L1`, `kMaxIters` |
+| Namespaces | `lowercase` | `OpenABF`, `detail`, `lscm`, `hlscm`, `traits` |
+| Template parameters | `PascalCase` | `T`, `MeshType`, `Solver` |
+| Public data members (POD / trait types) | `lower_snake_case` | `Vertex::pos`, `Edge::alpha`, `Face::head` |
+| Private and protected members | `lower_snake_case_` (trailing underscore) | `verts_`, `pinned_indices_`, `is_pinned_` |
+
+### Algorithm vs utility — heuristic
+A free function is an **algorithm** if a user would plausibly call it as a meaningful step in a flattening pipeline (or other domain workflow). It's a **utility** if it's a small generic helper that supports algorithms but isn't itself one. When in doubt: PascalCase for things that take a mesh/face/edge or compute something domain-specific; snake_case for things that take a string or generic container.
+
+### Setter style
+Setters on instance configuration follow the instance-method rule: `set_<thing>(value)`, not `setThing(value)`. Example: `set_level_ratio(4)`, not `setLevelRatio(4)`.
+
+### Project history note (2026-06)
+Pre-2026 code in several places uses `camelCase` for instance methods and `detail::` free functions (e.g., `setLevelRatio`, `detail::lscm::buildSystem`, `DecimationMesh::tryCollapse`). These are tracked for rename in issue #94. New code must follow the table above.
 
 ## C++ Standards
 - **Standard**: C++17 required; do not use C++20 features in public headers without a guard
@@ -38,6 +57,6 @@ The `thirdparty/` directory is excluded from formatting — it contains external
 - All public API must have Doxygen-compatible documentation comments (`/** ... */`)
 
 ## Tooling
-- **Formatter**: `clang-format` (use project root `.clang-format`)
+- **Formatter**: `clang-format` (use project root `.clang-format`). **Note**: CI installs `clang-format` via `apt` on `ubuntu-latest`, which currently resolves to v18; locally-installed newer versions (v20+) may produce different reflow on edge cases. If CI fails formatting after a local pre-commit format, manually match CI by inspecting the diff in the failed action log.
 - **Static analysis**: `clang-tidy` recommended (no project `.clang-tidy` yet — add one as needed)
 - **CI**: GitHub Actions runs lint checks; all PRs must pass before merge
