@@ -2,16 +2,15 @@
 
 ## Next Up
 
-Planned work order (updated 2026-06-14; P4 landed in PR #91, P5 landed in PR #92):
+Planned work order (updated 2026-06-14; A7 landed in PR #93):
 
-No parallel pair currently scheduled. Next pick from the active list — A7,
+No parallel pair currently scheduled. Next pick from the active list —
 A10, F2, or F5–F11 — based on priority at the time of starting.
 
 ## Active Tracks
 
 | Status | Track ID | Title | GitHub | Created | Updated |
 | ------ | -------- | ----- | ------ | ------- | ------- |
-| in_progress | A7 | Multi-pin UV constraints for LSCM and Hierarchical LSCM | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-03-16 | 2026-06-14 |
 | open | A10 | Add static Compute() overloads accepting levelRatio and minCoarseVertices | [#68](https://github.com/educelab/OpenABF/issues/68) | 2026-03-20 | 2026-03-20 |
 | open | F5 | Implement Hierarchical SLIM (H-SLIM) | [#52](https://github.com/educelab/OpenABF/issues/52) | 2026-03-20 | 2026-03-20 |
 | open | F6 | Migrate to C++20 | [#54](https://github.com/educelab/OpenABF/issues/54) | 2026-03-20 | 2026-03-20 |
@@ -26,6 +25,7 @@ A10, F2, or F5–F11 — based on priority at the time of starting.
 
 | Status | Track ID | Title | GitHub | Archived |
 | ------ | -------- | ----- | ------ | -------- |
+| closed | A7 | Multi-pin UV constraints for LSCM and Hierarchical LSCM (PR #93) | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-06-14 |
 | closed | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) — PR #92 | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-06-14 |
 | closed | P4 | IncompleteCholesky preconditioner for AngleBasedLSCM (benchmarked; SparseLU stays default) — PR #91 | [#47](https://github.com/educelab/OpenABF/issues/47) | 2026-06-14 |
 | closed | P6 | Precompute sin/cos values before HLSCM face assembly loop (obsolete — post-A8 loop has no trig redundancy to eliminate) | [#66](https://github.com/educelab/OpenABF/issues/66) | 2026-06-13 |

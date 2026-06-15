@@ -87,4 +87,4 @@ Per user direction 2026-06-14: retain `Compute(mesh, p0, p1)` and
 ## Phase 6: Conductor & GitHub
 - [x] 6.1 PR #93 opened against #42; PR description notes expanded scope
   (HLSCM included) and the deprecated-shim plan for 3.0 removal.
-- [ ] 6.2 Update `tracks.md` (move A7 to archived once PR lands).
+- [x] 6.2 Update `tracks.md` (move A7 to archived once PR lands).
