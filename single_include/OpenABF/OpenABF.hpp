@@ -3131,8 +3131,8 @@ void validatePins(const typename MeshType::Pointer& mesh, const PinMap<T>& pins)
  * either index is out of range.
  */
 template <typename T, class MeshType>
-auto autoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx, std::size_t p1Idx)
-    -> PinMap<T>
+auto autoPlacePair(const typename MeshType::Pointer& mesh, std::size_t p0Idx,
+                   std::size_t p1Idx) -> PinMap<T>
 {
     const auto numVerts = mesh->num_vertices();
     if (p0Idx >= numVerts || p1Idx >= numVerts) {

@@ -1480,8 +1480,7 @@ TEST(Parameterization, AngleBasedLSCM_PinMap_Rejects_Duplicate)
 
     auto mesh = ConstructPyramid<LSCM::Mesh>();
     PinMap pins{
-        {0u, Vec<float, 2>{0.f, 0.f}},
-        {0u, Vec<float, 2>{2.f, 0.f}},  // same index repeated
+        {0u, Vec<float, 2>{0.f, 0.f}}, {0u, Vec<float, 2>{2.f, 0.f}},  // same index repeated
     };
     EXPECT_THROW(LSCM::Compute(mesh, pins), std::invalid_argument);
 }
@@ -1493,8 +1492,7 @@ TEST(Parameterization, AngleBasedLSCM_PinMap_Rejects_OutOfRange)
 
     auto mesh = ConstructPyramid<LSCM::Mesh>();  // 4 vertices
     PinMap pins{
-        {0u, Vec<float, 2>{0.f, 0.f}},
-        {99u, Vec<float, 2>{2.f, 0.f}},  // out of range
+        {0u, Vec<float, 2>{0.f, 0.f}}, {99u, Vec<float, 2>{2.f, 0.f}},  // out of range
     };
     EXPECT_THROW(LSCM::Compute(mesh, pins), std::invalid_argument);
 }
