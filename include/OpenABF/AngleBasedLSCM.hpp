@@ -1,7 +1,12 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <iterator>
 #include <optional>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 
 #include <Eigen/IterativeLinearSolvers>
@@ -10,6 +15,7 @@
 #include "OpenABF/Exceptions.hpp"
 #include "OpenABF/HalfEdgeMesh.hpp"
 #include "OpenABF/Math.hpp"
+#include "OpenABF/Vec.hpp"
 #include "OpenABF/detail/LSCMSystem.hpp"
 
 namespace OpenABF
@@ -121,17 +127,48 @@ public:
     /** @brief Mesh type alias */
     using Mesh = MeshType;
 
-    /** @brief Set the pinned vertex indices used by compute() */
-    void setPinnedVertices(std::size_t pin0Idx, std::size_t pin1Idx)
+    /**
+     * @brief Per-pin entry: (mesh vertex index, target UV).
+     *
+     * A `PinMap` of size N ≥ 2 specifies an explicit LSCM pin set; each pinned
+     * vertex's final UV equals its entry in the map.
+     */
+    using PinMap = detail::lscm::PinMap<T>;
+
+    /**
+     * @brief Set the explicit pin set used by `compute()`
+     *
+     * The PinMap must contain at least two unique, in-range vertex indices;
+     * `compute()` rejects malformed inputs at solve time.
+     */
+    void setPins(PinMap pins)
     {
-        pinnedVertices_ = {pin0Idx, pin1Idx};
+        pins_ = std::move(pins);
+        legacyPinIndices_.reset();
+    }
+
+    /**
+     * @brief Deprecated: set a pin pair by index using the LSCM axis-snap
+     * convention at compute time.
+     *
+     * @deprecated Prefer `setPins(PinMap)`. This overload will be removed in
+     * version 3.0.
+     */
+    [[deprecated("Use setPins(PinMap); will be removed in 3.0")]] void setPinnedVertices(
+        std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        legacyPinIndices_ = {pin0Idx, pin1Idx};
+        pins_.reset();
     }
 
     /** @copydoc AngleBasedLSCM::Compute() */
     void compute(typename Mesh::Pointer& mesh) const
     {
-        if (pinnedVertices_) {
-            Compute(mesh, pinnedVertices_->first, pinnedVertices_->second);
+        if (pins_) {
+            Compute(mesh, *pins_);
+        } else if (legacyPinIndices_) {
+            ComputeImpl(mesh,
+                        autoPlacePair(mesh, legacyPinIndices_->first, legacyPinIndices_->second));
         } else {
             Compute(mesh);
         }
@@ -141,16 +178,65 @@ public:
      * @brief Compute the parameterized mesh using automatic pin selection
      *
      * Selects the first boundary vertex and its boundary-edge neighbor as
-     * pinned vertices.
+     * pinned vertices, placing pin0 at the UV origin and pin1 at distance
+     * `|p1 - p0|` along the dominant world-axis of `(p1 - p0)`.
      *
-     * @throws MeshException If pinned vertex is not on boundary.
+     * @throws MeshException If pin selection fails (no boundary vertices).
      * @throws SolverException If matrix cannot be decomposed or if solver fails
      * to find a solution.
      */
-    static void Compute(typename Mesh::Pointer& mesh)
+    static void Compute(typename Mesh::Pointer& mesh) { ComputeImpl(mesh, autoSelectPins(mesh)); }
+
+    /**
+     * @brief Compute the parameterized mesh with caller-specified pin UVs
+     *
+     * @param mesh Triangle mesh whose vertex positions will be overwritten with
+     * computed 2D UV coordinates (z component set to 0).
+     * @param pins Sequence of (vertex index, target UV) pairs. Must contain at
+     * least two unique, in-range vertex indices. Each pinned vertex's final UV
+     * equals the supplied target verbatim.
+     * @throws std::invalid_argument If `pins` has fewer than two entries, a
+     * duplicate index, or an out-of-range index.
+     * @throws SolverException If matrix cannot be decomposed or if solver fails
+     * to find a solution.
+     */
+    static void Compute(typename Mesh::Pointer& mesh, const PinMap& pins)
     {
-        // Pinned vertex selection: first boundary vertex + boundary-edge neighbor
-        auto p0 = mesh->vertices_boundary().front();
+        validatePins(mesh, pins);
+        ComputeImpl(mesh, pins);
+    }
+
+    /**
+     * @brief Deprecated: compute with an explicit pin pair by index.
+     *
+     * Builds a 2-entry PinMap using the LSCM axis-snap convention (pin0 at the
+     * UV origin, pin1 on the dominant world-axis of `(p1 - p0)`) and
+     * dispatches to the PinMap path.
+     *
+     * @deprecated Prefer `Compute(mesh, PinMap)`. This overload will be
+     * removed in version 3.0.
+     */
+    [[deprecated("Use Compute(mesh, PinMap); will be removed in 3.0")]] static void Compute(
+        typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
+    {
+        ComputeImpl(mesh, autoPlacePair(mesh, pin0Idx, pin1Idx));
+    }
+
+private:
+    /** Optional explicit pin set configured via `setPins()`. */
+    std::optional<PinMap> pins_;
+    /** Deprecated: legacy two-pin index pair set via `setPinnedVertices`. */
+    std::optional<std::pair<std::size_t, std::size_t>> legacyPinIndices_;
+
+    /** Walk the boundary to pick the default pin pair. */
+    static auto selectBoundaryPair(const typename Mesh::Pointer& mesh)
+        -> std::pair<typename Mesh::VertPtr, typename Mesh::VertPtr>
+    {
+        auto boundary = mesh->vertices_boundary();
+        if (boundary.empty()) {
+            throw MeshException("AngleBasedLSCM: mesh has no boundary vertices");
+        }
+        auto p0 = boundary.front();
         auto e = p0->edge;
         do {
             if (e->pair->is_boundary()) {
@@ -162,47 +248,85 @@ public:
             throw MeshException("Pinned vertex not on boundary");
         }
         auto p1 = e->next->vertex;
-        ComputeImpl(mesh, p0, p1);
+        return {p0, p1};
     }
 
     /**
-     * @brief Compute the parameterized mesh with explicit pinned vertex indices
+     * @brief Build a 2-entry PinMap from explicit indices using the LSCM
+     * axis-snap convention.
      *
-     * @param mesh Triangle mesh whose vertex positions will be overwritten with
-     * computed 2D UV coordinates (z component set to 0).
-     * @param pin0Idx Index of the first pinned vertex (placed at the UV origin)
-     * @param pin1Idx Index of the second pinned vertex (placed on the nearest axis)
-     * @throws SolverException If matrix cannot be decomposed or if solver fails
-     * to find a solution.
+     * pin0 at `{0, 0}`, pin1 at signed distance `|p1 - p0|` on whichever world
+     * axis the `(p1 - p0)` vector has the largest magnitude.
      */
-    static void Compute(typename Mesh::Pointer& mesh, std::size_t pin0Idx, std::size_t pin1Idx)
+    static auto autoPlacePair(const typename Mesh::Pointer& mesh, std::size_t p0Idx,
+                              std::size_t p1Idx) -> PinMap
     {
-        ComputeImpl(mesh, mesh->vertex(pin0Idx), mesh->vertex(pin1Idx));
+        auto p0 = mesh->vertex(p0Idx);
+        auto p1 = mesh->vertex(p1Idx);
+        auto pinVec = p1->pos - p0->pos;
+        auto dist = norm(pinVec);
+        pinVec /= dist;
+        auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
+        auto maxAxis = std::distance(pinVec.begin(), maxElem);
+        dist = std::copysign(dist, *maxElem);
+        Vec<T, 2> uv0{T(0), T(0)};
+        Vec<T, 2> uv1 = (maxAxis == 0) ? Vec<T, 2>{dist, T(0)} : Vec<T, 2>{T(0), dist};
+        return PinMap{{p0Idx, uv0}, {p1Idx, uv1}};
     }
 
-private:
-    /** Optional explicit pin pair set via setPinnedVertices() */
-    std::optional<std::pair<std::size_t, std::size_t>> pinnedVertices_;
+    /**
+     * @brief Auto-select two boundary pins and place them via the LSCM
+     * axis-snap convention.
+     */
+    static auto autoSelectPins(const typename Mesh::Pointer& mesh) -> PinMap
+    {
+        auto [p0, p1] = selectBoundaryPair(mesh);
+        return autoPlacePair(mesh, p0->idx, p1->idx);
+    }
+
+    /** Validate that the user's PinMap is well-formed for this mesh. */
+    static void validatePins(const typename Mesh::Pointer& mesh, const PinMap& pins)
+    {
+        if (pins.size() < 2) {
+            throw std::invalid_argument("AngleBasedLSCM: PinMap requires at least 2 pins");
+        }
+        auto numVerts = mesh->num_vertices();
+        std::unordered_set<std::size_t> seen;
+        seen.reserve(pins.size());
+        for (const auto& [vIdx, uv] : pins) {
+            if (vIdx >= numVerts) {
+                throw std::invalid_argument("AngleBasedLSCM: PinMap vertex index out of range");
+            }
+            if (!seen.insert(vIdx).second) {
+                throw std::invalid_argument("AngleBasedLSCM: PinMap has duplicate vertex index");
+            }
+        }
+    }
 
     /**
-     * @brief Core solver: place p0/p1 on the UV axes then solve for free vertices
+     * @brief Core solver: build the LSCM system from the PinMap, solve for free
+     * vertices, and write UVs back to the mesh.
      */
-    static void ComputeImpl(typename Mesh::Pointer& mesh, const typename Mesh::VertPtr& p0,
-                            const typename Mesh::VertPtr& p1)
+    static void ComputeImpl(typename Mesh::Pointer& mesh, const PinMap& pins)
     {
         using SparseMatrix = Eigen::SparseMatrix<T>;
         using DenseMatrix = Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
 
         // Pin placement + LSCM system assembly (shared with HierarchicalLSCM)
-        auto parts = detail::lscm::buildSystem<T, Mesh>(mesh, p0, p1);
+        auto parts = detail::lscm::buildSystem<T, Mesh>(mesh, pins);
 
         // Solve for x
         auto x = detail::SolveLeastSquares<SparseMatrix, DenseMatrix, Solver>(parts.A, parts.b);
 
-        // Assign solution to UV coordinates
-        // Pins are already updated by buildSystem, so these are free vertices
+        // Assign solution to free vertices. Pin vertices are already at their
+        // target UVs (written by buildSystem).
+        std::unordered_set<std::size_t> pinIdx;
+        pinIdx.reserve(pins.size());
+        for (const auto& [vIdx, uv] : pins) {
+            pinIdx.insert(vIdx);
+        }
         for (const auto& v : mesh->vertices()) {
-            if (v == p0 or v == p1) {
+            if (pinIdx.count(v->idx)) {
                 continue;
             }
             auto newIdx = 2 * parts.freeIdxTable.at(v->idx);

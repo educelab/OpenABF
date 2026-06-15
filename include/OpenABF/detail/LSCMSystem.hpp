@@ -4,20 +4,28 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <iterator>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Eigen/SparseCore>
+
+#include "OpenABF/Vec.hpp"
 
 namespace OpenABF::detail::lscm
 {
 
 /**
- * @brief Outputs of `buildSystem`: the LSCM least-squares system for a mesh
- *        with two pinned vertices.
+ * @brief Per-pin entry: (mesh vertex index, target UV).
  *
- * @tparam T Floating-point type
+ * Shared by `AngleBasedLSCM::PinMap` and `HierarchicalLSCM::PinMap`.
+ */
+template <typename T>
+using PinMap = std::vector<std::pair<std::size_t, OpenABF::Vec<T, 2>>>;
+
+/**
+ * @brief Outputs of `buildSystem`: the LSCM least-squares system for a mesh
+ *        with N pinned vertices (N ≥ 2).
  *
  * Layout: `A` is `(2·numFaces) × (2·numFree)`, `b` is `(2·numFaces) × 1`,
  * `freeIdxTable` maps `vertex->idx` to a row-pair index in `A`/`x` (so a free
@@ -35,62 +43,59 @@ struct SystemParts {
 };
 
 /**
- * @brief Build the LSCM sparse system for a mesh with two pinned vertices.
+ * @brief Build the LSCM sparse system for a mesh with N pinned vertices.
  *
- * Mutates the mesh: places `p0` at the UV origin and `p1` on whichever XY
- * axis its displacement from `p0` has the largest magnitude — same pin
- * placement convention used by `AngleBasedLSCM::ComputeImpl` and
- * `HierarchicalLSCM::solveLSCMLevel`.
+ * Mutates the mesh: each pinned vertex's `pos` is overwritten with `{uv[0],
+ * uv[1], 0}` (the caller's chosen UV). The function does NOT auto-place pins
+ * — UVs are taken verbatim from the PinMap. Callers that want the LSCM
+ * axis-snap convention (origin + dominant-axis placement for an auto-selected
+ * pair) compute those UVs themselves before calling this helper.
  *
  * Assembly follows Lévy et al. 2002 Eq. 10 using the per-edge `alpha` angles
  * already stored on the mesh.
  */
 template <typename T, class MeshType>
-auto buildSystem(const typename MeshType::Pointer& mesh, const typename MeshType::VertPtr& p0,
-                 const typename MeshType::VertPtr& p1) -> SystemParts<T>
+auto buildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) -> SystemParts<T>
 {
     using Triplet = Eigen::Triplet<T>;
     using SparseMatrix = Eigen::SparseMatrix<T>;
 
-    // Map selected edge to closest XY axis. Use sign to select direction.
-    auto pinVec = p1->pos - p0->pos;
-    auto dist = norm(pinVec);
-    pinVec /= dist;
-    p0->pos = {T(0), T(0), T(0)};
-    auto maxElem = std::max_element(pinVec.begin(), pinVec.end());
-    auto maxAxis = std::distance(pinVec.begin(), maxElem);
-    dist = std::copysign(dist, *maxElem);
-    if (maxAxis == 0) {
-        p1->pos = {dist, T(0), T(0)};
-    } else {
-        p1->pos = {T(0), dist, T(0)};
-    }
-
     const auto numFaces = mesh->num_faces();
     const auto numVerts = mesh->num_vertices();
-    constexpr std::size_t numFixed = 2;
+    const auto numFixed = pins.size();
     const auto numFree = numVerts - numFixed;
+
+    // Pin index → slot (0-based position within the PinMap).
+    std::unordered_map<std::size_t, std::size_t> pinSlot;
+    pinSlot.reserve(numFixed);
+    for (std::size_t s = 0; s < numFixed; ++s) {
+        pinSlot.emplace(pins[s].first, s);
+    }
+
+    // Write pin UVs into the mesh and into bFixed.
+    std::vector<Triplet> tripletsB;
+    tripletsB.reserve(2 * numFixed);
+    for (std::size_t s = 0; s < numFixed; ++s) {
+        const auto& [vIdx, uv] = pins[s];
+        auto v = mesh->vertex(vIdx);
+        v->pos = {uv[0], uv[1], T(0)};
+        tripletsB.emplace_back(2 * s, 0, uv[0]);
+        tripletsB.emplace_back(2 * s + 1, 0, uv[1]);
+    }
+    SparseMatrix bFixed(2 * numFixed, 1);
+    bFixed.reserve(tripletsB.size());
+    bFixed.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     // Permutation for free vertices: maps mesh vertex idx → row-pair slot in A.
     std::unordered_map<std::size_t, std::size_t> freeIdxTable;
     freeIdxTable.reserve(numFree);
     for (const auto& v : mesh->vertices()) {
-        if (v == p0 or v == p1) {
+        if (pinSlot.count(v->idx)) {
             continue;
         }
         auto newIdx = freeIdxTable.size();
         freeIdxTable[v->idx] = newIdx;
     }
-
-    // Setup pinned bFixed.
-    std::vector<Triplet> tripletsB;
-    tripletsB.emplace_back(0, 0, p0->pos[0]);
-    tripletsB.emplace_back(1, 0, p0->pos[1]);
-    tripletsB.emplace_back(2, 0, p1->pos[0]);
-    tripletsB.emplace_back(3, 0, p1->pos[1]);
-    SparseMatrix bFixed(2 * numFixed, 1);
-    bFixed.reserve(tripletsB.size());
-    bFixed.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     // Setup variables matrix. Only solving for free vertices, so pins go in
     // a special matrix.
@@ -99,19 +104,16 @@ auto buildSystem(const typename MeshType::Pointer& mesh, const typename MeshType
 
     // Per-vertex contribution helper (Lévy et al. 2002, Eq. 10).
     // Each vertex contributes a 2×2 conformal block [c, -s; s, c] at its
-    // column. Fixed pins (p0, p1) go into tripletsB; free vertices into
-    // tripletsA.
+    // column. Pin vertices go into tripletsB at columns 2*slot and 2*slot+1;
+    // free vertices into tripletsA.
     auto addContrib = [&](std::size_t row, const auto& e, T c, T s) {
-        if (e->vertex == p0) {
-            tripletsB.emplace_back(row, 0, c);
-            tripletsB.emplace_back(row, 1, -s);
-            tripletsB.emplace_back(row + 1, 0, s);
-            tripletsB.emplace_back(row + 1, 1, c);
-        } else if (e->vertex == p1) {
-            tripletsB.emplace_back(row, 2, c);
-            tripletsB.emplace_back(row, 3, -s);
-            tripletsB.emplace_back(row + 1, 2, s);
-            tripletsB.emplace_back(row + 1, 3, c);
+        auto it = pinSlot.find(e->vertex->idx);
+        if (it != pinSlot.end()) {
+            auto col = 2 * it->second;
+            tripletsB.emplace_back(row, col, c);
+            tripletsB.emplace_back(row, col + 1, -s);
+            tripletsB.emplace_back(row + 1, col, s);
+            tripletsB.emplace_back(row + 1, col + 1, c);
         } else {
             auto freeIdx = freeIdxTable.at(e->vertex->idx);
             tripletsA.emplace_back(row, 2 * freeIdx, c);

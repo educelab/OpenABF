@@ -517,10 +517,11 @@ TEST(HLSCM, InstanceAPILevelRatio)
     constexpr std::size_t pin1 = 19;  // opposite corner of a 20x20 grid row
     constexpr std::size_t minCoarseVerts = 10;
 
+    const std::vector<std::size_t> pinIndices{pin0, pin1};
     auto [levelsSmall, _csmall] =
-        buildHierarchy<float>(mesh2, pin0, pin1, /*levelRatio=*/2, minCoarseVerts);
+        buildHierarchy<float>(mesh2, pinIndices, /*levelRatio=*/2, minCoarseVerts);
     auto [levelsLarge, _clarge] =
-        buildHierarchy<float>(mesh2, pin0, pin1, /*levelRatio=*/8, minCoarseVerts);
+        buildHierarchy<float>(mesh2, pinIndices, /*levelRatio=*/8, minCoarseVerts);
 
     // Sanity: both hierarchies have at least the finest level
     ASSERT_GE(levelsSmall.size(), 1u);
@@ -544,9 +545,9 @@ TEST(HLSCM, MultiLevelHierarchy)
     auto mesh = ConstructWavySurface<HLSCM::Mesh>(20, 20);
 
     // Match HLSCM defaults except force a small minCoarseVerts so we get >1 level
-    auto [levels, collapsesByLevel] =
-        OpenABF::detail::hlscm::buildHierarchy<float>(mesh, 0, 1, /*levelRatio=*/10,
-                                                      /*minCoarseVerts=*/10);
+    auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
+        mesh, std::vector<std::size_t>{0, 1}, /*levelRatio=*/10,
+        /*minCoarseVerts=*/10);
     EXPECT_GE(levels.size(), std::size_t(2))
         << "buildHierarchy produced only " << levels.size() << " level(s)";
 
@@ -896,7 +897,7 @@ TEST(HLSCMInternal, DecimationMesh_RejectsPinnedVertex)
     constexpr std::size_t pin0 = 0;
     constexpr std::size_t pin1 = 1;
     DMesh dm;
-    dm.build(mesh, pin0, pin1);
+    dm.build(mesh, std::vector<std::size_t>{pin0, pin1});
 
     // Attempting to remove a pinned vertex (pin0=0 → vertex 1) must return nullopt
     auto result = dm.tryCollapse(pin0, 1);
@@ -923,7 +924,7 @@ TEST(HLSCMInternal, TryCollapse_OutKeepNbrsMatchesVertexNeighbors)
     constexpr std::size_t pin0 = 0;
     constexpr std::size_t pin1 = 7;
     DMesh dm;
-    dm.build(mesh, pin0, pin1);
+    dm.build(mesh, std::vector<std::size_t>{pin0, pin1});
 
     std::vector<std::size_t> outNbrs;
     std::size_t successful = 0;
@@ -966,7 +967,7 @@ TEST(HLSCMInternal, ProlongateUVs_MultiLevelCoverage)
     constexpr std::size_t pin1 = 11;
 
     auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
-        mesh, pin0, pin1, /*levelRatio=*/3, /*minCoarseVerts=*/5);
+        mesh, std::vector<std::size_t>{pin0, pin1}, /*levelRatio=*/3, /*minCoarseVerts=*/5);
     ASSERT_GE(levels.size(), std::size_t(3)) << "Expected at least 3 hierarchy levels";
 
     // Seed coarsest-level UVs with arbitrary deterministic values.
@@ -1008,8 +1009,8 @@ TEST(HLSCMInternal, BuildHierarchy_LevelCount)
     constexpr std::size_t levelRatio = 4;
     constexpr std::size_t minCoarseVerts = 10;
 
-    auto [levels, collapsesByLevel] =
-        OpenABF::detail::hlscm::buildHierarchy<float>(mesh, pin0, pin1, levelRatio, minCoarseVerts);
+    auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
+        mesh, std::vector<std::size_t>{pin0, pin1}, levelRatio, minCoarseVerts);
 
     // 20x20 = 400 verts, ratio 4, min 10  →  400, 100, 25, 10  → 4 levels (≥3)
     ASSERT_GE(levels.size(), std::size_t(3))
@@ -1079,7 +1080,7 @@ TEST(HLSCMInternal, ProlongateUVs_BarycentricReconstruction)
 
     // Force a 2-level hierarchy (25 verts → ~6 verts at ratio 4).
     auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
-        mesh, pin0, pin1, /*levelRatio=*/4, /*minCoarseVerts=*/5);
+        mesh, std::vector<std::size_t>{pin0, pin1}, /*levelRatio=*/4, /*minCoarseVerts=*/5);
     ASSERT_GE(levels.size(), std::size_t(2)) << "Expected at least 2 hierarchy levels";
     ASSERT_FALSE(collapsesByLevel.empty()) << "Expected at least one collapse record set";
 
@@ -1152,7 +1153,7 @@ TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
     // Build a single-level hierarchy (pyramid is too small to decimate).
     auto meshH = ConstructPyramid<HLSCM::Mesh>();
     auto [levels, collapsesByLevel] = OpenABF::detail::hlscm::buildHierarchy<float>(
-        meshH, pin0, pin1, /*levelRatio=*/10, /*minCoarseVerts=*/100);
+        meshH, std::vector<std::size_t>{pin0, pin1}, /*levelRatio=*/10, /*minCoarseVerts=*/100);
     ASSERT_EQ(levels.size(), std::size_t(1)) << "Pyramid should produce a single-level hierarchy";
 
     const auto& level = levels[0];
@@ -1160,7 +1161,12 @@ TEST(HLSCMInternal, SolveLSCMLevel_KnownMesh)
     OpenABF::ComputeMeshAngles(levelMesh);
 
     const auto origVertCount = meshH->num_vertices();
-    auto uvs = OpenABF::detail::hlscm::solveLSCMLevel<float, Solver>(levelMesh, level, pin0, pin1,
+    // Match the LSCM axis-snap convention used by the auto-pin path.
+    OpenABF::detail::lscm::PinMap<float> pins{
+        {pin0, OpenABF::Vec<float, 2>{0.f, 0.f}},
+        {pin1, OpenABF::Vec<float, 2>{2.f, 0.f}},
+    };
+    auto uvs = OpenABF::detail::hlscm::solveLSCMLevel<float, Solver>(levelMesh, level, pins,
                                                                      origVertCount, nullptr);
 
     // Pyramid produces a single-level hierarchy, so every vertex must have a UV.
@@ -1215,7 +1221,13 @@ auto BuildPyramidSystem()
     ComputeMeshAngles(mesh);
     auto p0 = mesh->vertex(pin0Idx);
     auto p1 = mesh->vertex(pin1Idx);
-    auto parts = OpenABF::detail::lscm::buildSystem<float, LSCMSystemMesh>(mesh, p0, p1);
+    // Match the LSCM axis-snap convention used by the auto-pin path: pin0 at
+    // the origin, pin1 on the dominant world-axis of (p1->pos - p0->pos).
+    OpenABF::detail::lscm::PinMap<float> pins{
+        {pin0Idx, Vec<float, 2>{0.f, 0.f}},
+        {pin1Idx, Vec<float, 2>{2.f, 0.f}},
+    };
+    auto parts = OpenABF::detail::lscm::buildSystem<float, LSCMSystemMesh>(mesh, pins);
     return std::make_tuple(mesh, p0, p1, std::move(parts));
 }
 
@@ -1298,9 +1310,11 @@ TEST(LSCMSystemBuild, FreeIdxTable_DeterministicAcrossRuns)
     auto runOnce = [&]() {
         auto mesh = ConstructGrid<LSCMSystemMesh>(4, 4);
         ComputeMeshAngles(mesh);
-        auto p0 = mesh->vertex(pin0Idx);
-        auto p1 = mesh->vertex(pin1Idx);
-        return OpenABF::detail::lscm::buildSystem<float, LSCMSystemMesh>(mesh, p0, p1);
+        OpenABF::detail::lscm::PinMap<float> pins{
+            {pin0Idx, Vec<float, 2>{0.f, 0.f}},
+            {pin1Idx, Vec<float, 2>{3.f, 0.f}},
+        };
+        return OpenABF::detail::lscm::buildSystem<float, LSCMSystemMesh>(mesh, pins);
     };
 
     auto parts1 = runOnce();

@@ -21,39 +21,68 @@ Confirmed Red: `cmake --build . --target OpenABF_TestParameterization` fails
 with 12 unknown-symbol errors (`PinMap`, `setPins`); no regressions in
 existing tests.
 
-## Phase 2: Shared assembly helper
-- [ ] 2.1 Add `detail::lscm::buildSystemMultiPin(mesh, pins)` in
-  `LSCMSystem.hpp`. Takes a `std::vector<std::pair<size_t, Vec<T,2>>>`. No
-  axis-snap; pin positions are written verbatim to the mesh and into `bFixed`.
-  Returns the existing `SystemParts<T>` shape.
-- [ ] 2.2 Keep the two-pin `buildSystem(mesh, p0, p1)` overload — it stays the
-  home of the LSCM axis-snap auto-placement convention used by the
-  default/two-pin code paths.
+## Phase 2: Migrate `detail::lscm::buildSystem` to PinMap-only
+Per user direction 2026-06-14: no two-arg compat. PinMap is the only explicit
+pin API in this codebase after this migration.
 
-## Phase 3: ABLSCM multi-pin
-- [ ] 3.1 Define `using PinMap = std::vector<std::pair<std::size_t, Vec<T,2>>>`
-  inside `AngleBasedLSCM`.
-- [ ] 3.2 Add `Compute(mesh, PinMap)` static overload. Validates pins ≥ 2,
-  unique indices, in-range; dispatches through `buildSystemMultiPin`.
-- [ ] 3.3 Add `setPins(PinMap)` and `pins_` (`std::optional<PinMap>`).
-- [ ] 3.4 Update `compute()` to prefer `pins_` over `pinnedVertices_` when set.
+- [x] 2.1 Redesign `buildSystem` to a single signature
+  `buildSystem(mesh, PinMap)` (no axis-snap inside; caller provides UVs
+  verbatim). Mutates each pinned vertex's `pos` to its specified UV, then
+  emits the LSCM least-squares system with those values in `bFixed`.
+- [x] 2.2 Migrate `LSCMSystemBuild.*` tests + `BuildPyramidSystem` helper to
+  the new signature.
 
-## Phase 4: HLSCM multi-pin
-- [ ] 4.1 Generalize `DecimationMesh::build` to accept a span/vector of pin
-  indices and flag each as `isPinned_[i] = true`.
-- [ ] 4.2 Generalize `buildHierarchy` to forward the pin set to `build`.
-- [ ] 4.3 Generalize `solveLSCMLevel` to take a PinMap; map each pin's original
-  idx to its level-local idx, write the user's UV into the level-mesh vertex
-  positions, build via `buildSystemMultiPin`, and write each pin back in the
-  output UV vector.
-- [ ] 4.4 Update initial-guess builder to skip *every* pin (not just p0/p1).
-- [ ] 4.5 Add `HierarchicalLSCM::Compute(mesh, PinMap)` and `setPins(PinMap)`.
-- [ ] 4.6 Update `compute()` to prefer `pins_` over `pinnedVertices_`.
+## Phase 3: ABLSCM full migration to PinMap (with deprecated 2-pin shim)
+Per user direction 2026-06-14: retain `Compute(mesh, p0, p1)` and
+`setPinnedVertices(p0, p1)` as `[[deprecated]]` shims slated for removal in
+3.0. Both forward to the PinMap path with axis-snap UVs.
 
-## Phase 5: Verify
-- [ ] 5.1 Run `ctest` — all existing tests pass unchanged.
-- [ ] 5.2 New multi-pin tests pass.
-- [ ] 5.3 Run `git clang-format`; regenerate amalgamated header.
+- [x] 3.1 Define `using PinMap = std::vector<std::pair<std::size_t, Vec<T,2>>>`
+  in `AngleBasedLSCM`.
+- [x] 3.2 Add private helpers `selectBoundaryPair(mesh)` and
+  `autoPlacePair(mesh, p0Idx, p1Idx) -> PinMap` (the existing axis-snap
+  convention). `autoSelectPins(mesh) = autoPlacePair(mesh,
+  selectBoundaryPair(mesh)...)`.
+- [x] 3.3 Rewrite `Compute(mesh)`: build PinMap via `autoSelectPins`, then
+  call `ComputeImpl(mesh, pins)`.
+- [x] 3.4 Add `Compute(mesh, PinMap)` static overload (validates pins ≥ 2,
+  unique indices, in-range).
+- [x] 3.5 Add `setPins(PinMap)` and `pins_` (`std::optional<PinMap>`).
+- [x] 3.6 Restore `Compute(mesh, p0Idx, p1Idx)` and
+  `setPinnedVertices(p0, p1)` as `[[deprecated]]` shims that build an
+  axis-snap PinMap and delegate. Update `compute()` dispatch to handle
+  legacy indices stored by the shim.
+- [x] 3.7 Keep `AngleBasedLSCM_ExplicitPins`, `_Reversed`,
+  `_SetPinnedVertices` — they now exercise the deprecated-shim path and
+  must continue to pass until 3.0.
+
+## Phase 4: HLSCM full migration to PinMap (with deprecated 2-pin shim)
+- [x] 4.1 `DecimationMesh::build` takes `std::vector<std::size_t>` pinIndices;
+  flag each as `isPinned_[idx] = true`.
+- [x] 4.2 `buildHierarchy` takes the pinIndices vector and forwards.
+- [x] 4.3 `solveLSCMLevel` takes a PinMap; map each pin's original idx to its
+  level-local idx, write the user's UV into the level mesh, run buildSystem,
+  copy each pin back into the output UV vector.
+- [x] 4.4 Update initial-guess builder to skip every pin (not just p0/p1).
+- [x] 4.5 In `HierarchicalLSCM`: add `PinMap` alias, `autoSelectPins` helper
+  using the existing axis-snap convention, `Compute(mesh)`,
+  `Compute(mesh, PinMap)`, `setPins`, `pins_`, and rewrite `compute()`
+  dispatch.
+- [x] 4.6 Single-level fallback delegates to
+  `AngleBasedLSCM::Compute(mesh, PinMap)`.
+- [x] 4.7 Restore `Compute(mesh, pin0Idx, pin1Idx)` and
+  `setPinnedVertices(p0, p1)` as `[[deprecated]]` shims (parallel to ABLSCM).
+- [x] 4.8 Migrate internal tests that pass the two-arg form to the new
+  signature (`std::vector<std::size_t>` for `DecimationMesh::build` and
+  `buildHierarchy`; `PinMap` for `solveLSCMLevel`).
+- [x] 4.9 Keep `HLSCM.ExplicitPins`, `HLSCM.SetPinnedVertices` — they now
+  exercise the deprecated-shim path and must continue to pass until 3.0.
+
+## Phase 5: Verify — done
+- [x] 5.1 Run `ctest` — 6/6 binaries, 50/50 parameterization assertions pass.
+- [x] 5.2 New multi-pin tests pass (5/5 new + 5 deprecated-shim tests still
+  green).
+- [x] 5.3 Run `git clang-format`; regenerate amalgamated header.
 
 ## Phase 6: Conductor & GitHub
 - [ ] 6.1 Open PR against issue #42; note expanded scope (HLSCM included) in PR
