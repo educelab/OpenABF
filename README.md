@@ -88,6 +88,13 @@ as the `Solver` template parameter.
 Visit our full library documentation [here](https://educelab.github.io/OpenABF/).
 
 ## Installation
+### Homebrew
+OpenABF can be installed on macOS and Linux using [Homebrew](https://brew.sh/):
+
+```shell
+brew install educelab/code/openabf
+```
+
 ### CMake
 This project can be configured and installed using the CMake build system:
 
