@@ -124,12 +124,16 @@ int main()
      * so the chart/atlas corner order is not guaranteed to match the source
      * face's corner order (see PackCharts / HalfEdgeMesh::insert_face).
      *
+     * This single PackCharts call produced ONE shared [0,1]^2 atlas, i.e. one
+     * packing domain, so the default UVMap (no per-coordinate chart index) is
+     * the right type here — every wedge lives in the same domain. See the note
+     * after the snippet for when traits::WithChart applies.
+     *
      *     #include <algorithm>
      *     #include "educelab/core/types/UVMap.hpp"
      *     using educelab::UVMap;
-     *     using educelab::traits::WithChart;   // optional: tag each UV by chart
      *
-     *     UVMap<float, 2, WithChart> uv;
+     *     UVMap<float, 2> uv;
      *
      *     for (std::size_t mf = 0; mf < merged.mesh->num_faces(); ++mf) {
      *         // Atlas face -> source chart + chart-local face -> source (M') face.
@@ -152,15 +156,22 @@ int main()
      *                 srcCorners.begin(),
      *                 std::find(srcCorners.begin(), srcCorners.end(), srcVert)));
      *
-     *             UVMap<float, 2, WithChart>::Coordinate c{e->vertex->pos[0],
-     *                                                      e->vertex->pos[1]};
-     *             c.chart = chart;                       // WithChart mixin
-     *             uv.map(srcFace, corner, uv.insert(c));
+     *             uv.map(srcFace, corner, uv.insert(e->vertex->pos[0],
+     *                                               e->vertex->pos[1]));
      *         }
      *     }
      *
      *     // uv.get_coordinate(srcFace, corner) now yields the packed UV for
      *     // each wedge of `mesh`, ready for OBJ `vt` emission.
+     *
+     * traits::WithChart is for MULTIPLE independent packing domains, not the
+     * connected components of a single atlas. Its `chart` index maps to a
+     * separate [0,1]^2 domain / texture page: educelab's write_obj groups
+     * faces into `usemtl materialN` by chart and emits one texture path per
+     * chart. You would use it if you partitioned the components into groups
+     * and ran PackCharts once per group (one atlas each), setting
+     * `coordinate.chart` to that group's domain index — not to tag the CCs
+     * that share this single packed frame.
      */
 
     // The source mesh's 3D vertex positions are unchanged by the per-chart
