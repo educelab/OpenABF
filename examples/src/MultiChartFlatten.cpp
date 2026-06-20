@@ -92,6 +92,11 @@ int main()
     // positions in place; the per-chart vertex_map/face_map remain valid.
     OpenABF::PackOptions<float> opts;
     opts.normalize = true;
+    // Add a gutter around every chart so neighbouring charts -- and the atlas
+    // boundary -- don't touch. Without this, charts pack flush and texture
+    // filtering can bleed one chart's texels into another. `padding` is in
+    // absolute chart units and is applied before the normalize scaling.
+    opts.padding = 0.1f;
     auto extent = OpenABF::PackCharts<Mesh>(chartMeshes, opts);
     std::cout << "Packed atlas extent: [" << extent.min[0] << ", " << extent.min[1] << "] -> ["
               << extent.max[0] << ", " << extent.max[1] << "]\n";

@@ -72,7 +72,15 @@ struct PackOptions {
      */
     std::optional<T> target_width{};
 
-    /** @brief Gutter added around each chart, in chart/absolute units */
+    /**
+     * @brief Gutter added around every chart, in chart/absolute units
+     *
+     * Applied on all four sides of each chart, including against the atlas
+     * boundary, so perimeter charts are inset from the returned extent by
+     * `padding` as well -- not merely separated from their neighbors.
+     * Defaults to `0` (charts laid out flush). `padding` is in absolute chart
+     * units and is applied before any `normalize` scaling.
+     */
     T padding{T(0)};
 };
 
@@ -199,19 +207,20 @@ auto PackCharts(std::vector<typename MeshType::Pointer>& charts,
 
     // Shelf layout. Charts are placed left-to-right; a row wraps to a new shelf
     // once it would exceed targetWidth (a chart wider than targetWidth still
-    // gets placed alone at the start of a shelf). Every chart's bbox-min is
-    // mapped to a cursor position >= 0, so the packed atlas's lower corner is
-    // the origin.
+    // gets placed alone at the start of a shelf). The cursor starts at `pad`
+    // and wraps back to `pad`, so every chart is inset by at least `pad` from
+    // the atlas's lower corner; the atlas's lower corner itself stays at the
+    // origin.
     std::vector<T> offsetX(n);
     std::vector<T> offsetY(n);
-    auto cursorX = T(0);
-    auto cursorY = T(0);
+    auto cursorX = pad;
+    auto cursorY = pad;
     auto shelfHeight = T(0);
     auto atlasMaxX = T(0);
     auto atlasMaxY = T(0);
     for (const auto i : order) {
-        if (cursorX > T(0) and cursorX + width[i] > targetWidth) {
-            cursorX = T(0);
+        if (cursorX > pad and cursorX + width[i] > targetWidth) {
+            cursorX = pad;
             cursorY += shelfHeight + pad;
             shelfHeight = T(0);
         }
@@ -223,11 +232,18 @@ auto PackCharts(std::vector<typename MeshType::Pointer>& charts,
         shelfHeight = std::max(shelfHeight, height[i]);
     }
 
+    // The atlas extent includes the perimeter gutter: charts are inset by
+    // `pad` from the lower corner (the cursor starts at `pad`), so add `pad`
+    // to the far edges too. Every chart then has >= `pad` of empty space on
+    // all four sides, including against the atlas boundary.
+    const T atlasW = atlasMaxX + pad;
+    const T atlasH = atlasMaxY + pad;
+
     // Optional normalization: a single global uniform scale that fits the
-    // packed atlas into [0,1]^2, preserving relative chart sizes.
+    // padded atlas into [0,1]^2, preserving relative chart sizes.
     auto scale = T(1);
     if (opts.normalize) {
-        const auto extentMax = std::max(atlasMaxX, atlasMaxY);
+        const auto extentMax = std::max(atlasW, atlasH);
         if (extentMax > T(0)) {
             scale = T(1) / extentMax;
         }
@@ -241,7 +257,7 @@ auto PackCharts(std::vector<typename MeshType::Pointer>& charts,
         }
     }
 
-    result.max = Vec<T, 2>{atlasMaxX * scale, atlasMaxY * scale};
+    result.max = Vec<T, 2>{atlasW * scale, atlasH * scale};
     return result;
 }
 

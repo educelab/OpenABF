@@ -157,19 +157,43 @@ TEST(ChartPacking, ExtentBoundsAllCharts)
 
 TEST(ChartPacking, PaddingSeparatesChartsInSingleRow)
 {
-    // Force a single row with a large target width; padding should appear as a
-    // gap between the two charts, so the atlas width is w0 + padding + w1.
+    // Force a single row with a large target width. Padding surrounds every
+    // chart on all sides, so the atlas width is
+    // pad + w0 + pad + w1 + pad = 0.5 + 1 + 0.5 + 1 + 0.5 = 3.5.
     std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f), MakeRectChart(1.f, 1.f)};
     PackOptions<float> opts;
     opts.target_width = 1000.f;
     opts.padding = 0.5f;
     auto extent = PackCharts<Mesh>(charts, opts);
-    EXPECT_NEAR(extent.max[0] - extent.min[0], 2.5f, 1e-4f);
+    EXPECT_NEAR(extent.max[0] - extent.min[0], 3.5f, 1e-4f);
 
     auto b0 = ChartBBox(charts[0]);
     auto b1 = ChartBBox(charts[1]);
     auto gap = std::max(b1.minx - b0.maxx, b0.minx - b1.maxx);
     EXPECT_GE(gap, 0.5f - 1e-4f);
+}
+
+TEST(ChartPacking, PaddingSurroundsChartsAtPerimeter)
+{
+    // Padding is a gutter on all four sides of every chart, including against
+    // the atlas boundary -- not just between neighbours. Use several charts so
+    // the layout wraps to multiple shelves, exercising both the left/bottom
+    // margins and the right/top margins.
+    const float pad = 0.5f;
+    std::vector<Mesh::Pointer> charts;
+    for (int i = 0; i < 5; ++i) {
+        charts.push_back(MakeRectChart(1.f, 1.f));
+    }
+    PackOptions<float> opts;
+    opts.padding = pad;
+    auto extent = PackCharts<Mesh>(charts, opts);
+    for (std::size_t i = 0; i < charts.size(); ++i) {
+        auto b = ChartBBox(charts[i]);
+        EXPECT_GE(b.minx, extent.min[0] + pad - 1e-4f) << "chart " << i;
+        EXPECT_GE(b.miny, extent.min[1] + pad - 1e-4f) << "chart " << i;
+        EXPECT_LE(b.maxx, extent.max[0] - pad + 1e-4f) << "chart " << i;
+        EXPECT_LE(b.maxy, extent.max[1] - pad + 1e-4f) << "chart " << i;
+    }
 }
 
 // --- Normalize mode --------------------------------------------------------
