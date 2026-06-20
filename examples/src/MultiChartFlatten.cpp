@@ -107,6 +107,62 @@ int main()
     std::cout << "Wrote packed atlas: " << merged.mesh->num_vertices() << " vertices, "
               << merged.mesh->num_faces() << " faces -> " << out << "\n";
 
+    /*
+     * Reference: building a per-wedge UVMap from the merged result
+     * -----------------------------------------------------------------------
+     * OpenABF does not own a UV-map type, but the merged atlas plus the
+     * components' back-maps carry everything needed to populate one. The
+     * snippet below (not compiled here) targets educelab::core's UVMap:
+     *
+     *     educelab/core/types/UVMap.hpp
+     *
+     * The UVMap is keyed by (face, corner) against the *torn source mesh*
+     * `mesh` — which still holds the original 3D geometry, since only the
+     * extracted charts were flattened. UV coordinates come from the packed
+     * chart vertices. Corner positions are resolved by *vertex identity*, not
+     * by traversal order: a face's winding may be reversed at insertion time,
+     * so the chart/atlas corner order is not guaranteed to match the source
+     * face's corner order (see PackCharts / HalfEdgeMesh::insert_face).
+     *
+     *     #include <algorithm>
+     *     #include "educelab/core/types/UVMap.hpp"
+     *     using educelab::UVMap;
+     *     using educelab::traits::WithChart;   // optional: tag each UV by chart
+     *
+     *     UVMap<float, 2, WithChart> uv;
+     *
+     *     for (std::size_t mf = 0; mf < merged.mesh->num_faces(); ++mf) {
+     *         // Atlas face -> source chart + chart-local face -> source (M') face.
+     *         const auto [chart, subFace] = merged.face_source[mf];
+     *         const auto srcFace = charts[chart].face_map[subFace];
+     *
+     *         // Source face corner order, keyed by M' vertex index.
+     *         std::vector<std::size_t> srcCorners;
+     *         for (const auto& e : *mesh->faces()[srcFace]) {
+     *             srcCorners.push_back(e->vertex->idx);
+     *         }
+     *
+     *         // Each atlas-face corner carries its packed UV in pos.
+     *         for (const auto& e : *merged.mesh->faces()[mf]) {
+     *             const auto [vChart, vSub] = merged.vertex_source[e->vertex->idx];
+     *             const auto srcVert = charts[vChart].vertex_map[vSub];  // M' vertex
+     *
+     *             // Place the UV at the matching corner of the source face.
+     *             const auto corner = static_cast<std::size_t>(std::distance(
+     *                 srcCorners.begin(),
+     *                 std::find(srcCorners.begin(), srcCorners.end(), srcVert)));
+     *
+     *             UVMap<float, 2, WithChart>::Coordinate c{e->vertex->pos[0],
+     *                                                      e->vertex->pos[1]};
+     *             c.chart = chart;                       // WithChart mixin
+     *             uv.map(srcFace, corner, uv.insert(c));
+     *         }
+     *     }
+     *
+     *     // uv.get_coordinate(srcFace, corner) now yields the packed UV for
+     *     // each wedge of `mesh`, ready for OBJ `vt` emission.
+     */
+
     // The source mesh's 3D vertex positions are unchanged by the per-chart
     // flattening and packing — only the extracted sub-meshes hold the 2D UV
     // result.
