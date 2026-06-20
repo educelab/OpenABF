@@ -124,11 +124,6 @@ int main()
      * so the chart/atlas corner order is not guaranteed to match the source
      * face's corner order (see PackCharts / HalfEdgeMesh::insert_face).
      *
-     * This single PackCharts call produced ONE shared [0,1]^2 atlas, i.e. one
-     * packing domain, so the default UVMap (no per-coordinate chart index) is
-     * the right type here — every wedge lives in the same domain. See the note
-     * after the snippet for when traits::WithChart applies.
-     *
      *     #include <algorithm>
      *     #include "educelab/core/types/UVMap.hpp"
      *     using educelab::UVMap;
@@ -164,14 +159,17 @@ int main()
      *     // uv.get_coordinate(srcFace, corner) now yields the packed UV for
      *     // each wedge of `mesh`, ready for OBJ `vt` emission.
      *
-     * traits::WithChart is for MULTIPLE independent packing domains, not the
-     * connected components of a single atlas. Its `chart` index maps to a
-     * separate [0,1]^2 domain / texture page: educelab's write_obj groups
-     * faces into `usemtl materialN` by chart and emits one texture path per
-     * chart. You would use it if you partitioned the components into groups
-     * and ran PackCharts once per group (one atlas each), setting
-     * `coordinate.chart` to that group's domain index — not to tag the CCs
-     * that share this single packed frame.
+     * This table is valid for BOTH the torn mesh and the untorn (pre-split)
+     * mesh. split_path preserves face indices and per-face winding (it never
+     * re-inserts faces), and the (face, corner) keys are resolved by vertex
+     * identity against `mesh`'s own faces — so any winding reversal insert_face
+     * applies (when M is built, when components are cloned by extract, and when
+     * charts are merged) is absorbed rather than baked into the keys. The rule
+     * that makes this work: consume the UVMap against the same HalfEdgeMesh (or
+     * one sharing its winding) and resolve corners by identity, never by a raw
+     * traversal index. Caveat: insert_face's auto-rewinding means a face's
+     * as-built corner order may differ from the raw input face list, and the
+     * mesh does not record that permutation (see issue tracker / bug track B9).
      */
 
     // The source mesh's 3D vertex positions are unchanged by the per-chart
