@@ -11,13 +11,13 @@ Design resolved 2026-06-20 (see spec.md → Design Decisions).
 - [x] 1.6 Resolve edge cases: empty list no-op, zero-area placed, null/empty throws, Dim>=2
 
 ## Phase 2: Tests (write first)
-- [ ] 2.1 Synthetic 2D charts: bbox computation correctness (min/max per mesh)
-- [ ] 2.2 Assert packed chart bounding boxes do not overlap (padding respected)
-- [ ] 2.3 Assert absolute-mode preserves relative chart sizes (no per-chart distortion)
-- [ ] 2.4 Assert normalize=true fits all UVs within [0,1]² via single global scale
-- [ ] 2.5 Assert returned PackResult extent bounds all packed charts
-- [ ] 2.6 Degenerate cases: empty list, single chart, zero-area chart, null/empty throw
-- [ ] 2.7 End-to-end: tear → extract_connected_components → LSCM → PackCharts, and
+- [x] 2.1 Synthetic 2D charts: bbox computation correctness (min/max per mesh)
+- [x] 2.2 Assert packed chart bounding boxes do not overlap (padding respected)
+- [x] 2.3 Assert absolute-mode preserves relative chart sizes (no per-chart distortion)
+- [x] 2.4 Assert normalize=true fits all UVs within [0,1]² via single global scale
+- [x] 2.5 Assert returned PackResult extent bounds all packed charts
+- [x] 2.6 Degenerate cases: empty list, single chart, zero-area chart, null/empty throw
+- [x] 2.7 End-to-end: tear → extract_connected_components → LSCM → PackCharts, and
           verify per-wedge recovery via (face_map[f], vertex_map[corner.vertex.idx])
 
 ## Phase 3: Implementation
