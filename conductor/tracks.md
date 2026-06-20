@@ -20,7 +20,7 @@ F2 or F5–F11 — based on priority at the time of starting.
 | open | F11 | Implement ACVD | [#62](https://github.com/educelab/OpenABF/issues/62) | 2026-03-20 | 2026-03-20 |
 | open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-06-20 |
 | open | B8 | LSCM area-preserving rescale of flattening output | [#98](https://github.com/educelab/OpenABF/issues/98) | 2026-06-20 | 2026-06-20 |
-| open | B9 | insert_face auto-rewinding silently changes face corner order vs input (unrecorded) | [#100](https://github.com/educelab/OpenABF/issues/100) | 2026-06-20 | 2026-06-20 |
+| open | B9 | No recoverable mapping from torn/parameterized mesh back to original input topology (insert_face rewind + split_path duplication) | [#100](https://github.com/educelab/OpenABF/issues/100) | 2026-06-20 | 2026-06-20 |
 
 ## Archived Tracks
 
