@@ -19,6 +19,7 @@ F2 or F5–F11 — based on priority at the time of starting.
 | open | F10 | Implement Ceres Solver Backend | [#58](https://github.com/educelab/OpenABF/issues/58) | 2026-03-20 | 2026-03-20 |
 | open | F11 | Implement ACVD | [#62](https://github.com/educelab/OpenABF/issues/62) | 2026-03-20 | 2026-03-20 |
 | open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-06-20 |
+| open | B8 | LSCM area-preserving rescale of flattening output | [#98](https://github.com/educelab/OpenABF/issues/98) | 2026-06-20 | 2026-06-20 |
 
 ## Archived Tracks
 
