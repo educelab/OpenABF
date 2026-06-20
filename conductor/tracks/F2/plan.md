@@ -47,3 +47,23 @@ provenance maps so merged → chart → M' composition keeps working.
 - [x] 5.3 Wire into OpenABF.hpp + multiheader install list; regenerate single header
 - [x] 5.4 Switch MultiChartFlatten example to use MergeMeshes
 - [x] 5.5 Verify: full ctest, single-header build, install-test all pass
+
+## Phase 6: Perimeter padding (added during review)
+Rationale: review question "shouldn't we add padding around the packed
+charts?". The original layout applied `padding` only as a gutter *between*
+charts — perimeter charts still touched the atlas boundary (left/bottom at the
+origin, rightmost/topmost at the extent). For a texture atlas this lets edge
+charts bleed across the boundary/seam under filtering, mipmapping, or wrap
+addressing. Resolution (user-confirmed): inset the whole layout so `padding`
+surrounds every chart on all four sides; keep the library default `padding = 0`
+and instead set a visible padding in the example.
+- [x] 6.1 Tests first: assert padding insets charts from the atlas perimeter
+          (new PaddingSurroundsChartsAtPerimeter); update single-row extent
+          expectation (pad + w0 + pad + w1 + pad)
+- [x] 6.2 Implement perimeter inset: cursor starts/wraps at `pad`; add `pad` to
+          far extents; normalize fits the padded atlas into [0,1]²
+- [x] 6.3 Update header docs (padding surrounds charts; atlas lower corner stays
+          at origin) + spec Decision 5 / acceptance criteria
+- [x] 6.4 Set a visible `padding` in the MultiChartFlatten example
+- [x] 6.5 Regenerate single header; verify full ctest, example run, single-header
+          build, clang-format all pass

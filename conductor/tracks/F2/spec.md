@@ -74,7 +74,8 @@ and emit per-corner `vt` entries, build atlases, etc., from there.
    struct PackOptions {
        bool normalize = false;            // fit packed atlas into [0,1]^2
        std::optional<T> target_width{};   // overrides sqrt-area heuristic
-       T padding = T(0);                  // per-chart gutter, absolute units
+       T padding = T(0);                  // gutter on all sides of every chart
+                                          // (incl. atlas perimeter), abs units
    };
    struct PackResult { Vec<T,2> min, max; };   // packed atlas extent
 
@@ -98,6 +99,9 @@ and emit per-corner `vt` entries, build atlases, etc., from there.
 - [ ] Shelf-packing with the ~square target-width heuristic, overridable.
 - [ ] No charts' bounding boxes overlap (padding respected); the packed set
       is contained in the returned extent (and in `[0,1]²` when normalized).
+- [ ] `padding` surrounds every chart on all four sides, including against the
+      atlas boundary (perimeter charts are inset from the extent by `padding`,
+      not just separated from neighbors).
 - [ ] Edge cases handled per Design Decision 6.
 - [ ] Header documents the vertex-identity per-wedge recipe (Decision 2).
 - [ ] Tests: synthetic 2D charts for deterministic geometric assertions plus
