@@ -18,8 +18,13 @@ limitations under the License.
 */
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstddef>
+#include <limits>
+#include <numeric>
 #include <optional>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -117,6 +122,11 @@ struct PackResult {
  * }
  * @endcode
  *
+ * @par Complexity
+ * `O(n log n)` in the number of charts `n` (dominated by the height sort) plus
+ * `O(V)` in the total vertex count `V` (two passes: one to measure bounding
+ * boxes, one to apply the transform). Memory overhead is `O(n)`.
+ *
  * @tparam MeshType A HalfEdgeMesh specialization
  * @param charts Charts to pack; each chart's vertex positions are modified
  * @param opts Packing options
@@ -135,10 +145,104 @@ auto PackCharts(std::vector<typename MeshType::Pointer>& charts,
         detail::VecDimensions<decltype(std::declval<typename MeshType::Vertex>().pos)>::value >= 2,
         "PackCharts requires mesh vertices with at least 2 position dimensions");
 
-    // STUB (TDD red phase): real layout is implemented in Phase 3.
-    (void)charts;
-    (void)opts;
-    return PackResult<T>{Vec<T, 2>{T(0), T(0)}, Vec<T, 2>{T(0), T(0)}};
+    PackResult<T> result{Vec<T, 2>{T(0), T(0)}, Vec<T, 2>{T(0), T(0)}};
+    if (charts.empty()) {
+        return result;
+    }
+    const std::size_t n = charts.size();
+
+    // Validate inputs and compute each chart's 2D bounding box (origin + size).
+    std::vector<T> minX(n);
+    std::vector<T> minY(n);
+    std::vector<T> width(n);
+    std::vector<T> height(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& chart = charts[i];
+        if (not chart or chart->num_vertices() == 0) {
+            throw std::invalid_argument("PackCharts: chart is null or has no vertices");
+        }
+        auto mnX = std::numeric_limits<T>::max();
+        auto mnY = std::numeric_limits<T>::max();
+        auto mxX = std::numeric_limits<T>::lowest();
+        auto mxY = std::numeric_limits<T>::lowest();
+        for (const auto& v : chart->vertices()) {
+            mnX = std::min(mnX, v->pos[0]);
+            mnY = std::min(mnY, v->pos[1]);
+            mxX = std::max(mxX, v->pos[0]);
+            mxY = std::max(mxY, v->pos[1]);
+        }
+        minX[i] = mnX;
+        minY[i] = mnY;
+        width[i] = mxX - mnX;
+        height[i] = mxY - mnY;
+    }
+
+    // Place taller charts first so shelves pack tightly.
+    std::vector<std::size_t> order(n);
+    std::iota(order.begin(), order.end(), std::size_t{0});
+    std::sort(order.begin(), order.end(),
+              [&](std::size_t a, std::size_t b) { return height[a] > height[b]; });
+
+    // Target shelf width: caller override, else sqrt(sum of padded chart areas)
+    // for a roughly square atlas.
+    const T pad = opts.padding;
+    T targetWidth;
+    if (opts.target_width) {
+        targetWidth = *opts.target_width;
+    } else {
+        auto areaSum = T(0);
+        for (std::size_t i = 0; i < n; ++i) {
+            areaSum += (width[i] + pad) * (height[i] + pad);
+        }
+        targetWidth = std::sqrt(areaSum);
+    }
+
+    // Shelf layout. Charts are placed left-to-right; a row wraps to a new shelf
+    // once it would exceed targetWidth (a chart wider than targetWidth still
+    // gets placed alone at the start of a shelf). Every chart's bbox-min is
+    // mapped to a cursor position >= 0, so the packed atlas's lower corner is
+    // the origin.
+    std::vector<T> offsetX(n);
+    std::vector<T> offsetY(n);
+    auto cursorX = T(0);
+    auto cursorY = T(0);
+    auto shelfHeight = T(0);
+    auto atlasMaxX = T(0);
+    auto atlasMaxY = T(0);
+    for (const auto i : order) {
+        if (cursorX > T(0) and cursorX + width[i] > targetWidth) {
+            cursorX = T(0);
+            cursorY += shelfHeight + pad;
+            shelfHeight = T(0);
+        }
+        offsetX[i] = cursorX - minX[i];
+        offsetY[i] = cursorY - minY[i];
+        atlasMaxX = std::max(atlasMaxX, cursorX + width[i]);
+        atlasMaxY = std::max(atlasMaxY, cursorY + height[i]);
+        cursorX += width[i] + pad;
+        shelfHeight = std::max(shelfHeight, height[i]);
+    }
+
+    // Optional normalization: a single global uniform scale that fits the
+    // packed atlas into [0,1]^2, preserving relative chart sizes.
+    auto scale = T(1);
+    if (opts.normalize) {
+        const auto extentMax = std::max(atlasMaxX, atlasMaxY);
+        if (extentMax > T(0)) {
+            scale = T(1) / extentMax;
+        }
+    }
+
+    // Apply translation (+ optional scale about the origin) in place.
+    for (std::size_t i = 0; i < n; ++i) {
+        for (const auto& v : charts[i]->vertices()) {
+            v->pos[0] = (v->pos[0] + offsetX[i]) * scale;
+            v->pos[1] = (v->pos[1] + offsetY[i]) * scale;
+        }
+    }
+
+    result.max = Vec<T, 2>{atlasMaxX * scale, atlasMaxY * scale};
+    return result;
 }
 
 }  // namespace OpenABF

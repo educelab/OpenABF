@@ -21,15 +21,16 @@ Design resolved 2026-06-20 (see spec.md → Design Decisions).
           verify per-wedge recovery via (face_map[f], vertex_map[corner.vertex.idx])
 
 ## Phase 3: Implementation
-- [ ] 3.1 Create `include/OpenABF/ChartPacking.hpp` with PackOptions, PackResult
-- [ ] 3.2 Implement per-chart bbox + sqrt-area target width + shelf placement
-- [ ] 3.3 Implement absolute (translate-only) and normalize (global uniform scale) modes
-- [ ] 3.4 Implement padding, degenerate-input handling, static_assert(Dim>=2)
-- [ ] 3.5 Document the vertex-identity per-wedge recipe in the header + complexity notes
-- [ ] 3.6 Add include to `include/OpenABF/OpenABF.hpp`
-- [ ] 3.7 Update `single_include.json` and run amalgamation script
+- [x] 3.1 Create `include/OpenABF/ChartPacking.hpp` with PackOptions, PackResult
+- [x] 3.2 Implement per-chart bbox + sqrt-area target width + shelf placement
+- [x] 3.3 Implement absolute (translate-only) and normalize (global uniform scale) modes
+- [x] 3.4 Implement padding, degenerate-input handling, static_assert(Dim>=2)
+- [x] 3.5 Document the vertex-identity per-wedge recipe in the header + complexity notes
+- [x] 3.6 Add include to `include/OpenABF/OpenABF.hpp`
+- [x] 3.7 Update single-header via amalgamation script (single_include.json unchanged —
+          it already tracks OpenABF.hpp transitively)
 
 ## Phase 4: Verify
-- [ ] 4.1 Run `ctest` — all tests pass
-- [ ] 4.2 Run clang-format on changed files
-- [ ] 4.3 Confirm single-header build matches multi-header
+- [x] 4.1 Run `ctest` — all 7 suites pass (incl. new OpenABF_TestChartPacking)
+- [x] 4.2 Run clang-format on changed files
+- [x] 4.3 Confirm single-header build compiles and runs
