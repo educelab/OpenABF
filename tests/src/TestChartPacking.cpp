@@ -6,7 +6,6 @@
 
 #include <gtest/gtest.h>
 
-#include "OpenABF/ChartPacking.hpp"
 #include "OpenABF/OpenABF.hpp"
 
 using Mesh = OpenABF::HalfEdgeMesh<float>;
