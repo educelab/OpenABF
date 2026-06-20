@@ -30,6 +30,7 @@ if(OPENABF_MULTIHEADER)
         include/OpenABF/HierarchicalLSCM.hpp
         include/OpenABF/AngleBasedLSCM.hpp
         include/OpenABF/ChartPacking.hpp
+        include/OpenABF/MeshMerge.hpp
         include/OpenABF/Math.hpp
         include/OpenABF/Vec.hpp
         include/OpenABF/MeshIO.hpp

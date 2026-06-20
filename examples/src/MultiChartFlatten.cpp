@@ -97,29 +97,15 @@ int main()
               << extent.max[0] << ", " << extent.max[1] << "]\n";
 
     // Merge the packed charts into a single mesh and write it as one atlas.
-    // The charts are disjoint in the packed frame, so concatenating their
-    // vertices and re-emitting their faces (with an index offset per chart)
-    // reconstructs a multi-component mesh in UV space.
-    auto packed = Mesh::New();
-    std::size_t offset{0};
-    for (const auto& chart : chartMeshes) {
-        for (const auto& v : chart->vertices()) {
-            packed->insert_vertex(v->pos[0], v->pos[1], v->pos[2]);
-        }
-        for (const auto& face : chart->faces()) {
-            std::vector<std::size_t> idxs;
-            for (const auto& edge : *face) {
-                idxs.push_back(edge->vertex->idx + offset);
-            }
-            packed->insert_face(idxs);
-        }
-        offset += chart->num_vertices();
-    }
+    // MergeMeshes returns provenance maps (vertex_source/face_source) that, when
+    // composed with each component's vertex_map/face_map, trace any atlas
+    // element back to the torn source mesh.
+    auto merged = OpenABF::MergeMeshes<Mesh>(chartMeshes);
 
     const std::string out = "openabf_example_multi_chart_packed.obj";
-    OpenABF::WriteMesh(out, packed);
-    std::cout << "Wrote packed atlas: " << packed->num_vertices() << " vertices, "
-              << packed->num_faces() << " faces -> " << out << "\n";
+    OpenABF::WriteMesh(out, merged.mesh);
+    std::cout << "Wrote packed atlas: " << merged.mesh->num_vertices() << " vertices, "
+              << merged.mesh->num_faces() << " faces -> " << out << "\n";
 
     // The source mesh's 3D vertex positions are unchanged by the per-chart
     // flattening and packing — only the extracted sub-meshes hold the 2D UV

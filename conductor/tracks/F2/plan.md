@@ -31,6 +31,19 @@ Design resolved 2026-06-20 (see spec.md → Design Decisions).
           it already tracks OpenABF.hpp transitively)
 
 ## Phase 4: Verify
-- [x] 4.1 Run `ctest` — all 7 suites pass (incl. new OpenABF_TestChartPacking)
+- [x] 4.1 Run `ctest` — all suites pass (incl. OpenABF_TestChartPacking, OpenABF_TestMeshMerge)
 - [x] 4.2 Run clang-format on changed files
 - [x] 4.3 Confirm single-header build compiles and runs
+
+## Phase 5: MergeMeshes helper (added during review)
+Rationale: the inline atlas merge in the example severs the back-map chain.
+MergeMeshes is the inverse of extract_connected_components — it returns
+provenance maps so merged → chart → M' composition keeps working.
+- [x] 5.1 Tests first: concatenation counts, vertex/face provenance, null/empty
+          throw, round-trip extract→merge recovers original (torn-mesh) identity
+- [x] 5.2 Implement `MergeMeshes<MeshType>` → `MergedMesh{mesh, vertex_source, face_source}`
+          in `include/OpenABF/MeshMerge.hpp` (preserves vertex traits/positions;
+          edge/face traits default-constructed)
+- [x] 5.3 Wire into OpenABF.hpp + multiheader install list; regenerate single header
+- [x] 5.4 Switch MultiChartFlatten example to use MergeMeshes
+- [x] 5.5 Verify: full ctest, single-header build, install-test all pass
