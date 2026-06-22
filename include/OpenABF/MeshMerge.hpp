@@ -74,6 +74,11 @@ auto MergeMeshes(const std::vector<typename MeshType::Pointer>& meshes) -> Merge
     MergedMesh<MeshType> result{MeshType::New(), {}, {}};
     auto& out = result.mesh;
 
+    // Gather every face's (offset) vertex indices so they can be inserted in a
+    // single insert_faces() call, which rebuilds the mesh boundary once at the
+    // end via update_boundary(). Inserting faces one at a time with
+    // insert_face() would leave the boundary stale.
+    std::vector<std::vector<std::size_t>> faces;
     for (std::size_t ci = 0; ci < meshes.size(); ++ci) {
         const auto& src = meshes[ci];
         if (not src or src->num_vertices() == 0) {
@@ -93,10 +98,11 @@ auto MergeMeshes(const std::vector<typename MeshType::Pointer>& meshes) -> Merge
             for (const auto& edge : *face) {
                 idxs.push_back(edge->vertex->idx + offset);
             }
-            out->insert_face(idxs);
+            faces.push_back(std::move(idxs));
             result.face_source.emplace_back(ci, face->idx);
         }
     }
+    out->insert_faces(faces);
     return result;
 }
 

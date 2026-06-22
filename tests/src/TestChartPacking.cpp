@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <limits>
 #include <set>
 #include <utility>
@@ -21,6 +23,21 @@ auto MakeRectChart(float w, float h) -> Mesh::Pointer
 {
     auto m = Mesh::New();
     m->insert_vertices({{0.f, 0.f, 0.f}, {w, 0.f, 0.f}, {w, h, 0.f}, {0.f, h, 0.f}});
+    m->insert_faces({{0, 1, 2}, {0, 2, 3}});
+    return m;
+}
+
+/** @brief Build a w x h rectangle chart rotated by `theta` radians */
+auto MakeRotatedRectChart(float w, float h, float theta) -> Mesh::Pointer
+{
+    const float c = std::cos(theta);
+    const float s = std::sin(theta);
+    auto rot = [&](float x, float y) -> std::array<float, 3> {
+        return {c * x - s * y, s * x + c * y, 0.f};
+    };
+    std::vector<std::array<float, 3>> verts{rot(0.f, 0.f), rot(w, 0.f), rot(w, h), rot(0.f, h)};
+    auto m = Mesh::New();
+    m->insert_vertices(verts);
     m->insert_faces({{0, 1, 2}, {0, 2, 3}});
     return m;
 }
@@ -95,8 +112,11 @@ TEST(ChartPacking, ZeroAreaChartIsPlacedWithoutThrowing)
 
 TEST(ChartPacking, SingleChartMapsMinToOrigin)
 {
+    // Disable rotation so this test exercises translation/layout in isolation.
     std::vector<Mesh::Pointer> charts{MakeRectChart(3.f, 2.f)};
-    auto extent = PackCharts<Mesh>(charts);
+    PackOptions<float> opts;
+    opts.minimize_bounding_box = false;
+    auto extent = PackCharts<Mesh>(charts, opts);
     auto b = ChartBBox(charts[0]);
     EXPECT_FLOAT_EQ(b.minx, 0.f);
     EXPECT_FLOAT_EQ(b.miny, 0.f);
@@ -108,13 +128,17 @@ TEST(ChartPacking, SingleChartMapsMinToOrigin)
 
 TEST(ChartPacking, AbsoluteModePreservesChartSizes)
 {
+    // Disable rotation so the bounding boxes stay in their input orientation;
+    // this test is about absolute mode not rescaling charts.
     std::vector<float> ws{1.f, 2.f, 0.5f, 3.f};
     std::vector<float> hs{1.f, 1.5f, 2.f, 0.7f};
     std::vector<Mesh::Pointer> charts;
     for (std::size_t i = 0; i < ws.size(); ++i) {
         charts.push_back(MakeRectChart(ws[i], hs[i]));
     }
-    PackCharts<Mesh>(charts);
+    PackOptions<float> opts;
+    opts.minimize_bounding_box = false;
+    PackCharts<Mesh>(charts, opts);
     for (std::size_t i = 0; i < charts.size(); ++i) {
         auto b = ChartBBox(charts[i]);
         EXPECT_FLOAT_EQ(b.width(), ws[i]) << "chart " << i;
@@ -194,6 +218,48 @@ TEST(ChartPacking, PaddingSurroundsChartsAtPerimeter)
         EXPECT_LE(b.maxx, extent.max[0] - pad + 1e-4f) << "chart " << i;
         EXPECT_LE(b.maxy, extent.max[1] - pad + 1e-4f) << "chart " << i;
     }
+}
+
+// --- Bounding-box minimization (rotation) ----------------------------------
+
+TEST(ChartPacking, MinimizeBoundingBoxTightensRotatedChart)
+{
+    // A 4x1 rectangle rotated off-axis has a loose axis-aligned bounding box.
+    // With minimize_bounding_box (the default), PackCharts rotates it back so
+    // the packed box collapses to the rectangle's true 4x1 area, standing the
+    // long axis vertical.
+    std::vector<Mesh::Pointer> charts{MakeRotatedRectChart(4.f, 1.f, 0.6f)};
+    PackCharts<Mesh>(charts);
+    auto b = ChartBBox(charts[0]);
+    EXPECT_NEAR(b.width() * b.height(), 4.f, 1e-2f);
+    // The long axis (~4) must be vertical; the short axis (~1) horizontal.
+    EXPECT_NEAR(b.height(), 4.f, 1e-2f);
+    EXPECT_NEAR(b.width(), 1.f, 1e-2f);
+}
+
+TEST(ChartPacking, MinimizeBoundingBoxStandsWideChartUpright)
+{
+    // An axis-aligned chart that is already minimum-area but wider than tall is
+    // rotated 90 degrees so its long axis is vertical, matching the
+    // tallest-first shelf strategy.
+    std::vector<Mesh::Pointer> charts{MakeRectChart(4.f, 1.f)};
+    PackCharts<Mesh>(charts);
+    auto b = ChartBBox(charts[0]);
+    EXPECT_NEAR(b.width() * b.height(), 4.f, 1e-3f);
+    EXPECT_NEAR(b.height(), 4.f, 1e-3f);
+    EXPECT_NEAR(b.width(), 1.f, 1e-3f);
+}
+
+TEST(ChartPacking, MinimizeBoundingBoxCanBeDisabled)
+{
+    // With minimization off, the off-axis rectangle keeps its loose bounding
+    // box, whose area is well above the rectangle's true 4x1 area.
+    std::vector<Mesh::Pointer> charts{MakeRotatedRectChart(4.f, 1.f, 0.6f)};
+    PackOptions<float> opts;
+    opts.minimize_bounding_box = false;
+    PackCharts<Mesh>(charts, opts);
+    auto b = ChartBBox(charts[0]);
+    EXPECT_GT(b.width() * b.height(), 5.f);
 }
 
 // --- Normalize mode --------------------------------------------------------

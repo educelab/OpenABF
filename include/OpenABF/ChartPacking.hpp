@@ -19,30 +19,147 @@ limitations under the License.
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <limits>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 #include <vector>
-
-#include "OpenABF/Vec.hpp"
 
 namespace OpenABF
 {
 
 namespace detail
 {
-/** @brief Deduce the dimensionality of a Vec type */
-template <typename>
-struct VecDimensions;
+/**
+ * @brief Rotate a chart within its UV plane so its axis-aligned bounding box
+ * has minimum area, with the larger extent vertical
+ *
+ * The minimum-area enclosing rectangle of a planar point set always has one
+ * edge collinear with an edge of the set's convex hull, so it suffices to test
+ * the orientation induced by each hull edge. The chart is then stood on its
+ * long axis (larger extent vertical) so it aligns with PackCharts's
+ * tallest-first shelf strategy. Vertex positions are rotated in place about the
+ * origin; only the first two components are touched. Rotation preserves
+ * topology and vertex identity, so any back-maps remain valid.
+ *
+ * @tparam MeshType A HalfEdgeMesh specialization
+ */
+template <typename MeshType>
+void MinimizeChartBoundingBox(const typename MeshType::Pointer& chart)
+{
+    using T = typename MeshType::type;
+    using Point = std::array<T, 2>;
 
-template <typename U, std::size_t N>
-struct VecDimensions<Vec<U, N>> {
-    static constexpr std::size_t value = N;
-};
+    // Gather the 2D point set.
+    std::vector<Point> pts;
+    pts.reserve(chart->num_vertices());
+    for (const auto& v : chart->vertices()) {
+        pts.push_back({v->pos[0], v->pos[1]});
+    }
+
+    // Convex hull via Andrew's monotone chain. Fewer than three unique points
+    // means a point or a segment, for which no rotation reduces the area.
+    std::sort(pts.begin(), pts.end());
+    pts.erase(std::unique(pts.begin(), pts.end()), pts.end());
+    const std::size_t m = pts.size();
+    if (m < 3) {
+        return;
+    }
+    auto crossZ = [](const Point& o, const Point& a, const Point& b) -> T {
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    };
+    std::vector<Point> hull(2 * m);
+    std::size_t k = 0;
+    for (std::size_t i = 0; i < m; ++i) {
+        while (k >= 2 and crossZ(hull[k - 2], hull[k - 1], pts[i]) <= T(0)) {
+            --k;
+        }
+        hull[k++] = pts[i];
+    }
+    for (std::size_t i = m - 1, t = k + 1; i > 0; --i) {
+        while (k >= t and crossZ(hull[k - 2], hull[k - 1], pts[i - 1]) <= T(0)) {
+            --k;
+        }
+        hull[k++] = pts[i - 1];
+    }
+    hull.resize(k - 1);  // drop the duplicated start point
+    const std::size_t h = hull.size();
+    if (h < 3) {
+        return;
+    }
+
+    // Bounding-box dimensions {width, height} of the hull after rotating every
+    // point by R(-theta), where (c, s) = (cos theta, sin theta).
+    auto boxFor = [&](T c, T s) -> Point {
+        auto mnX = std::numeric_limits<T>::max();
+        auto mnY = std::numeric_limits<T>::max();
+        auto mxX = std::numeric_limits<T>::lowest();
+        auto mxY = std::numeric_limits<T>::lowest();
+        for (const auto& p : hull) {
+            const auto rx = c * p[0] + s * p[1];
+            const auto ry = -s * p[0] + c * p[1];
+            mnX = std::min(mnX, rx);
+            mnY = std::min(mnY, ry);
+            mxX = std::max(mxX, rx);
+            mxY = std::max(mxY, ry);
+        }
+        return {mxX - mnX, mxY - mnY};
+    };
+
+    // Seed with the current (unrotated) box so we only rotate on a strict
+    // area improvement.
+    auto bestCos = T(1);
+    auto bestSin = T(0);
+    auto bestBox = boxFor(T(1), T(0));
+    auto bestArea = bestBox[0] * bestBox[1];
+    for (std::size_t i = 0; i < h; ++i) {
+        const auto& p0 = hull[i];
+        const auto& p1 = hull[(i + 1) % h];
+        const auto ex = p1[0] - p0[0];
+        const auto ey = p1[1] - p0[1];
+        const auto len = std::sqrt(ex * ex + ey * ey);
+        if (len <= T(0)) {
+            continue;
+        }
+        // Align this hull edge with the x-axis (theta = atan2(ey, ex)).
+        const auto c = ex / len;
+        const auto s = ey / len;
+        const auto box = boxFor(c, s);
+        const auto area = box[0] * box[1];
+        if (area < bestArea) {
+            bestArea = area;
+            bestCos = c;
+            bestSin = s;
+            bestBox = box;
+        }
+    }
+
+    // Stand the chart on its long axis: the packer sorts tallest-first and
+    // fills horizontal shelves, so the larger extent should be vertical. If the
+    // min-area box is wider than tall, compose an extra 90-degree rotation
+    // (R90 * R(-theta), where R90 maps (x, y) -> (-y, x)).
+    if (bestBox[0] > bestBox[1]) {
+        const auto c = bestCos;
+        const auto s = bestSin;
+        bestCos = s;
+        bestSin = -c;
+    }
+
+    // Apply the chosen rotation to every vertex in place (skip the identity).
+    if (bestCos != T(1) or bestSin != T(0)) {
+        for (const auto& v : chart->vertices()) {
+            const auto x = v->pos[0];
+            const auto y = v->pos[1];
+            v->pos[0] = bestCos * x + bestSin * y;
+            v->pos[1] = -bestSin * x + bestCos * y;
+        }
+    }
+}
 }  // namespace detail
 
 /**
@@ -52,6 +169,19 @@ struct VecDimensions<Vec<U, N>> {
  */
 template <typename T>
 struct PackOptions {
+    /**
+     * @brief Rotate each chart in-plane to minimize its bounding-box area
+     *
+     * When `true` (default), each chart is rotated within its UV plane before
+     * layout so its axis-aligned bounding box has minimum area, then stood on
+     * its long axis (larger extent vertical) to match the tallest-first shelf
+     * strategy. Shelf packing works on axis-aligned boxes, so tightening and
+     * consistently orienting each box lets charts nest more densely. The
+     * rotation is applied in place and preserves topology and vertex identity,
+     * so any back-maps a caller holds remain valid.
+     */
+    bool minimize_bounding_box{true};
+
     /**
      * @brief Fit the packed atlas into the unit square `[0,1]^2`
      *
@@ -87,14 +217,17 @@ struct PackOptions {
 /**
  * @brief The bounding box of the packed atlas
  *
- * @tparam T Floating-point scalar type
+ * `min`/`max` use the same vector type as the input meshes' vertex positions;
+ * only the first two (`u`, `v`) components are meaningful.
+ *
+ * @tparam VecType The vertex position vector type of the packed meshes
  */
-template <typename T>
+template <typename VecType>
 struct PackResult {
     /** @brief Lower corner of the packed atlas */
-    Vec<T, 2> min;
+    VecType min;
     /** @brief Upper corner of the packed atlas */
-    Vec<T, 2> max;
+    VecType max;
 };
 
 /**
@@ -103,10 +236,10 @@ struct PackResult {
  * Lays out a list of already-parameterized charts (2D meshes whose vertex
  * `pos` holds `{u, v, ...}`) into a single shared frame using shelf packing,
  * so that no two charts' bounding boxes overlap. Operates purely on geometry:
- * each chart's vertex positions are translated (and, when `normalize` is set,
- * uniformly scaled) **in place**. Topology, vertex indices, and face indices
- * are untouched, so any `ExtractedComponent` back-maps a caller holds remain
- * valid after packing.
+ * each chart's vertex positions are rotated (when `minimize_bounding_box` is
+ * set), translated, and (when `normalize` is set) uniformly scaled **in
+ * place**. Topology, vertex indices, and face indices are untouched, so any
+ * `ExtractedComponent` back-maps a caller holds remain valid after packing.
  *
  * @par Scaling
  * By default charts keep their absolute scale and are only translated; the
@@ -133,7 +266,9 @@ struct PackResult {
  * @par Complexity
  * `O(n log n)` in the number of charts `n` (dominated by the height sort) plus
  * `O(V)` in the total vertex count `V` (two passes: one to measure bounding
- * boxes, one to apply the transform). Memory overhead is `O(n)`.
+ * boxes, one to apply the transform). With `minimize_bounding_box`, each chart
+ * additionally costs an `O(v log v)` convex hull plus an `O(h v)` orientation
+ * search over its `h` hull edges. Memory overhead is `O(n)`.
  *
  * @tparam MeshType A HalfEdgeMesh specialization
  * @param charts Charts to pack; each chart's vertex positions are modified
@@ -144,16 +279,17 @@ struct PackResult {
  *         vertices.
  */
 template <typename MeshType>
-auto PackCharts(std::vector<typename MeshType::Pointer>& charts,
-                const PackOptions<typename MeshType::type>& opts =
-                    PackOptions<typename MeshType::type>{}) -> PackResult<typename MeshType::type>
+auto PackCharts(
+    std::vector<typename MeshType::Pointer>& charts,
+    const PackOptions<typename MeshType::type>& opts = PackOptions<typename MeshType::type>{})
+    -> PackResult<std::decay_t<decltype(std::declval<typename MeshType::Vertex>().pos)>>
 {
     using T = typename MeshType::type;
-    static_assert(
-        detail::VecDimensions<decltype(std::declval<typename MeshType::Vertex>().pos)>::value >= 2,
-        "PackCharts requires mesh vertices with at least 2 position dimensions");
+    using VecType = std::decay_t<decltype(std::declval<typename MeshType::Vertex>().pos)>;
+    static_assert(VecType::Dimensions >= 2,
+                  "PackCharts requires mesh vertices with at least 2 position dimensions");
 
-    PackResult<T> result{Vec<T, 2>{T(0), T(0)}, Vec<T, 2>{T(0), T(0)}};
+    PackResult<VecType> result{};
     if (charts.empty()) {
         return result;
     }
@@ -169,20 +305,19 @@ auto PackCharts(std::vector<typename MeshType::Pointer>& charts,
         if (not chart or chart->num_vertices() == 0) {
             throw std::invalid_argument("PackCharts: chart is null or has no vertices");
         }
-        auto mnX = std::numeric_limits<T>::max();
-        auto mnY = std::numeric_limits<T>::max();
-        auto mxX = std::numeric_limits<T>::lowest();
-        auto mxY = std::numeric_limits<T>::lowest();
-        for (const auto& v : chart->vertices()) {
-            mnX = std::min(mnX, v->pos[0]);
-            mnY = std::min(mnY, v->pos[1]);
-            mxX = std::max(mxX, v->pos[0]);
-            mxY = std::max(mxY, v->pos[1]);
+        // Tighten the chart's bounding box by rotating it in-plane first.
+        if (opts.minimize_bounding_box) {
+            detail::MinimizeChartBoundingBox<MeshType>(chart);
         }
-        minX[i] = mnX;
-        minY[i] = mnY;
-        width[i] = mxX - mnX;
-        height[i] = mxY - mnY;
+        const auto& verts = chart->vertices();
+        const auto cmpX = [](const auto& a, const auto& b) { return a->pos[0] < b->pos[0]; };
+        const auto cmpY = [](const auto& a, const auto& b) { return a->pos[1] < b->pos[1]; };
+        const auto [xlo, xhi] = std::minmax_element(verts.begin(), verts.end(), cmpX);
+        const auto [ylo, yhi] = std::minmax_element(verts.begin(), verts.end(), cmpY);
+        minX[i] = (*xlo)->pos[0];
+        minY[i] = (*ylo)->pos[1];
+        width[i] = (*xhi)->pos[0] - (*xlo)->pos[0];
+        height[i] = (*yhi)->pos[1] - (*ylo)->pos[1];
     }
 
     // Place taller charts first so shelves pack tightly.
@@ -257,7 +392,9 @@ auto PackCharts(std::vector<typename MeshType::Pointer>& charts,
         }
     }
 
-    result.max = Vec<T, 2>{atlasW * scale, atlasH * scale};
+    // result.min is value-initialized to the origin; only u/v of max are set.
+    result.max[0] = atlasW * scale;
+    result.max[1] = atlasH * scale;
     return result;
 }
 

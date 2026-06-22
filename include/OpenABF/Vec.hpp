@@ -23,6 +23,9 @@ class Vec
     using Container = std::array<T, Dims>;
 
 public:
+    /** @brief Number of dimensions (elements) in the vector */
+    static constexpr std::size_t Dimensions = Dims;
+
     /** Element type */
     using value_type = T;
     /** Vector size type */
