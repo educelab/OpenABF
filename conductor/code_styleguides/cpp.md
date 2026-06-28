@@ -42,7 +42,7 @@ Setters on instance configuration follow the instance-method rule: `set_<thing>(
 Pre-2026 code in several places uses `camelCase` for instance methods and `detail::` free functions (e.g., `setLevelRatio`, `detail::lscm::buildSystem`, `DecimationMesh::tryCollapse`). These are tracked for rename in issue #94. New code must follow the table above.
 
 ## C++ Standards
-- **Standard**: C++17 required; do not use C++20 features in public headers without a guard
+- **Standard**: C++20 required
 - **Headers**: All public headers must be self-contained (include what they use)
 - **`#pragma once`**: Preferred over include guards in project headers
 - **RAII**: Prefer RAII over manual resource management

@@ -5,7 +5,7 @@ file(s) into your include directory. This page outlines the various installation
 options.
 
 ## Dependencies
-- C++17 compiler
+- C++20 compiler
 - [Eigen 3.3+](http://eigen.tuxfamily.org/)
 - CMake 3.15+ (optional)
 
@@ -74,7 +74,7 @@ path. As %OpenABF depends upon the Eigen library, you will also need to add the
 Eigen headers to your include path:
 
 ```{.sh}
-g++ -I /path/to/eigen/ -std=c++17 -DNDEBUG -O3 main.cpp -o main
+g++ -I /path/to/eigen/ -std=c++20 -DNDEBUG -O3 main.cpp -o main
 ```
 
 **Note:** For best performance, compile your application with the `-DNDEBUG -03`
@@ -86,8 +86,8 @@ For many legacy reasons, the Microsoft Visual C++ compiler (MSVC) is not
 automatically conformant with the C++ standard in all cases. This may lead to
 the following issues when compiling against OpenABF.
 
-**Note:** As this project only supports C++17 and up, you should always compile
-with at least `/std:c++17`.
+**Note:** As this project only supports C++20 and up, you should always compile
+with at least `/std:c++20`.
 
 ### Undeclared identifier errors
 
