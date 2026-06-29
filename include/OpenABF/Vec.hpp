@@ -16,7 +16,8 @@ namespace OpenABF
  * @tparam T Element type
  * @tparam Dims Number of elements
  */
-template <typename T, std::size_t Dims, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+template <typename T, std::size_t Dims>
+    requires(std::is_arithmetic_v<T>)
 class Vec
 {
     /** Underlying element storage */
@@ -203,7 +204,8 @@ public:
     }
 
     /** @brief Multiplication assignment operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     Vec& operator*=(const T2& b)
     {
         for (auto& v : val_) {
@@ -213,7 +215,8 @@ public:
     }
 
     /** @brief Multiplication operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     friend Vec operator*(Vec lhs, const T2& rhs)
     {
         lhs *= rhs;
@@ -221,7 +224,8 @@ public:
     }
 
     /** @brief Division assignment operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     Vec& operator/=(const T2& b)
     {
         for (auto& v : val_) {
@@ -231,7 +235,8 @@ public:
     }
 
     /** @brief Division operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     friend Vec operator/(Vec lhs, const T2& rhs)
     {
         lhs /= rhs;
@@ -247,7 +252,8 @@ public:
 
     /** @brief Compute the vector cross product */
     template <class Vector, std::size_t D = Dims>
-    std::enable_if_t<D == 3, Vec> cross(const Vector& v)
+        requires(D == 3)
+    Vec cross(const Vector& v)
     {
         return OpenABF::cross(*this, v);
     }

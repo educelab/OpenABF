@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <numeric>
 
@@ -80,16 +81,14 @@ auto interior_angle(const Vector1& a, const Vector2& b)
 }
 
 /** @brief Convert degrees to radians */
-template <typename T = float, typename T2,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T = float, typename T2>
 constexpr auto to_radians(T2 deg) -> T
 {
     return deg * PI<T> / T(180);
 }
 
 /** @brief Convert radians to degrees */
-template <typename T = float, typename T2,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T = float, typename T2>
 constexpr auto to_degrees(T2 rad) -> T
 {
     return rad * T(180) / PI<T>;

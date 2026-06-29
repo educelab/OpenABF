@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <vector>
 
@@ -84,7 +85,7 @@ void InitializeAnglesAndWeights(MeshPtr& m)
 }
 
 /** @brief Compute ∇CTri w.r.t LambdaTri == CTri */
-template <typename T, class FacePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class FacePtr>
 auto TriGrad(const FacePtr& f) -> T
 {
     T g = -PI<T>;
@@ -95,7 +96,7 @@ auto TriGrad(const FacePtr& f) -> T
 }
 
 /** @brief Compute ∇CPlan w.r.t LambdaPlan == CPlan */
-template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class VertPtr>
 auto PlanGrad(const VertPtr& v) -> T
 {
     T g = -2 * PI<T>;
@@ -106,7 +107,7 @@ auto PlanGrad(const VertPtr& v) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t LambdaLen == CLen */
-template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class VertPtr>
 auto LenGrad(const VertPtr& vertex) -> T
 {
     T p1{1};
@@ -119,8 +120,7 @@ auto LenGrad(const VertPtr& vertex) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t edge->alpha */
-template <typename T, class VertPtr, class EdgePtr,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class VertPtr, class EdgePtr>
 auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 {
     T p1{1};
@@ -146,7 +146,7 @@ auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t an edge's alpha */
-template <typename T, class EdgePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class EdgePtr>
 auto AlphaGrad(const EdgePtr& edge) -> T
 {
     // δE/δα
@@ -172,7 +172,7 @@ auto AlphaGrad(const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t all parameters */
-template <typename T, class MeshPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshPtr>
 auto Gradient(const MeshPtr& mesh) -> T
 {
     T g{0};
@@ -225,9 +225,8 @@ auto Gradient(const MeshPtr& mesh) -> T
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <typename T, class MeshType = detail::ABF::Mesh<T>,
-          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>>
 class ABF
 {
 public:

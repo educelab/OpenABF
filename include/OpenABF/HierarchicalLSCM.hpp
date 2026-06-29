@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -969,10 +970,9 @@ auto SolveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
  *       The result is numerically equivalent but may differ in convergence
  *       behavior from a plain AngleBasedLSCM call.
  */
-template <typename T, class MeshType = HalfEdgeMesh<T>,
+template <std::floating_point T, class MeshType = HalfEdgeMesh<T>,
           class Solver =
-              Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower | Eigen::Upper>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+              Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower | Eigen::Upper>>
 class HierarchicalLSCM
 {
 public:

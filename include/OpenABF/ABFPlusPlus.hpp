@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <vector>
 
@@ -38,9 +39,8 @@ namespace OpenABF
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <typename T, class MeshType = detail::ABF::Mesh<T>,
-          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>>
 class ABFPlusPlus
 {
 public:
