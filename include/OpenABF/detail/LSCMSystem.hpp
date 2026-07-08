@@ -187,7 +187,6 @@ auto BuildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) 
         tripletsB.emplace_back(2 * s + 1, 0, uv[1]);
     }
     SparseMatrix bFixed(2 * numFixed, 1);
-    bFixed.reserve(tripletsB.size());
     bFixed.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     // Permutation for free vertices: maps mesh vertex idx → row-pair slot in A.
@@ -269,11 +268,9 @@ auto BuildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) 
     }
 
     SparseMatrix A(2 * numFaces, 2 * numFree);
-    A.reserve(tripletsA.size());
     A.setFromTriplets(tripletsA.begin(), tripletsA.end());
 
     SparseMatrix bFree(2 * numFaces, 2 * numFixed);
-    bFree.reserve(tripletsB.size());
     bFree.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     SparseMatrix b = bFree * bFixed * T(-1);
