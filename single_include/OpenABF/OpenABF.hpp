@@ -5172,8 +5172,9 @@ struct PackResult {
  * `O(n log n)` in the number of charts `n` (dominated by the height sort) plus
  * `O(V)` in the total vertex count `V` (two passes: one to measure bounding
  * boxes, one to apply the transform). With `minimize_bounding_box`, each chart
- * additionally costs an `O(v log v)` convex hull plus an `O(h v)` orientation
- * search over its `h` hull edges. Memory overhead is `O(n)`.
+ * additionally costs an `O(v log v)` convex hull over its `v` vertices plus an
+ * `O(h^2)` orientation search, which measures the hull's `h` points once per
+ * hull edge. Memory overhead is `O(n)`.
  *
  * @tparam MeshType A HalfEdgeMesh specialization
  * @param charts Charts to pack; each chart's vertex positions are modified

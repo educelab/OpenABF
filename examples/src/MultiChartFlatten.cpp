@@ -4,10 +4,14 @@
  * # Multi-chart flattening demo
  *
  * Builds a mesh with multiple connected components (here, a 3x3 grid torn
- * along two seams), extracts each component as an independent mesh, runs
+ * down its center line), extracts each component as an independent mesh, runs
  * ABF++ + LSCM on each, packs the flattened charts into a shared coordinate
  * frame with OpenABF::PackCharts, and writes the packed atlas to a single
  * .obj file.
+ *
+ * Charts are flattened defensively: not every chart topology is solvable, so a
+ * chart that throws OpenABF::SolverException is reported and skipped rather
+ * than aborting the atlas.
  *
  * The original mesh is never modified — the extracted sub-meshes own their
  * own vertices and per-edge state, and each is parameterized in isolation
@@ -73,12 +77,21 @@ int main()
 
         std::size_t iters{0};
         float grad{OpenABF::INF<float>};
-        ABF::Compute(cc.mesh, iters, grad);
-        LSCM::Compute(cc.mesh);
-        chartMeshes.push_back(cc.mesh);
-
-        std::cout << "Chart " << i << ": " << cc.mesh->num_vertices() << " vertices, "
-                  << cc.mesh->num_faces() << " faces, " << iters << " ABF++ iters\n";
+        // Not every chart topology is solvable, and one unsolvable chart should
+        // not cost you the whole atlas. Flatten each chart inside its own
+        // try/catch and pack whatever succeeded: a chart that throws is simply
+        // left out of `chartMeshes`, so its faces get no UVs while the rest of
+        // the atlas is still produced.
+        try {
+            ABF::Compute(cc.mesh, iters, grad);
+            LSCM::Compute(cc.mesh);
+            std::cout << "Chart " << i << ": " << cc.mesh->num_vertices() << " vertices, "
+                      << cc.mesh->num_faces() << " faces, " << iters << " ABF++ iters\n";
+            chartMeshes.push_back(cc.mesh);
+        } catch (const OpenABF::SolverException& e) {
+            std::cout << "Chart " << i << ": skipped, could not be flattened (" << e.what()
+                      << ")\n";
+        }
 
         // cc.vertex_map[chart_idx] -> original vertex idx
         // cc.face_map[chart_idx]   -> original face idx

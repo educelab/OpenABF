@@ -67,3 +67,40 @@ and instead set a visible padding in the example.
 - [x] 6.4 Set a visible `padding` in the MultiChartFlatten example
 - [x] 6.5 Regenerate single header; verify full ctest, example run, single-header
           build, clang-format all pass
+
+## Phase 7: In-plane bounding-box minimization (added during review)
+Rationale: shelf packing works on axis-aligned boxes, so a chart that arrives
+rotated wastes atlas area equal to the slack between its AABB and its true
+footprint. Rotating each chart to its min-area box (and standing it on its long
+axis) makes the tallest-first shelf strategy far more effective. Default is
+`true` — see spec.md Decision 7 for why that default is safe.
+- [x] 7.1 Tests first: MinimizeBoundingBoxTightensRotatedChart (off-axis 4x1
+          rectangle collapses to its true 4x1 area, long axis vertical),
+          MinimizeBoundingBoxStandsWideChartUpright, MinimizeBoundingBoxCanBeDisabled
+- [x] 7.2 Implement `detail::MinimizeChartBoundingBox` — monotone-chain convex
+          hull, orientation search over hull edges, 90-degree stand-up composition,
+          in-place rotation of the first two position components
+- [x] 7.3 Add `PackOptions::minimize_bounding_box` (default true) and call it
+          during the bbox measurement pass
+- [x] 7.4 Add `Vec::Dimensions` so PackCharts can static_assert on the position
+          type; document rotation + revised complexity in the header
+- [x] 7.5 Record the feature in spec.md (Decision 1/5/6/7 + acceptance criteria)
+- [x] 7.6 Update pre-existing translation/layout tests to disable rotation so
+          they still exercise layout in isolation
+- [x] 7.7 Regenerate single header; full ctest green
+
+## Phase 8: HalfEdgeMesh BFS fix (out of scope, carried by this PR)
+Rationale: found while running the packing pipeline on a real partitioned mesh.
+`num_connected_components()` and `connected_components()` marked a face visited
+when it was *dequeued*, so a face adjacent to two or more still-queued faces was
+enqueued once per incident interior edge. This is a correctness bug, not just
+wasted work: the duplicate entries reach `connected_components()`'s face lists,
+and `extract_connected_components()` then clones the same face twice and throws
+"Attempted to add non-manifold face". Measured on a 4x4 grid: 38 faces reported
+for an 18-face mesh. Kept in this PR (user-confirmed) because F2's pipeline is
+unusable without it; tracked separately as its own bug issue.
+- [x] 8.1 Mark faces visited at enqueue time in both BFS traversals
+- [x] 8.2 Regression test `ConnectedComponentsVisitEachFaceOnce`: component face
+          list has no duplicates and matches num_faces(); extracted face_map is a
+          permutation of [0, num_faces). Verified Red against develop's BFS.
+- [x] 8.3 File the bug issue (#103, track B10) and link it from tracks.md

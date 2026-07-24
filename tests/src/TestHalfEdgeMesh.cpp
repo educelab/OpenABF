@@ -1,5 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <numeric>
+#include <vector>
+
 #include "OpenABF/OpenABF.hpp"
 #include "Utils.hpp"
 
@@ -65,6 +69,45 @@ TEST(HalfEdgeMesh, ConnectedComponents)
     ccs = mesh->connected_components();
     EXPECT_EQ(ccs.size(), 2);
     EXPECT_EQ(ccs.size(), mesh->num_connected_components());
+}
+
+TEST(HalfEdgeMesh, ConnectedComponentsVisitEachFaceOnce)
+{
+    // Regression: the BFS used to mark a face visited when it was *dequeued*
+    // rather than when it was enqueued. A face adjacent to two or more faces
+    // that are themselves still in the queue was therefore pushed once per
+    // incident interior edge, so it appeared multiple times in the component's
+    // face list (and the traversal did redundant work that compounds on large
+    // meshes). Any mesh with mutually-adjacent neighbors exercises this; a
+    // grid's interior faces do.
+    const auto mesh = ConstructGrid<MeshType>(4, 4);
+    ASSERT_EQ(mesh->num_faces(), 18);
+    ASSERT_EQ(mesh->num_connected_components(), 1);
+
+    const auto ccs = mesh->connected_components();
+    ASSERT_EQ(ccs.size(), 1);
+
+    std::vector<std::size_t> faceIdxs;
+    for (const auto& f : ccs[0]) {
+        faceIdxs.push_back(f->idx);
+    }
+    std::sort(faceIdxs.begin(), faceIdxs.end());
+    const auto last = std::unique(faceIdxs.begin(), faceIdxs.end());
+    EXPECT_EQ(last, faceIdxs.end()) << "component face list contains duplicate faces";
+    EXPECT_EQ(faceIdxs.size(), mesh->num_faces());
+
+    // The same duplication reached extract_connected_components, which clones
+    // every face in the list into the sub-mesh.
+    const auto components = mesh->extract_connected_components();
+    ASSERT_EQ(components.size(), 1);
+    EXPECT_EQ(components[0].mesh->num_faces(), mesh->num_faces());
+    EXPECT_EQ(components[0].face_map.size(), mesh->num_faces());
+
+    auto faceMap = components[0].face_map;
+    std::sort(faceMap.begin(), faceMap.end());
+    std::vector<std::size_t> expected(mesh->num_faces());
+    std::iota(expected.begin(), expected.end(), std::size_t{0});
+    EXPECT_EQ(faceMap, expected);
 }
 
 TEST(HalfEdgeMesh, CheckWindingOrder)

@@ -18,7 +18,8 @@ F2 or F5–F11 — based on priority at the time of starting.
 | open | F9 | Implement OpenBLAS/LAPACK Backend | [#57](https://github.com/educelab/OpenABF/issues/57) | 2026-03-20 | 2026-03-20 |
 | open | F10 | Implement Ceres Solver Backend | [#58](https://github.com/educelab/OpenABF/issues/58) | 2026-03-20 | 2026-03-20 |
 | open | F11 | Implement ACVD | [#62](https://github.com/educelab/OpenABF/issues/62) | 2026-03-20 | 2026-03-20 |
-| open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-06-20 |
+| open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-07-24 |
+| open | B10 | `extract_connected_components` throws on meshes with mutually-adjacent interior faces (BFS marked visited on dequeue) — fix + regression test carried by PR #99 (F2 Phase 8) | [#103](https://github.com/educelab/OpenABF/issues/103) | 2026-07-24 | 2026-07-24 |
 | open | B8 | LSCM area-preserving rescale of flattening output | [#98](https://github.com/educelab/OpenABF/issues/98) | 2026-06-20 | 2026-06-20 |
 | open | B9 | No recoverable mapping from torn/parameterized mesh back to original input topology (insert_face rewind + split_path duplication) | [#100](https://github.com/educelab/OpenABF/issues/100) | 2026-06-20 | 2026-06-20 |
 
