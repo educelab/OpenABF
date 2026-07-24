@@ -52,7 +52,9 @@ TEST(MeshMerge, ConcatenatesVerticesAndFaces)
 {
     std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f, 0.f, 0.f),
                                       MakeRectChart(1.f, 1.f, 5.f, 0.f)};
-    auto merged = MergeMeshes<Mesh>(charts);
+    // MeshType is deduced from the mesh vector here; the explicit spelling used
+    // elsewhere in this file must keep working too.
+    auto merged = MergeMeshes(charts);
     EXPECT_EQ(merged.mesh->num_vertices(), 8u);
     EXPECT_EQ(merged.mesh->num_faces(), 4u);
     EXPECT_EQ(merged.vertex_source.size(), 8u);
@@ -90,6 +92,60 @@ TEST(MeshMerge, FaceSourceProvenanceIsValid)
         ASSERT_LT(chart, charts.size());
         ASSERT_LT(sub, charts[chart]->num_faces());
         EXPECT_TRUE(seen.emplace(chart, sub).second) << "duplicate face provenance";
+    }
+}
+
+// Uniqueness is not enough: face_source[i] must describe merged face i. Charts
+// are placed far apart so each source face has a distinct centroid.
+TEST(MeshMerge, FaceSourceIndexAlignsWithMergedFace)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f, 0.f, 0.f),
+                                      MakeRectChart(2.f, 3.f, 10.f, 20.f)};
+    auto merged = MergeMeshes<Mesh>(charts);
+    ASSERT_EQ(merged.face_source.size(), merged.mesh->num_faces());
+
+    auto centroid = [](const auto& face) {
+        float cx{0.f};
+        float cy{0.f};
+        float n{0.f};
+        for (const auto& edge : *face) {
+            cx += edge->vertex->pos[0];
+            cy += edge->vertex->pos[1];
+            n += 1.f;
+        }
+        return std::pair<float, float>{cx / n, cy / n};
+    };
+
+    for (std::size_t i = 0; i < merged.mesh->num_faces(); ++i) {
+        const auto [chart, sub] = merged.face_source[i];
+        ASSERT_LT(chart, charts.size());
+        ASSERT_LT(sub, charts[chart]->num_faces());
+        const auto [mx, my] = centroid(merged.mesh->face(i));
+        const auto [sx, sy] = centroid(charts[chart]->face(sub));
+        EXPECT_FLOAT_EQ(mx, sx) << "merged face " << i;
+        EXPECT_FLOAT_EQ(my, sy) << "merged face " << i;
+    }
+}
+
+// Merged vertices must reference half-edges of the merged mesh, never of a
+// source mesh: Vertex::is_boundary(), wheel(), and is_unreferenced() all read
+// `edge` directly, so a carried-over pointer would silently report the source
+// chart's neighbourhood.
+TEST(MeshMerge, MergedVerticesReferenceMergedMeshEdges)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f, 0.f, 0.f),
+                                      MakeRectChart(1.f, 1.f, 5.f, 0.f)};
+    auto merged = MergeMeshes<Mesh>(charts);
+    for (const auto& v : merged.mesh->vertices()) {
+        ASSERT_NE(v->edge, nullptr) << "vertex " << v->idx << " has no edge";
+        EXPECT_EQ(v->edge->mesh, merged.mesh.get())
+            << "vertex " << v->idx << " references an edge outside the merged mesh";
+        EXPECT_EQ(v->mesh, merged.mesh.get()) << "vertex " << v->idx;
+    }
+    // Every vertex of these two disjoint quads is on a boundary; this traverses
+    // via vertex->edge, so it only holds if the pointers are rebound correctly.
+    for (const auto& v : merged.mesh->vertices()) {
+        EXPECT_TRUE(v->is_boundary()) << "vertex " << v->idx;
     }
 }
 
