@@ -33,9 +33,10 @@ and emit per-corner `vt` entries, build atlases, etc., from there.
 ## Design Decisions (resolved 2026-06-20)
 
 1. **Geometry-only, in-place.** `PackCharts` mutates each chart's
-   `Vertex::pos` (translate + optional scale). Packing touches no topology
-   and no vertex/face indices, so any `ExtractedComponent` back-maps the
-   caller holds remain valid afterward.
+   `Vertex::pos` (optional in-plane rotation, then translate, then optional
+   scale — see Decision 7). Packing touches no topology and no vertex/face
+   indices, so any `ExtractedComponent` back-maps the caller holds remain
+   valid afterward.
 
 2. **Per-wedge iteration is feasible and must key on vertex identity.**
    A `Face` stores no vertex list — corners come from walking the half-edge
@@ -70,22 +71,45 @@ and emit per-corner `vt` entries, build atlases, etc., from there.
 
 5. **API shape.**
    ```cpp
-   template <class T, class MeshType>
+   template <typename T>
    struct PackOptions {
+       bool minimize_bounding_box = true;  // in-plane min-area rotation (Decision 7)
        bool normalize = false;            // fit packed atlas into [0,1]^2
        std::optional<T> target_width{};   // overrides sqrt-area heuristic
-       T padding = T(0);                  // per-chart gutter, absolute units
+       T padding = T(0);                  // gutter on all sides of every chart
+                                          // (incl. atlas perimeter), abs units
    };
-   struct PackResult { Vec<T,2> min, max; };   // packed atlas extent
+   template <typename VecType>
+   struct PackResult { VecType min, max; };    // packed atlas extent
 
    PackResult PackCharts(std::vector<typename MeshType::Pointer>& charts,
-                         PackOptions opts = {});
+                         const PackOptions<T>& opts = {});
    ```
+   `PackResult` carries the meshes' own position vector type rather than a
+   `Vec<T,2>`, so the extent needs no conversion to compare against vertex
+   positions; only the `u`/`v` components are meaningful.
 
 6. **Degenerate input.** Empty list → return empty extent (no-op). Zero-area
    / single-point charts are placed by their (flat) bbox. Null pointer or a
-   chart with zero vertices → `throw std::invalid_argument`.
-   `static_assert(MeshType::Dim >= 2)`.
+   chart with zero vertices → `throw std::invalid_argument`. The dimension
+   guard is `static_assert(VecType::Dimensions >= 2)` on the vertex position
+   type; `Vec` gained a public `static constexpr std::size_t Dimensions` to
+   support it (there is no `MeshType::Dim`).
+
+7. **In-plane bounding-box minimization (added during review, default on).**
+   Shelf packing reasons about axis-aligned boxes, so a chart that arrives at
+   an arbitrary orientation wastes atlas area proportional to how far its
+   AABB exceeds its true footprint. Before layout, each chart is rotated
+   within its UV plane so its AABB has minimum area (convex hull, then test
+   the orientation induced by each hull edge — the min-area enclosing
+   rectangle always has an edge collinear with a hull edge), then stood on its
+   long axis so the larger extent is vertical, matching the tallest-first
+   shelf strategy. Rotation is in place about the origin and touches only the
+   first two components; it preserves topology and vertex identity, so
+   back-maps stay valid and the wedge recipe in Decision 2 is unaffected.
+   Default is `true`: denser atlases are the reason a caller packs at all, and
+   UV orientation carries no meaning that packing must preserve. Callers who
+   need the charts' input orientation set `minimize_bounding_box = false`.
 
 ## Acceptance Criteria
 - [ ] `PackCharts<MeshType>` free function accepts a list of parameterized
@@ -98,6 +122,15 @@ and emit per-corner `vt` entries, build atlases, etc., from there.
 - [ ] Shelf-packing with the ~square target-width heuristic, overridable.
 - [ ] No charts' bounding boxes overlap (padding respected); the packed set
       is contained in the returned extent (and in `[0,1]²` when normalized).
+- [ ] `padding` surrounds every chart on all four sides, including against the
+      atlas boundary (perimeter charts are inset from the extent by `padding`,
+      not just separated from neighbors).
+- [ ] `minimize_bounding_box` (default on) rotates each chart in-plane to its
+      minimum-area bounding box and stands its long axis vertical; it is
+      disableable, and rotation preserves topology and vertex identity so the
+      wedge recipe still holds (Decision 7).
+- [ ] The example demonstrates handling a chart whose topology the solver
+      cannot flatten (`SolverException`) without aborting the whole atlas.
 - [ ] Edge cases handled per Design Decision 6.
 - [ ] Header documents the vertex-identity per-wedge recipe (Decision 2).
 - [ ] Tests: synthetic 2D charts for deterministic geometric assertions plus

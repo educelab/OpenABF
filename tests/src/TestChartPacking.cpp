@@ -1,0 +1,552 @@
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <limits>
+#include <set>
+#include <utility>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "OpenABF/OpenABF.hpp"
+
+using Mesh = OpenABF::HalfEdgeMesh<float>;
+using OpenABF::PackCharts;
+using OpenABF::PackOptions;
+using OpenABF::PackResult;
+
+namespace
+{
+
+/** @brief Build a w x h rectangle chart (two triangles) at the origin */
+auto MakeRectChart(float w, float h) -> Mesh::Pointer
+{
+    auto m = Mesh::New();
+    m->insert_vertices({{0.f, 0.f, 0.f}, {w, 0.f, 0.f}, {w, h, 0.f}, {0.f, h, 0.f}});
+    m->insert_faces({{0, 1, 2}, {0, 2, 3}});
+    return m;
+}
+
+/** @brief Build a w x h rectangle chart rotated by `theta` radians */
+auto MakeRotatedRectChart(float w, float h, float theta) -> Mesh::Pointer
+{
+    const float c = std::cos(theta);
+    const float s = std::sin(theta);
+    auto rot = [&](float x, float y) -> std::array<float, 3> {
+        return {c * x - s * y, s * x + c * y, 0.f};
+    };
+    std::vector<std::array<float, 3>> verts{rot(0.f, 0.f), rot(w, 0.f), rot(w, h), rot(0.f, h)};
+    auto m = Mesh::New();
+    m->insert_vertices(verts);
+    m->insert_faces({{0, 1, 2}, {0, 2, 3}});
+    return m;
+}
+
+struct BBox {
+    float minx{std::numeric_limits<float>::max()};
+    float miny{std::numeric_limits<float>::max()};
+    float maxx{std::numeric_limits<float>::lowest()};
+    float maxy{std::numeric_limits<float>::lowest()};
+    [[nodiscard]] auto width() const -> float { return maxx - minx; }
+    [[nodiscard]] auto height() const -> float { return maxy - miny; }
+};
+
+template <typename MeshPtr>
+auto ChartBBox(const MeshPtr& m) -> BBox
+{
+    BBox b;
+    for (const auto& v : m->vertices()) {
+        b.minx = std::min(b.minx, v->pos[0]);
+        b.miny = std::min(b.miny, v->pos[1]);
+        b.maxx = std::max(b.maxx, v->pos[0]);
+        b.maxy = std::max(b.maxy, v->pos[1]);
+    }
+    return b;
+}
+
+/** @brief True if two boxes overlap by more than eps (touching is allowed) */
+auto Overlaps(const BBox& a, const BBox& b, float eps) -> bool
+{
+    return (a.minx + eps < b.maxx) && (b.minx + eps < a.maxx) && (a.miny + eps < b.maxy) &&
+           (b.miny + eps < a.maxy);
+}
+
+/**
+ * @brief Snapshot of a mesh's topology: per-face corner vertex indices
+ *
+ * PackCharts documents that it touches only vertex positions, so this must be
+ * identical before and after a pack.
+ */
+template <typename MeshPtr>
+auto TopologySnapshot(const MeshPtr& m) -> std::vector<std::vector<std::size_t>>
+{
+    std::vector<std::vector<std::size_t>> topo;
+    for (const auto& face : m->faces()) {
+        std::vector<std::size_t> corners;
+        for (const auto& edge : *face) {
+            corners.push_back(edge->vertex->idx);
+        }
+        topo.push_back(std::move(corners));
+    }
+    return topo;
+}
+
+/** @brief Twice the signed area of a face, from its first three corners */
+template <typename FacePtr>
+auto SignedArea2(const FacePtr& face) -> float
+{
+    std::vector<std::array<float, 2>> p;
+    for (const auto& edge : *face) {
+        p.push_back({edge->vertex->pos[0], edge->vertex->pos[1]});
+    }
+    return (p[1][0] - p[0][0]) * (p[2][1] - p[0][1]) - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
+}
+
+/** @brief All vertex positions of a chart, in index order */
+template <typename MeshPtr>
+auto Positions(const MeshPtr& m) -> std::vector<std::array<float, 2>>
+{
+    std::vector<std::array<float, 2>> pos;
+    for (const auto& v : m->vertices()) {
+        pos.push_back({v->pos[0], v->pos[1]});
+    }
+    return pos;
+}
+
+}  // namespace
+
+// --- Edge cases ------------------------------------------------------------
+
+TEST(ChartPacking, EmptyListReturnsEmptyExtent)
+{
+    std::vector<Mesh::Pointer> charts;
+    auto extent = PackCharts<Mesh>(charts);
+    EXPECT_FLOAT_EQ(extent.min[0], 0.f);
+    EXPECT_FLOAT_EQ(extent.min[1], 0.f);
+    EXPECT_FLOAT_EQ(extent.max[0], 0.f);
+    EXPECT_FLOAT_EQ(extent.max[1], 0.f);
+}
+
+TEST(ChartPacking, NullChartThrows)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f), nullptr};
+    EXPECT_THROW(PackCharts<Mesh>(charts), std::invalid_argument);
+}
+
+TEST(ChartPacking, EmptyChartThrows)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f), Mesh::New()};
+    EXPECT_THROW(PackCharts<Mesh>(charts), std::invalid_argument);
+}
+
+TEST(ChartPacking, NegativePaddingThrows)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f)};
+    PackOptions<float> opts;
+    opts.padding = -0.1f;
+    EXPECT_THROW(PackCharts<Mesh>(charts, opts), std::invalid_argument);
+}
+
+TEST(ChartPacking, NonPositiveTargetWidthThrows)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f)};
+    PackOptions<float> zero;
+    zero.target_width = 0.f;
+    EXPECT_THROW(PackCharts<Mesh>(charts, zero), std::invalid_argument);
+    PackOptions<float> negative;
+    negative.target_width = -1.f;
+    EXPECT_THROW(PackCharts<Mesh>(charts, negative), std::invalid_argument);
+}
+
+// PackCharts mutates caller-owned meshes in place, so a rejected input must
+// leave every chart exactly as it was -- otherwise the caller cannot tell which
+// charts were already rotated when the throw happened.
+TEST(ChartPacking, InvalidInputLeavesChartsUntouched)
+{
+    auto valid = MakeRectChart(4.f, 1.f);  // wide: would be stood upright
+    const auto before = Positions(valid);
+
+    std::vector<Mesh::Pointer> withNull{valid, nullptr};
+    EXPECT_THROW(PackCharts<Mesh>(withNull), std::invalid_argument);
+    EXPECT_EQ(Positions(valid), before) << "chart mutated before the null chart was rejected";
+
+    std::vector<Mesh::Pointer> withEmpty{valid, Mesh::New()};
+    EXPECT_THROW(PackCharts<Mesh>(withEmpty), std::invalid_argument);
+    EXPECT_EQ(Positions(valid), before) << "chart mutated before the empty chart was rejected";
+
+    std::vector<Mesh::Pointer> single{valid};
+    PackOptions<float> badPad;
+    badPad.padding = -1.f;
+    EXPECT_THROW(PackCharts<Mesh>(single, badPad), std::invalid_argument);
+    EXPECT_EQ(Positions(valid), before) << "chart mutated before bad options were rejected";
+}
+
+TEST(ChartPacking, ZeroAreaChartIsPlacedWithoutThrowing)
+{
+    // A flat (collinear) chart has zero area but is a valid mesh: distinct
+    // vertices, non-zero edges. PackCharts must place it without crashing.
+    auto flat = Mesh::New();
+    flat->insert_vertices({{0.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {2.f, 0.f, 0.f}});
+    flat->insert_faces({{0, 1, 2}});
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f), flat};
+    EXPECT_NO_THROW(PackCharts<Mesh>(charts));
+}
+
+// --- Absolute (default) mode ----------------------------------------------
+
+TEST(ChartPacking, SingleChartMapsMinToOrigin)
+{
+    // Disable rotation so this test exercises translation/layout in isolation.
+    std::vector<Mesh::Pointer> charts{MakeRectChart(3.f, 2.f)};
+    PackOptions<float> opts;
+    opts.minimize_bounding_box = false;
+    auto extent = PackCharts<Mesh>(charts, opts);
+    auto b = ChartBBox(charts[0]);
+    EXPECT_FLOAT_EQ(b.minx, 0.f);
+    EXPECT_FLOAT_EQ(b.miny, 0.f);
+    EXPECT_FLOAT_EQ(b.width(), 3.f);
+    EXPECT_FLOAT_EQ(b.height(), 2.f);
+    EXPECT_FLOAT_EQ(extent.max[0], 3.f);
+    EXPECT_FLOAT_EQ(extent.max[1], 2.f);
+}
+
+TEST(ChartPacking, AbsoluteModePreservesChartSizes)
+{
+    // Disable rotation so the bounding boxes stay in their input orientation;
+    // this test is about absolute mode not rescaling charts.
+    std::vector<float> ws{1.f, 2.f, 0.5f, 3.f};
+    std::vector<float> hs{1.f, 1.5f, 2.f, 0.7f};
+    std::vector<Mesh::Pointer> charts;
+    for (std::size_t i = 0; i < ws.size(); ++i) {
+        charts.push_back(MakeRectChart(ws[i], hs[i]));
+    }
+    PackOptions<float> opts;
+    opts.minimize_bounding_box = false;
+    PackCharts<Mesh>(charts, opts);
+    for (std::size_t i = 0; i < charts.size(); ++i) {
+        auto b = ChartBBox(charts[i]);
+        EXPECT_FLOAT_EQ(b.width(), ws[i]) << "chart " << i;
+        EXPECT_FLOAT_EQ(b.height(), hs[i]) << "chart " << i;
+    }
+}
+
+TEST(ChartPacking, ChartsDoNotOverlap)
+{
+    std::vector<Mesh::Pointer> charts;
+    for (int i = 0; i < 6; ++i) {
+        charts.push_back(MakeRectChart(1.f + 0.3f * static_cast<float>(i), 1.f));
+    }
+    // MeshType is deduced from the chart vector here; the explicit spelling used
+    // elsewhere in this file must keep working too.
+    PackCharts(charts);
+    std::vector<BBox> boxes;
+    for (const auto& c : charts) {
+        boxes.push_back(ChartBBox(c));
+    }
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        for (std::size_t j = i + 1; j < boxes.size(); ++j) {
+            EXPECT_FALSE(Overlaps(boxes[i], boxes[j], 1e-4f)) << "charts " << i << " and " << j;
+        }
+    }
+}
+
+TEST(ChartPacking, ExtentBoundsAllCharts)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f), MakeRectChart(2.f, 0.5f),
+                                      MakeRectChart(0.5f, 3.f)};
+    auto extent = PackCharts<Mesh>(charts);
+    for (const auto& c : charts) {
+        for (const auto& v : c->vertices()) {
+            EXPECT_GE(v->pos[0], extent.min[0] - 1e-4f);
+            EXPECT_GE(v->pos[1], extent.min[1] - 1e-4f);
+            EXPECT_LE(v->pos[0], extent.max[0] + 1e-4f);
+            EXPECT_LE(v->pos[1], extent.max[1] + 1e-4f);
+        }
+    }
+}
+
+// The guarantee every caller's back-maps depend on: packing edits vertex
+// positions only. Element counts, vertex indices, and per-face corner order must
+// all survive, including the rotation performed by minimize_bounding_box.
+TEST(ChartPacking, TopologyAndIndicesUnchanged)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(3.f, 1.f), MakeRotatedRectChart(2.f, 1.f, 0.4f),
+                                      MakeRectChart(1.f, 1.f)};
+    std::vector<std::size_t> vertCounts;
+    std::vector<std::size_t> faceCounts;
+    std::vector<std::size_t> edgeCounts;
+    std::vector<std::vector<std::vector<std::size_t>>> topo;
+    for (const auto& c : charts) {
+        vertCounts.push_back(c->num_vertices());
+        faceCounts.push_back(c->num_faces());
+        edgeCounts.push_back(c->num_edges());
+        topo.push_back(TopologySnapshot(c));
+    }
+
+    PackCharts<Mesh>(charts);
+
+    for (std::size_t i = 0; i < charts.size(); ++i) {
+        EXPECT_EQ(charts[i]->num_vertices(), vertCounts[i]) << "chart " << i;
+        EXPECT_EQ(charts[i]->num_faces(), faceCounts[i]) << "chart " << i;
+        EXPECT_EQ(charts[i]->num_edges(), edgeCounts[i]) << "chart " << i;
+        EXPECT_EQ(TopologySnapshot(charts[i]), topo[i]) << "chart " << i;
+        // Vertex indices must stay dense and in order for back-maps to resolve.
+        std::size_t expected = 0;
+        for (const auto& v : charts[i]->vertices()) {
+            EXPECT_EQ(v->idx, expected++) << "chart " << i;
+        }
+    }
+}
+
+// The bounding-box minimization must be a rigid rotation, never a reflection: a
+// mirrored chart would flip texture handedness while leaving every bounding-box
+// assertion in this file happy.
+TEST(ChartPacking, PackingPreservesFaceOrientation)
+{
+    std::vector<Mesh::Pointer> charts{MakeRotatedRectChart(4.f, 1.f, 0.6f), MakeRectChart(3.f, 2.f),
+                                      MakeRotatedRectChart(1.f, 2.f, -1.2f)};
+    std::vector<std::vector<float>> before;
+    for (const auto& c : charts) {
+        std::vector<float> areas;
+        for (const auto& f : c->faces()) {
+            areas.push_back(SignedArea2(f));
+        }
+        before.push_back(std::move(areas));
+    }
+
+    PackCharts<Mesh>(charts);
+
+    for (std::size_t i = 0; i < charts.size(); ++i) {
+        std::size_t fi = 0;
+        for (const auto& f : charts[i]->faces()) {
+            const auto after = SignedArea2(f);
+            EXPECT_GT(after * before[i][fi], 0.f)
+                << "chart " << i << " face " << fi << " changed orientation";
+            // Rotation is rigid, so the magnitude is preserved as well.
+            EXPECT_NEAR(std::abs(after), std::abs(before[i][fi]), 1e-3f)
+                << "chart " << i << " face " << fi;
+            ++fi;
+        }
+    }
+}
+
+TEST(ChartPacking, TargetWidthWrapsCharts)
+{
+    // Four 1x1 charts against a target width of 2.5: two fit per shelf, so the
+    // layout must wrap into two rows and stay within the requested width.
+    std::vector<Mesh::Pointer> charts;
+    for (int i = 0; i < 4; ++i) {
+        charts.push_back(MakeRectChart(1.f, 1.f));
+    }
+    PackOptions<float> opts;
+    opts.minimize_bounding_box = false;
+    opts.target_width = 2.5f;
+    auto extent = PackCharts<Mesh>(charts, opts);
+
+    EXPECT_LE(extent.max[0] - extent.min[0], 2.5f + 1e-4f) << "layout exceeded target_width";
+
+    // Two distinct shelf origins, two charts on each.
+    std::set<float> shelves;
+    for (const auto& c : charts) {
+        shelves.insert(ChartBBox(c).miny);
+    }
+    EXPECT_EQ(shelves.size(), 2u) << "expected the charts to wrap onto two shelves";
+    EXPECT_NEAR(extent.max[1] - extent.min[1], 2.f, 1e-4f);
+}
+
+TEST(ChartPacking, PaddingSeparatesChartsInSingleRow)
+{
+    // Force a single row with a large target width. Padding surrounds every
+    // chart on all sides, so the atlas width is
+    // pad + w0 + pad + w1 + pad = 0.5 + 1 + 0.5 + 1 + 0.5 = 3.5.
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f), MakeRectChart(1.f, 1.f)};
+    PackOptions<float> opts;
+    opts.target_width = 1000.f;
+    opts.padding = 0.5f;
+    auto extent = PackCharts<Mesh>(charts, opts);
+    EXPECT_NEAR(extent.max[0] - extent.min[0], 3.5f, 1e-4f);
+
+    auto b0 = ChartBBox(charts[0]);
+    auto b1 = ChartBBox(charts[1]);
+    auto gap = std::max(b1.minx - b0.maxx, b0.minx - b1.maxx);
+    EXPECT_GE(gap, 0.5f - 1e-4f);
+}
+
+TEST(ChartPacking, PaddingSurroundsChartsAtPerimeter)
+{
+    // Padding is a gutter on all four sides of every chart, including against
+    // the atlas boundary -- not just between neighbours. Use several charts so
+    // the layout wraps to multiple shelves, exercising both the left/bottom
+    // margins and the right/top margins.
+    const float pad = 0.5f;
+    std::vector<Mesh::Pointer> charts;
+    for (int i = 0; i < 5; ++i) {
+        charts.push_back(MakeRectChart(1.f, 1.f));
+    }
+    PackOptions<float> opts;
+    opts.padding = pad;
+    auto extent = PackCharts<Mesh>(charts, opts);
+    for (std::size_t i = 0; i < charts.size(); ++i) {
+        auto b = ChartBBox(charts[i]);
+        EXPECT_GE(b.minx, extent.min[0] + pad - 1e-4f) << "chart " << i;
+        EXPECT_GE(b.miny, extent.min[1] + pad - 1e-4f) << "chart " << i;
+        EXPECT_LE(b.maxx, extent.max[0] - pad + 1e-4f) << "chart " << i;
+        EXPECT_LE(b.maxy, extent.max[1] - pad + 1e-4f) << "chart " << i;
+    }
+}
+
+// --- Bounding-box minimization (rotation) ----------------------------------
+
+TEST(ChartPacking, MinimizeBoundingBoxTightensRotatedChart)
+{
+    // A 4x1 rectangle rotated off-axis has a loose axis-aligned bounding box.
+    // With minimize_bounding_box (the default), PackCharts rotates it back so
+    // the packed box collapses to the rectangle's true 4x1 area, standing the
+    // long axis vertical.
+    std::vector<Mesh::Pointer> charts{MakeRotatedRectChart(4.f, 1.f, 0.6f)};
+    PackCharts<Mesh>(charts);
+    auto b = ChartBBox(charts[0]);
+    EXPECT_NEAR(b.width() * b.height(), 4.f, 1e-2f);
+    // The long axis (~4) must be vertical; the short axis (~1) horizontal.
+    EXPECT_NEAR(b.height(), 4.f, 1e-2f);
+    EXPECT_NEAR(b.width(), 1.f, 1e-2f);
+}
+
+TEST(ChartPacking, MinimizeBoundingBoxStandsWideChartUpright)
+{
+    // An axis-aligned chart that is already minimum-area but wider than tall is
+    // rotated 90 degrees so its long axis is vertical, matching the
+    // tallest-first shelf strategy.
+    std::vector<Mesh::Pointer> charts{MakeRectChart(4.f, 1.f)};
+    PackCharts<Mesh>(charts);
+    auto b = ChartBBox(charts[0]);
+    EXPECT_NEAR(b.width() * b.height(), 4.f, 1e-3f);
+    EXPECT_NEAR(b.height(), 4.f, 1e-3f);
+    EXPECT_NEAR(b.width(), 1.f, 1e-3f);
+}
+
+TEST(ChartPacking, MinimizeBoundingBoxCanBeDisabled)
+{
+    // With minimization off, the off-axis rectangle keeps its loose bounding
+    // box, whose area is well above the rectangle's true 4x1 area.
+    std::vector<Mesh::Pointer> charts{MakeRotatedRectChart(4.f, 1.f, 0.6f)};
+    PackOptions<float> opts;
+    opts.minimize_bounding_box = false;
+    PackCharts<Mesh>(charts, opts);
+    auto b = ChartBBox(charts[0]);
+    EXPECT_GT(b.width() * b.height(), 5.f);
+}
+
+// --- Normalize mode --------------------------------------------------------
+
+TEST(ChartPacking, NormalizeFitsUnitSquare)
+{
+    std::vector<Mesh::Pointer> charts{MakeRectChart(2.f, 1.f), MakeRectChart(1.f, 3.f),
+                                      MakeRectChart(0.5f, 0.5f)};
+    PackOptions<float> opts;
+    opts.normalize = true;
+    auto extent = PackCharts<Mesh>(charts, opts);
+
+    float maxCoord = 0.f;
+    for (const auto& c : charts) {
+        for (const auto& v : c->vertices()) {
+            EXPECT_GE(v->pos[0], -1e-4f);
+            EXPECT_GE(v->pos[1], -1e-4f);
+            EXPECT_LE(v->pos[0], 1.f + 1e-4f);
+            EXPECT_LE(v->pos[1], 1.f + 1e-4f);
+            maxCoord = std::max({maxCoord, v->pos[0], v->pos[1]});
+        }
+    }
+    // The atlas should fill at least one axis of the unit square.
+    EXPECT_NEAR(maxCoord, 1.f, 1e-3f);
+    EXPECT_LE(extent.max[0], 1.f + 1e-4f);
+    EXPECT_LE(extent.max[1], 1.f + 1e-4f);
+}
+
+TEST(ChartPacking, NormalizePreservesRelativeChartSizes)
+{
+    // One chart twice the linear size of the other: ratio must survive a single
+    // global uniform scale.
+    std::vector<Mesh::Pointer> charts{MakeRectChart(1.f, 1.f), MakeRectChart(2.f, 2.f)};
+    PackOptions<float> opts;
+    opts.normalize = true;
+    PackCharts<Mesh>(charts, opts);
+    auto b0 = ChartBBox(charts[0]);
+    auto b1 = ChartBBox(charts[1]);
+    EXPECT_NEAR(b1.width() / b0.width(), 2.f, 1e-3f);
+    EXPECT_NEAR(b1.height() / b0.height(), 2.f, 1e-3f);
+}
+
+// --- End-to-end pipeline + per-wedge recovery ------------------------------
+
+TEST(ChartPacking, EndToEndTearExtractFlattenPackAndWedgeRecovery)
+{
+    using ABF = OpenABF::ABFPlusPlus<float>;
+    using LSCM = OpenABF::AngleBasedLSCM<float, ABF::Mesh>;
+
+    // 3x3 grid (matches the MultiChartFlatten example).
+    auto mesh = ABF::Mesh::New();
+    mesh->insert_vertices({
+        {0.f, 0.f, 0.f},
+        {1.f, 0.f, 0.f},
+        {2.f, 0.f, 0.f},
+        {0.f, 1.f, 0.f},
+        {1.f, 1.f, 0.f},
+        {2.f, 1.f, 0.f},
+        {0.f, 2.f, 0.f},
+        {1.f, 2.f, 0.f},
+        {2.f, 2.f, 0.f},
+    });
+    mesh->insert_faces({
+        {0, 3, 1},
+        {1, 3, 4},
+        {1, 4, 2},
+        {2, 4, 5},
+        {3, 6, 4},
+        {4, 6, 7},
+        {4, 7, 5},
+        {5, 7, 8},
+    });
+
+    // Tear into two charts and extract.
+    mesh->split_path({1, 4, 7});
+    auto ccs = mesh->extract_connected_components();
+    ASSERT_EQ(ccs.size(), 2u);
+
+    // Flatten each chart and collect the meshes for packing.
+    std::vector<ABF::Mesh::Pointer> chartMeshes;
+    for (auto& cc : ccs) {
+        std::size_t iters{0};
+        float grad{OpenABF::INF<float>};
+        ABF::Compute(cc.mesh, iters, grad);
+        LSCM::Compute(cc.mesh);
+        chartMeshes.push_back(cc.mesh);
+    }
+
+    auto extent = PackCharts<ABF::Mesh>(chartMeshes);
+
+    // Charts must not overlap after packing.
+    std::vector<BBox> boxes;
+    for (const auto& c : chartMeshes) {
+        boxes.push_back(ChartBBox(c));
+    }
+    EXPECT_FALSE(Overlaps(boxes[0], boxes[1], 1e-4f));
+
+    // Per-wedge recovery via the back-maps, keyed on vertex identity. Every
+    // (original face, original vertex) wedge must be unique, proving the
+    // documented recipe yields a well-formed per-wedge map.
+    std::set<std::pair<std::size_t, std::size_t>> wedges;
+    std::size_t corners = 0;
+    for (auto& cc : ccs) {
+        for (const auto& face : cc.mesh->faces()) {
+            for (const auto& edge : *face) {
+                auto origFace = cc.face_map[face->idx];
+                auto origVert = cc.vertex_map[edge->vertex->idx];
+                wedges.emplace(origFace, origVert);
+                ++corners;
+            }
+        }
+    }
+    EXPECT_EQ(corners, 8u * 3u);  // 8 faces, 3 corners each
+    EXPECT_EQ(wedges.size(), corners);
+}

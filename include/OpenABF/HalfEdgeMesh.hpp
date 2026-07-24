@@ -388,6 +388,9 @@ public:
     /** Pointer type */
     using Pointer = std::shared_ptr<HalfEdgeMesh>;
 
+    /** Vertex position type */
+    using PositionType = Vec<T, Dim>;
+
     struct Vertex;
     struct Edge;
     struct Face;
@@ -1218,19 +1221,22 @@ public:
                 continue;
             }
 
-            // Start a new connected component
+            // Start a new connected component. Mark faces visited as they are
+            // enqueued (not when dequeued) so each face is enqueued and
+            // expanded exactly once; otherwise a face is re-enqueued once per
+            // incident interior edge and the traversal blows up on large meshes.
+            visited[f->idx] = true;
             queue.push(f);
             while (not queue.empty()) {
                 // Get the top of the queue
                 auto p = queue.front();
                 queue.pop();
-                // Mark as visited
-                visited[p->idx] = true;
                 // Add the neighbor faces to the queue
                 for (const auto& e : *p) {
                     if (not e->pair->is_boundary()) {
                         auto n = e->pair->face;
                         if (not visited[n->idx]) {
+                            visited[n->idx] = true;
                             queue.push(n);
                         }
                     }
@@ -1258,15 +1264,17 @@ public:
                 continue;
             }
 
-            // Start a new connected component
+            // Start a new connected component. Mark faces visited as they are
+            // enqueued (not when dequeued) so each face is enqueued and
+            // expanded exactly once; otherwise a face is re-enqueued once per
+            // incident interior edge and the traversal blows up on large meshes.
             current.clear();
+            visited[f->idx] = true;
             queue.push(f);
             while (not queue.empty()) {
                 // Get the top of the queue
                 auto p = queue.front();
                 queue.pop();
-                // Mark as visited
-                visited[p->idx] = true;
                 // Add to this connected component
                 current.emplace_back(p);
                 // Add the neighbor faces to the queue
@@ -1274,6 +1282,7 @@ public:
                     if (not e->pair->is_boundary()) {
                         auto n = e->pair->face;
                         if (not visited[n->idx]) {
+                            visited[n->idx] = true;
                             queue.push(n);
                         }
                     }

@@ -16,6 +16,8 @@ set(tests
     src/TestParameterization.cpp
     src/TestMeshIOUtils.cpp
     src/TestMeshIO.cpp
+    src/TestChartPacking.cpp
+    src/TestMeshMerge.cpp
 )
 
 foreach(src ${tests})

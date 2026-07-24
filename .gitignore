@@ -45,5 +45,9 @@ venv/*
 docs/latex/
 docs/html/
 
+# Example programs write their output meshes to the working directory
+openabf_example_*.obj
+openabf_example_*.ply
+
 # CLion
 cmake-build*/
