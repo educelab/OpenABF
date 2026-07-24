@@ -388,6 +388,9 @@ public:
     /** Pointer type */
     using Pointer = std::shared_ptr<HalfEdgeMesh>;
 
+    /** Vertex position type */
+    using PositionType = Vec<T, Dim>;
+
     struct Vertex;
     struct Edge;
     struct Face;

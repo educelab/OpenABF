@@ -23,10 +23,10 @@ limitations under the License.
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -198,7 +198,7 @@ struct PackOptions {
      *
      * Charts wrap to a new shelf when a row would exceed this width. If unset,
      * the width defaults to `sqrt(sum of per-chart bounding-box areas)`, which
-     * yields a roughly square atlas.
+     * yields a roughly square atlas. Must be positive when set.
      */
     std::optional<T> target_width{};
 
@@ -209,7 +209,8 @@ struct PackOptions {
      * boundary, so perimeter charts are inset from the returned extent by
      * `padding` as well -- not merely separated from their neighbors.
      * Defaults to `0` (charts laid out flush). `padding` is in absolute chart
-     * units and is applied before any `normalize` scaling.
+     * units and is applied before any `normalize` scaling. Must be
+     * non-negative.
      */
     T padding{T(0)};
 };
@@ -276,17 +277,19 @@ struct PackResult {
  * @param opts Packing options
  * @return The bounding box of the packed atlas
  *
- * @throws std::invalid_argument If a chart pointer is null or a chart has no
- *         vertices.
+ * @throws std::invalid_argument If a chart pointer is null, a chart has no
+ *         vertices, `opts.padding` is negative, or `opts.target_width` is set
+ *         to a non-positive value. All inputs are validated before any chart is
+ *         modified, so a throw leaves every chart untouched.
  */
 template <typename MeshType>
 auto PackCharts(
-    std::vector<typename MeshType::Pointer>& charts,
+    std::vector<std::shared_ptr<MeshType>>& charts,
     const PackOptions<typename MeshType::type>& opts = PackOptions<typename MeshType::type>{})
-    -> PackResult<std::decay_t<decltype(std::declval<typename MeshType::Vertex>().pos)>>
+    -> PackResult<typename MeshType::PositionType>
 {
     using T = typename MeshType::type;
-    using VecType = std::decay_t<decltype(std::declval<typename MeshType::Vertex>().pos)>;
+    using VecType = typename MeshType::PositionType;
     static_assert(VecType::Dimensions >= 2,
                   "PackCharts requires mesh vertices with at least 2 position dimensions");
 
@@ -296,16 +299,28 @@ auto PackCharts(
     }
     const std::size_t n = charts.size();
 
-    // Validate inputs and compute each chart's 2D bounding box (origin + size).
+    // Validate everything up front. This function mutates caller-owned meshes in
+    // place, so throwing partway through would leave some charts rotated and
+    // others not, with no way for the caller to tell which.
+    if (opts.padding < T(0)) {
+        throw std::invalid_argument("PackCharts: padding must be non-negative");
+    }
+    if (opts.target_width and *opts.target_width <= T(0)) {
+        throw std::invalid_argument("PackCharts: target_width must be positive");
+    }
+    for (const auto& chart : charts) {
+        if (not chart or chart->num_vertices() == 0) {
+            throw std::invalid_argument("PackCharts: chart is null or has no vertices");
+        }
+    }
+
+    // Compute each chart's 2D bounding box (origin + size).
     std::vector<T> minX(n);
     std::vector<T> minY(n);
     std::vector<T> width(n);
     std::vector<T> height(n);
     for (std::size_t i = 0; i < n; ++i) {
         const auto& chart = charts[i];
-        if (not chart or chart->num_vertices() == 0) {
-            throw std::invalid_argument("PackCharts: chart is null or has no vertices");
-        }
         // Tighten the chart's bounding box by rotating it in-plane first.
         if (opts.minimize_bounding_box) {
             detail::MinimizeChartBoundingBox<MeshType>(chart);
@@ -352,8 +367,10 @@ auto PackCharts(
     auto cursorX = pad;
     auto cursorY = pad;
     auto shelfHeight = T(0);
-    auto atlasMaxX = T(0);
-    auto atlasMaxY = T(0);
+    auto placedMinX = std::numeric_limits<T>::max();
+    auto placedMinY = std::numeric_limits<T>::max();
+    auto placedMaxX = std::numeric_limits<T>::lowest();
+    auto placedMaxY = std::numeric_limits<T>::lowest();
     for (const auto i : order) {
         if (cursorX > pad and cursorX + width[i] > targetWidth) {
             cursorX = pad;
@@ -362,18 +379,23 @@ auto PackCharts(
         }
         offsetX[i] = cursorX - minX[i];
         offsetY[i] = cursorY - minY[i];
-        atlasMaxX = std::max(atlasMaxX, cursorX + width[i]);
-        atlasMaxY = std::max(atlasMaxY, cursorY + height[i]);
+        placedMinX = std::min(placedMinX, cursorX);
+        placedMinY = std::min(placedMinY, cursorY);
+        placedMaxX = std::max(placedMaxX, cursorX + width[i]);
+        placedMaxY = std::max(placedMaxY, cursorY + height[i]);
         cursorX += width[i] + pad;
         shelfHeight = std::max(shelfHeight, height[i]);
     }
 
-    // The atlas extent includes the perimeter gutter: charts are inset by
-    // `pad` from the lower corner (the cursor starts at `pad`), so add `pad`
-    // to the far edges too. Every chart then has >= `pad` of empty space on
-    // all four sides, including against the atlas boundary.
-    const T atlasW = atlasMaxX + pad;
-    const T atlasH = atlasMaxY + pad;
+    // The atlas extent is measured from where the charts actually landed, then
+    // grown by the perimeter gutter, so every chart has >= `pad` of empty space
+    // on all four sides including against the atlas boundary. Measuring rather
+    // than assuming the lower corner keeps the returned extent honest if the
+    // layout strategy above ever changes.
+    const T atlasMinX = placedMinX - pad;
+    const T atlasMinY = placedMinY - pad;
+    const T atlasW = (placedMaxX + pad) - atlasMinX;
+    const T atlasH = (placedMaxY + pad) - atlasMinY;
 
     // Optional normalization: a single global uniform scale that fits the
     // padded atlas into [0,1]^2, preserving relative chart sizes.
@@ -385,15 +407,19 @@ auto PackCharts(
         }
     }
 
-    // Apply translation (+ optional scale about the origin) in place.
+    // Apply translation (+ optional scale about the origin) in place. Shifting
+    // by the measured atlas corner puts that corner on the origin by
+    // construction rather than by assumption; with the shelf layout above the
+    // shift is already zero.
     for (std::size_t i = 0; i < n; ++i) {
         for (const auto& v : charts[i]->vertices()) {
-            v->pos[0] = (v->pos[0] + offsetX[i]) * scale;
-            v->pos[1] = (v->pos[1] + offsetY[i]) * scale;
+            v->pos[0] = (v->pos[0] + offsetX[i] - atlasMinX) * scale;
+            v->pos[1] = (v->pos[1] + offsetY[i] - atlasMinY) * scale;
         }
     }
 
-    // result.min is value-initialized to the origin; only u/v of max are set.
+    // The atlas lower corner now sits on the origin, so result.min keeps its
+    // value-initialized zero; only u/v of max are set.
     result.max[0] = atlasW * scale;
     result.max[1] = atlasH * scale;
     return result;

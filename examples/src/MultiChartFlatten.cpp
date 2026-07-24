@@ -21,7 +21,10 @@
  * @see OpenABF::HalfEdgeMesh::extract_connected_components
  * @see OpenABF::PackCharts
  */
+#include <cstddef>
+#include <cstdlib>
 #include <iostream>
+#include <string>
 #include <vector>
 
 #include "OpenABF/OpenABF.hpp"
@@ -97,6 +100,13 @@ int main()
         // cc.face_map[chart_idx]   -> original face idx
         // Available for downstream uses such as building a per-wedge UV map
         // keyed by source-mesh face corners.
+    }
+
+    // Nothing to pack if every chart failed to flatten. Bail out loudly rather
+    // than writing an empty atlas that looks like a successful run.
+    if (chartMeshes.empty()) {
+        std::cerr << "No chart could be flattened; no atlas written\n";
+        return EXIT_FAILURE;
     }
 
     // Pack the flattened charts into a shared frame. `normalize` fits the whole

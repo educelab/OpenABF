@@ -19,6 +19,7 @@ limitations under the License.
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -69,26 +70,42 @@ struct MergedMesh {
  * @throws std::invalid_argument If an input pointer is null or has no vertices.
  */
 template <typename MeshType>
-auto MergeMeshes(const std::vector<typename MeshType::Pointer>& meshes) -> MergedMesh<MeshType>
+auto MergeMeshes(const std::vector<std::shared_ptr<MeshType>>& meshes) -> MergedMesh<MeshType>
 {
     MergedMesh<MeshType> result{MeshType::New(), {}, {}};
     auto& out = result.mesh;
+
+    // Validate and size up the inputs before building anything.
+    std::size_t totalVerts{0};
+    std::size_t totalFaces{0};
+    for (const auto& src : meshes) {
+        if (not src or src->num_vertices() == 0) {
+            throw std::invalid_argument("MergeMeshes: input mesh is null or has no vertices");
+        }
+        totalVerts += src->num_vertices();
+        totalFaces += src->num_faces();
+    }
+    result.vertex_source.reserve(totalVerts);
+    result.face_source.reserve(totalFaces);
 
     // Gather every face's (offset) vertex indices so they can be inserted in a
     // single insert_faces() call, which rebuilds the mesh boundary once at the
     // end via update_boundary(). Inserting faces one at a time with
     // insert_face() would leave the boundary stale.
     std::vector<std::vector<std::size_t>> faces;
+    faces.reserve(totalFaces);
     for (std::size_t ci = 0; ci < meshes.size(); ++ci) {
         const auto& src = meshes[ci];
-        if (not src or src->num_vertices() == 0) {
-            throw std::invalid_argument("MergeMeshes: input mesh is null or has no vertices");
-        }
         // Vertices keep their relative order, so merged index == offset + sub
         // index; record provenance alongside each insertion.
         const auto offset = out->num_vertices();
         for (const auto& v : src->vertices()) {
-            out->insert_vertex(*v);
+            const auto newIdx = out->insert_vertex(*v);
+            // Vertex's copy constructor copies only traits and position, but
+            // null `edge` explicitly -- as clone() and
+            // extract_connected_components() do -- so a merged vertex can never
+            // reference a half-edge belonging to one of the source meshes.
+            out->vertex(newIdx)->edge = nullptr;
             result.vertex_source.emplace_back(ci, v->idx);
         }
         // Re-emit each face against the offset vertex indices, preserving the
