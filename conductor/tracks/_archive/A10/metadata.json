@@ -1,0 +1,10 @@
+{
+  "id": "A10",
+  "title": "Add static Compute() overloads accepting levelRatio and minCoarseVertices",
+  "type": "improvement",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/68",
+  "archived": true,
+  "archived_at": "2026-06-20",
+  "archive_reason": "Completed"
+}

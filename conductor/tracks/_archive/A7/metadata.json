@@ -1,0 +1,10 @@
+{
+  "id": "A7",
+  "title": "Multi-pin UV constraints for LSCM and Hierarchical LSCM",
+  "type": "improvement",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/42",
+  "archived": true,
+  "archived_at": "2026-06-14",
+  "archive_reason": "Completed"
+}

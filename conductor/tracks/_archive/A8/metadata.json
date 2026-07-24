@@ -1,0 +1,10 @@
+{
+  "id": "A8",
+  "title": "Extract shared LSCM system-building logic",
+  "type": "improvement",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/64",
+  "archived": true,
+  "archived_at": "2026-06-13",
+  "archive_reason": "Completed"
+}

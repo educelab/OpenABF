@@ -1,0 +1,10 @@
+{
+  "id": "E2",
+  "title": "Add sphere cap built-in mesh generator to benchmark",
+  "type": "example",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/48",
+  "archived": true,
+  "archived_at": "2026-06-12",
+  "archive_reason": "Completed"
+}

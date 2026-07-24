@@ -1,0 +1,10 @@
+{
+  "id": "F2",
+  "title": "Multi-chart packing in a common world coordinate frame",
+  "type": "feature",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/18",
+  "archived": true,
+  "archived_at": "2026-07-24",
+  "archive_reason": "Completed"
+}

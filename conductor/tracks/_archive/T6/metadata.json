@@ -1,0 +1,10 @@
+{
+  "id": "T6",
+  "title": "Add test for HLSCM::setPinnedVertices() instance API",
+  "type": "test",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/51",
+  "archived": true,
+  "archived_at": "2026-06-12",
+  "archive_reason": "Completed"
+}

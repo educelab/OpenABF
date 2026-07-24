@@ -2,9 +2,14 @@
   "id": "P4",
   "title": "IncompleteCholesky preconditioner for AngleBasedLSCM",
   "type": "performance",
-  "status": "open",
+  "status": "archived",
   "github_issue": "https://github.com/educelab/OpenABF/issues/47",
   "created": "2026-03-18",
   "updated": "2026-03-18",
-  "dependencies": ["E1"]
+  "dependencies": [
+    "E1"
+  ],
+  "archived": true,
+  "archived_at": "2026-06-14",
+  "archive_reason": "Completed"
 }

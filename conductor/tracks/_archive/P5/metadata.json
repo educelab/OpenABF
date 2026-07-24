@@ -1,0 +1,10 @@
+{
+  "id": "P5",
+  "title": "HLSCM hot-path allocation reduction",
+  "type": "performance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/63",
+  "archived": true,
+  "archived_at": "2026-06-14",
+  "archive_reason": "Completed"
+}

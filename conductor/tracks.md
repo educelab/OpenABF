@@ -2,10 +2,12 @@
 
 ## Next Up
 
-Planned work order (updated 2026-06-20; A10 landed in PR #97):
+Planned work order (updated 2026-07-24; F2 landed in PR #99):
 
-No parallel pair currently scheduled. Next pick from the active list —
-F2 or F5–F11 — based on priority at the time of starting.
+No parallel pair currently scheduled. P7 is the natural follow-on — its
+Phase 0 gate (PR #99 merged) is now satisfied, and it fixes the shelf-wrap
+padding disagreement F2 introduced. Otherwise pick from B8, B9, or F5–F11
+based on priority at the time of starting.
 
 ## Active Tracks
 
@@ -18,9 +20,8 @@ F2 or F5–F11 — based on priority at the time of starting.
 | open | F9 | Implement OpenBLAS/LAPACK Backend | [#57](https://github.com/educelab/OpenABF/issues/57) | 2026-03-20 | 2026-03-20 |
 | open | F10 | Implement Ceres Solver Backend | [#58](https://github.com/educelab/OpenABF/issues/58) | 2026-03-20 | 2026-03-20 |
 | open | F11 | Implement ACVD | [#62](https://github.com/educelab/OpenABF/issues/62) | 2026-03-20 | 2026-03-20 |
-| open | F2 | Multi-chart UV packing | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-03-13 | 2026-07-24 |
-| open | B10 | `extract_connected_components` throws on meshes with mutually-adjacent interior faces (BFS marked visited on dequeue) — fix + regression test carried by PR #99 (F2 Phase 8) | [#103](https://github.com/educelab/OpenABF/issues/103) | 2026-07-24 | 2026-07-24 |
-| open | P7 | PackCharts shelf-wrap test and sqrt-area target width disagree on padding, causing premature wraps and narrow atlases (blocked on F2/PR #99 merging) | [#104](https://github.com/educelab/OpenABF/issues/104) | 2026-07-24 | 2026-07-24 |
+| open | B10 | `extract_connected_components` throws on meshes with mutually-adjacent interior faces (BFS marked visited on dequeue) — fix + regression test carried by PR #99 (F2 Phase 8); issue #103 closed, no track dir, needs archiving | [#103](https://github.com/educelab/OpenABF/issues/103) | 2026-07-24 | 2026-07-24 |
+| open | P7 | PackCharts shelf-wrap test and sqrt-area target width disagree on padding, causing premature wraps and narrow atlases (unblocked: PR #99 merged 2026-07-24) | [#104](https://github.com/educelab/OpenABF/issues/104) | 2026-07-24 | 2026-07-24 |
 | open | B8 | LSCM area-preserving rescale of flattening output | [#98](https://github.com/educelab/OpenABF/issues/98) | 2026-06-20 | 2026-06-20 |
 | open | B9 | No recoverable mapping from torn/parameterized mesh back to original input topology (insert_face rewind + split_path duplication) | [#100](https://github.com/educelab/OpenABF/issues/100) | 2026-06-20 | 2026-06-20 |
 
@@ -28,6 +29,7 @@ F2 or F5–F11 — based on priority at the time of starting.
 
 | Status | Track ID | Title | GitHub | Archived |
 | ------ | -------- | ----- | ------ | -------- |
+| closed | F2 | Multi-chart packing in a common world coordinate frame (PackCharts, PR #99; includes MergeMeshes, perimeter padding, bbox minimization, and the Phase 8 BFS fix) | [#18](https://github.com/educelab/OpenABF/issues/18) | 2026-07-24 |
 | closed | A10 | Add static Compute() overload with levelRatio/minCoarseVertices (PinMap variant, PR #97; bare `(mesh, levelRatio, minCoarseVerts)` shape blocked by deprecated-overload cleanup) | [#68](https://github.com/educelab/OpenABF/issues/68) | 2026-06-20 |
 | closed | A7 | Multi-pin UV constraints for LSCM and Hierarchical LSCM (PR #93) | [#42](https://github.com/educelab/OpenABF/issues/42) | 2026-06-14 |
 | closed | P5 | HLSCM hot-path allocation reduction (UV map, vertexNeighbors, originalToLocal) — PR #92 | [#63](https://github.com/educelab/OpenABF/issues/63) | 2026-06-14 |

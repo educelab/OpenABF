@@ -1,0 +1,10 @@
+{
+  "id": "P6",
+  "title": "Precompute sin/cos values before HLSCM face assembly loop",
+  "type": "performance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/66",
+  "archived": true,
+  "archived_at": "2026-06-13",
+  "archive_reason": "Obsolete"
+}
