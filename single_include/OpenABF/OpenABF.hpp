@@ -2627,23 +2627,30 @@ public:
             }
         }
 
+        // Typedefs
+        using Triplet = Eigen::Triplet<T>;
+        using SparseMatrix = Eigen::SparseMatrix<T>;
+        using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
+        // Helpful parameters
+        auto vIntCnt = mesh->num_vertices_interior();
+        auto edgeCnt = mesh->num_edges();
+        auto faceCnt = mesh->num_faces();
+
+        std::vector<Triplet> triplets;
+        auto Asize = edgeCnt + faceCnt + 2 * vIntCnt;
+        SparseMatrix b(Asize, 1);
+        SparseMatrix A(Asize, Asize);
+        DenseVector delta(Asize, 1);
+
         while (gradient > gradThreshold and gradDelta > gradThreshold and iters < maxIters) {
             if (std::isnan(gradient) or std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
-            // Typedefs
-            using Triplet = Eigen::Triplet<T>;
-            using SparseMatrix = Eigen::SparseMatrix<T>;
-            using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-
-            // Helpful parameters
-            auto vIntCnt = mesh->num_vertices_interior();
-            auto edgeCnt = mesh->num_edges();
-            auto faceCnt = mesh->num_faces();
 
             //// RHS ////
             // b1 = -alpha gradient
-            std::vector<Triplet> triplets;
+            triplets.clear();
             std::size_t idx{0};
             for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, 0, -AlphaGrad<T>(e));
@@ -2662,8 +2669,6 @@ public:
                 triplets.emplace_back(vIntCnt + idx, 0, -LenGrad<T>(v));
                 ++idx;
             }
-            SparseMatrix b(edgeCnt + faceCnt + 2 * vIntCnt, 1);
-            b.reserve(triplets.size());
             b.setFromTriplets(triplets.begin(), triplets.end());
 
             ///// LHS /////
@@ -2710,9 +2715,6 @@ public:
                 }
                 ++idx;
             }
-            auto Asize = edgeCnt + faceCnt + 2 * vIntCnt;
-            SparseMatrix A(Asize, Asize);
-            A.reserve(triplets.size());
             A.setFromTriplets(triplets.begin(), triplets.end());
 
             A.makeCompressed();
@@ -2721,7 +2723,7 @@ public:
             if (solver.info() != Eigen::ComputationInfo::Success) {
                 throw SolverException("ABF: Failed to solve A");
             }
-            DenseVector delta = solver.solve(b);
+            delta = solver.solve(b);
             if (solver.info() != Eigen::ComputationInfo::Success) {
                 throw SolverException("ABF: Failed to solve b");
             }
@@ -2903,29 +2905,39 @@ public:
             }
         }
 
+        // Typedefs
+        using Triplet = Eigen::Triplet<T>;
+        using SparseMatrix = Eigen::SparseMatrix<T>;
+        using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
+        // Helpful parameters
+        auto vIntCnt = mesh->num_vertices_interior();
+        auto edgeCnt = mesh->num_edges();
+        auto faceCnt = mesh->num_faces();
+
+        std::vector<Triplet> triplets;
+        SparseMatrix b1(edgeCnt, 1);
+        SparseMatrix b2(faceCnt + 2 * vIntCnt, 1);
+        SparseMatrix J(faceCnt + 2 * vIntCnt, 3 * faceCnt);
+        SparseMatrix LambdaInv(edgeCnt, edgeCnt);
+        SparseMatrix LambdaStarInv(faceCnt, faceCnt);
+        SparseMatrix A(2 * vIntCnt, 2 * vIntCnt);
+        SparseMatrix b(2 * vIntCnt, 1);
+        DenseVector deltaLambda(faceCnt + 2 * vIntCnt, 1);
+        DenseVector deltaAlpha(edgeCnt, 1);
+
         while (gradient > gradThreshold and gradDelta > gradThreshold and iters < maxIters) {
             if (std::isnan(gradient) or std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
-            // Typedefs
-            using Triplet = Eigen::Triplet<T>;
-            using SparseMatrix = Eigen::SparseMatrix<T>;
-            using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-
-            // Helpful parameters
-            auto vIntCnt = mesh->num_vertices_interior();
-            auto edgeCnt = mesh->num_edges();
-            auto faceCnt = mesh->num_faces();
 
             // b1 = -alpha gradient
-            std::vector<Triplet> triplets;
+            triplets.clear();
             std::size_t idx{0};
             for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, 0, -AlphaGrad<T>(e));
                 ++idx;
             }
-            SparseMatrix b1(edgeCnt, 1);
-            b1.reserve(triplets.size());
             b1.setFromTriplets(triplets.begin(), triplets.end());
 
             // b2 = -lambda gradient
@@ -2942,8 +2954,6 @@ public:
                 triplets.emplace_back(vIntCnt + idx, 0, -LenGrad<T>(v));
                 idx++;
             }
-            SparseMatrix b2(faceCnt + 2 * vIntCnt, 1);
-            b2.reserve(triplets.size());
             b2.setFromTriplets(triplets.begin(), triplets.end());
 
             // Compute J1 + J2
@@ -2970,8 +2980,6 @@ public:
                 }
                 ++idx;
             }
-            SparseMatrix J(faceCnt + 2 * vIntCnt, 3 * faceCnt);
-            J.reserve(triplets.size());
             J.setFromTriplets(triplets.begin(), triplets.end());
 
             // Lambda = diag(2/w)
@@ -2983,15 +2991,13 @@ public:
                 triplets.emplace_back(idx, idx, T(1) / (2 * e->weight));
                 ++idx;
             }
-            SparseMatrix LambdaInv(edgeCnt, edgeCnt);
-            LambdaInv.reserve(edgeCnt);
             LambdaInv.setFromTriplets(triplets.begin(), triplets.end());
 
             // solve Eq. 16
             auto bstar = J * LambdaInv * b1 - b2;
             auto JLiJt = J * LambdaInv * J.transpose();
 
-            SparseMatrix LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
+            LambdaStarInv = JLiJt.block(0, 0, faceCnt, faceCnt);
             for (int k = 0; k < LambdaStarInv.outerSize(); ++k) {
                 for (typename SparseMatrix::InnerIterator it(LambdaStarInv, k); it; ++it) {
                     it.valueRef() = T(1) / it.value();
@@ -3004,8 +3010,8 @@ public:
             auto bstar2 = bstar.block(faceCnt, 0, 2 * vIntCnt, 1);
 
             // (J* Lam*^-1 J*^t - J**) delta_lambda_2 = J* Lam*^-1 b*_1 - b*_2
-            SparseMatrix A = Jstar * LambdaStarInv * JstarT - Jstar2;
-            SparseMatrix b = Jstar * LambdaStarInv * bstar1 - bstar2;
+            A = Jstar * LambdaStarInv * JstarT - Jstar2;
+            b = Jstar * LambdaStarInv * bstar1 - bstar2;
             A.makeCompressed();
             Solver solver;
             solver.compute(A);
@@ -3021,11 +3027,11 @@ public:
             auto deltaLambda1 = LambdaStarInv * (bstar1 - JstarT * deltaLambda2);
 
             // Construct deltaLambda
-            DenseVector deltaLambda(deltaLambda1.rows() + deltaLambda2.rows(), 1);
-            deltaLambda << DenseVector(deltaLambda1), DenseVector(deltaLambda2);
+            deltaLambda.topRows(faceCnt) = deltaLambda1;
+            deltaLambda.bottomRows(2 * vIntCnt) = deltaLambda2;
 
             // Compute Eq. 10 -> delta_alpha
-            DenseVector deltaAlpha = LambdaInv * (b1 - J.transpose() * deltaLambda);
+            deltaAlpha = LambdaInv * (b1 - J.transpose() * deltaLambda);
 
             // lambda += delta_lambda
             for (auto& f : mesh->faces()) {
@@ -3292,7 +3298,6 @@ auto BuildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) 
         tripletsB.emplace_back(2 * s + 1, 0, uv[1]);
     }
     SparseMatrix bFixed(2 * numFixed, 1);
-    bFixed.reserve(tripletsB.size());
     bFixed.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     // Permutation for free vertices: maps mesh vertex idx → row-pair slot in A.
@@ -3374,11 +3379,9 @@ auto BuildSystem(const typename MeshType::Pointer& mesh, const PinMap<T>& pins) 
     }
 
     SparseMatrix A(2 * numFaces, 2 * numFree);
-    A.reserve(tripletsA.size());
     A.setFromTriplets(tripletsA.begin(), tripletsA.end());
 
     SparseMatrix bFree(2 * numFaces, 2 * numFixed);
-    bFree.reserve(tripletsB.size());
     bFree.setFromTriplets(tripletsB.begin(), tripletsB.end());
 
     SparseMatrix b = bFree * bFixed * T(-1);

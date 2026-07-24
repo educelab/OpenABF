@@ -307,23 +307,30 @@ public:
             }
         }
 
+        // Typedefs
+        using Triplet = Eigen::Triplet<T>;
+        using SparseMatrix = Eigen::SparseMatrix<T>;
+        using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
+        // Helpful parameters
+        auto vIntCnt = mesh->num_vertices_interior();
+        auto edgeCnt = mesh->num_edges();
+        auto faceCnt = mesh->num_faces();
+
+        std::vector<Triplet> triplets;
+        auto Asize = edgeCnt + faceCnt + 2 * vIntCnt;
+        SparseMatrix b(Asize, 1);
+        SparseMatrix A(Asize, Asize);
+        DenseVector delta(Asize, 1);
+
         while (gradient > gradThreshold and gradDelta > gradThreshold and iters < maxIters) {
             if (std::isnan(gradient) or std::isinf(gradient)) {
                 throw MeshException("Mesh gradient cannot be computed");
             }
-            // Typedefs
-            using Triplet = Eigen::Triplet<T>;
-            using SparseMatrix = Eigen::SparseMatrix<T>;
-            using DenseVector = Eigen::Matrix<T, Eigen::Dynamic, 1>;
-
-            // Helpful parameters
-            auto vIntCnt = mesh->num_vertices_interior();
-            auto edgeCnt = mesh->num_edges();
-            auto faceCnt = mesh->num_faces();
 
             //// RHS ////
             // b1 = -alpha gradient
-            std::vector<Triplet> triplets;
+            triplets.clear();
             std::size_t idx{0};
             for (const auto& e : mesh->edges()) {
                 triplets.emplace_back(idx, 0, -AlphaGrad<T>(e));
@@ -342,8 +349,6 @@ public:
                 triplets.emplace_back(vIntCnt + idx, 0, -LenGrad<T>(v));
                 ++idx;
             }
-            SparseMatrix b(edgeCnt + faceCnt + 2 * vIntCnt, 1);
-            b.reserve(triplets.size());
             b.setFromTriplets(triplets.begin(), triplets.end());
 
             ///// LHS /////
@@ -390,9 +395,6 @@ public:
                 }
                 ++idx;
             }
-            auto Asize = edgeCnt + faceCnt + 2 * vIntCnt;
-            SparseMatrix A(Asize, Asize);
-            A.reserve(triplets.size());
             A.setFromTriplets(triplets.begin(), triplets.end());
 
             A.makeCompressed();
@@ -401,7 +403,7 @@ public:
             if (solver.info() != Eigen::ComputationInfo::Success) {
                 throw SolverException("ABF: Failed to solve A");
             }
-            DenseVector delta = solver.solve(b);
+            delta = solver.solve(b);
             if (solver.info() != Eigen::ComputationInfo::Success) {
                 throw SolverException("ABF: Failed to solve b");
             }
