@@ -154,4 +154,5 @@ Expected extents (`minimize_bounding_box = false`, `normalize = false`):
 - **F2 (#18, PR #99) must merge first** — `include/OpenABF/ChartPacking.hpp` and
   its tests land there. Work starts from `develop` after that merge, not from the
   `f2-multi-chart-packing` branch.
-- B10 (#103) also rides on PR #99 but is otherwise independent of P7.
+- The `extract_connected_components` BFS fix (#103) also rode on PR #99 —
+  it shipped as F2 Phase 8 — but is otherwise independent of P7.
