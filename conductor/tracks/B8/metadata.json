@@ -1,0 +1,9 @@
+{
+  "id": "B8",
+  "title": "LSCM area-preserving rescale of flattening output",
+  "type": "bug",
+  "status": "open",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/98",
+  "created": "2026-06-20",
+  "updated": "2026-06-20"
+}

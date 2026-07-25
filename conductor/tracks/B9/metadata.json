@@ -1,0 +1,9 @@
+{
+  "id": "B9",
+  "title": "No recoverable mapping from torn seam-duplicate vertices back to the consumer's pre-HEM mesh",
+  "type": "bug",
+  "status": "open",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/100",
+  "created": "2026-06-20",
+  "updated": "2026-06-20"
+}

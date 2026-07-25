@@ -1,0 +1,12 @@
+{
+  "id": "P7",
+  "title": "PackCharts wastes atlas area: shelf-wrap test and sqrt-area target width disagree on padding",
+  "type": "performance",
+  "status": "open",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/104",
+  "created": "2026-07-24",
+  "updated": "2026-07-24",
+  "dependencies": [
+    "F2"
+  ]
+}

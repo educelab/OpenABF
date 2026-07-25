@@ -1,0 +1,12 @@
+{
+  "id": "F10",
+  "title": "Implement Ceres Solver Backend",
+  "type": "feature",
+  "status": "open",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/58",
+  "created": "2026-03-20",
+  "updated": "2026-03-20",
+  "dependencies": [
+    "F7"
+  ]
+}

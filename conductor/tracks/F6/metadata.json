@@ -1,0 +1,9 @@
+{
+  "id": "F6",
+  "title": "Migrate to C++20",
+  "type": "maintenance",
+  "status": "open",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/54",
+  "created": "2026-03-20",
+  "updated": "2026-03-20"
+}

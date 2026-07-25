@@ -1,0 +1,15 @@
+{
+  "id": "M5",
+  "title": "split_edge and detail::filter cleanup",
+  "type": "maintenance",
+  "status": "archived",
+  "github_issue": "https://github.com/educelab/OpenABF/issues/76",
+  "github_issues": [
+    "https://github.com/educelab/OpenABF/issues/76",
+    "https://github.com/educelab/OpenABF/issues/77",
+    "https://github.com/educelab/OpenABF/issues/78"
+  ],
+  "archived": true,
+  "archived_at": "2026-06-12",
+  "archive_reason": "Completed"
+}
