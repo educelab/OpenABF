@@ -1,7 +1,7 @@
 # Tech Stack
 
 ## Primary Language
-- **C++17** — all library code; required standard for consumers
+- **C++20** — all library code; required standard for consumers
 - **Python 3.x** — utility/build scripts (e.g. `thirdparty/amalgamate/amalgamate.py` for single-header generation); Python bindings (pybind11) are a future consideration
 
 ## Build System

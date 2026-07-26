@@ -53,7 +53,7 @@ target_include_directories(OpenABF
         $<BUILD_INTERFACE:${OPENABF_LINK_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-target_compile_features(OpenABF INTERFACE cxx_std_17)
+target_compile_features(OpenABF INTERFACE cxx_std_20)
 set_target_properties(OpenABF
     PROPERTIES
         PUBLIC_HEADER "${public_hdrs}"

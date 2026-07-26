@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <optional>
@@ -32,9 +33,8 @@ template <template <class...> class U, class... Vs>
 constexpr bool is_instance_of_v<U<Vs...>, U> = std::true_type{};
 
 /** Solve least squares using A'Ab  */
-template <
-    class SparseMatrix, class DenseMatrix, class Solver,
-    std::enable_if_t<!is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = false>
+template <class SparseMatrix, class DenseMatrix, class Solver>
+    requires(!is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>)
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Setup AtA and solver
@@ -56,9 +56,8 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 }
 
 /** Solve least squares with LeastSquaresConjugateGradient */
-template <
-    class SparseMatrix, class DenseMatrix, class Solver,
-    std::enable_if_t<is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = true>
+template <class SparseMatrix, class DenseMatrix, class Solver>
+    requires(is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>)
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Solve
@@ -118,9 +117,8 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * at the mesh sizes we target. Use IC only if you have profiled it favorably
  * against Diagonal for your specific mesh class.
  */
-template <typename T, class MeshType = HalfEdgeMesh<T>,
-          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshType = HalfEdgeMesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>>
 class AngleBasedLSCM
 {
 public:

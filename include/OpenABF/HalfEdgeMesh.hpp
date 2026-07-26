@@ -433,14 +433,16 @@ private:
 
         /** Dereference operator */
         template <bool Const_ = Const>
-        std::enable_if_t<Const_, reference> operator*() const
+            requires(Const_)
+        reference operator*() const
         {
             return current_;
         }
 
         /** Dereference operator */
         template <bool Const_ = Const>
-        std::enable_if_t<not Const_, reference> operator*()
+            requires(not Const_)
+        reference operator*()
         {
             return current_;
         }
@@ -510,13 +512,15 @@ private:
 
         /** Dereference (const overload) */
         template <bool C = Const>
-        auto operator*() const -> std::enable_if_t<C, reference>
+            requires(C)
+        auto operator*() const -> reference
         {
             return current_;
         }
         /** Dereference (non-const overload) */
         template <bool C = Const>
-        auto operator*() -> std::enable_if_t<!C, reference>
+            requires(!C)
+        auto operator*() -> reference
         {
             return current_;
         }
@@ -601,13 +605,15 @@ private:
 
         /** Dereference (const overload) */
         template <bool C = Const>
-        auto operator*() const -> std::enable_if_t<C, reference>
+            requires(C)
+        auto operator*() const -> reference
         {
             return *edgeIt_;
         }
         /** Dereference (non-const overload) */
         template <bool C = Const>
-        auto operator*() -> std::enable_if_t<!C, reference>
+            requires(!C)
+        auto operator*() -> reference
         {
             return *edgeIt_;
         }

@@ -5,7 +5,7 @@ The templated interface is designed for simple out-of-the-box use, and
 integration with existing geometric processing pipelines is quick and easy.
 
 ## Dependencies
-- C++17 compiler
+- C++20 compiler
 - [Eigen 3.3+](http://eigen.tuxfamily.org/)
 - CMake 3.15+ (optional)
 
@@ -161,7 +161,7 @@ path. As OpenABF depends upon the Eigen library, you will also need to add the
 Eigen headers to your include path:
 
 ```shell
-g++ -I /path/to/eigen/ -std=c++17 -DNDEBUG -O3 main.cpp -o main
+g++ -I /path/to/eigen/ -std=c++20 -DNDEBUG -O3 main.cpp -o main
 ```
 
 > [!IMPORTANT]
@@ -175,8 +175,8 @@ automatically conformant with the C++ standard in all cases. This may lead to
 the following issues when compiling against OpenABF.
 
 > [!NOTE]
-> As this project only supports C++17 and up, you should always compile 
-with at least `/std:c++17`.
+> As this project only supports C++20 and up, you should always compile 
+with at least `/std:c++20`.
 
 #### Undeclared identifier errors
 

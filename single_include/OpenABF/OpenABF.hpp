@@ -54,6 +54,7 @@ public:
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <numeric>
 
@@ -132,16 +133,14 @@ auto interior_angle(const Vector1& a, const Vector2& b)
 }
 
 /** @brief Convert degrees to radians */
-template <typename T = float, typename T2,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T = float, typename T2>
 constexpr auto to_radians(T2 deg) -> T
 {
     return deg * PI<T> / T(180);
 }
 
 /** @brief Convert radians to degrees */
-template <typename T = float, typename T2,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T = float, typename T2>
 constexpr auto to_degrees(T2 rad) -> T
 {
     return rad * T(180) / PI<T>;
@@ -168,7 +167,8 @@ namespace OpenABF
  * @tparam T Element type
  * @tparam Dims Number of elements
  */
-template <typename T, std::size_t Dims, std::enable_if_t<std::is_arithmetic<T>::value, bool> = true>
+template <typename T, std::size_t Dims>
+    requires(std::is_arithmetic_v<T>)
 class Vec
 {
     /** Underlying element storage */
@@ -358,7 +358,8 @@ public:
     }
 
     /** @brief Multiplication assignment operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     Vec& operator*=(const T2& b)
     {
         for (auto& v : val_) {
@@ -368,7 +369,8 @@ public:
     }
 
     /** @brief Multiplication operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     friend Vec operator*(Vec lhs, const T2& rhs)
     {
         lhs *= rhs;
@@ -376,7 +378,8 @@ public:
     }
 
     /** @brief Division assignment operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     Vec& operator/=(const T2& b)
     {
         for (auto& v : val_) {
@@ -386,7 +389,8 @@ public:
     }
 
     /** @brief Division operator */
-    template <typename T2, std::enable_if_t<std::is_arithmetic<T2>::value, bool> = true>
+    template <typename T2>
+        requires(std::is_arithmetic_v<T2>)
     friend Vec operator/(Vec lhs, const T2& rhs)
     {
         lhs /= rhs;
@@ -402,7 +406,8 @@ public:
 
     /** @brief Compute the vector cross product */
     template <class Vector, std::size_t D = Dims>
-    std::enable_if_t<D == 3, Vec> cross(const Vector& v)
+        requires(D == 3)
+    Vec cross(const Vector& v)
     {
         return OpenABF::cross(*this, v);
     }
@@ -880,14 +885,16 @@ private:
 
         /** Dereference operator */
         template <bool Const_ = Const>
-        std::enable_if_t<Const_, reference> operator*() const
+            requires(Const_)
+        reference operator*() const
         {
             return current_;
         }
 
         /** Dereference operator */
         template <bool Const_ = Const>
-        std::enable_if_t<not Const_, reference> operator*()
+            requires(not Const_)
+        reference operator*()
         {
             return current_;
         }
@@ -957,13 +964,15 @@ private:
 
         /** Dereference (const overload) */
         template <bool C = Const>
-        auto operator*() const -> std::enable_if_t<C, reference>
+            requires(C)
+        auto operator*() const -> reference
         {
             return current_;
         }
         /** Dereference (non-const overload) */
         template <bool C = Const>
-        auto operator*() -> std::enable_if_t<!C, reference>
+            requires(!C)
+        auto operator*() -> reference
         {
             return current_;
         }
@@ -1048,13 +1057,15 @@ private:
 
         /** Dereference (const overload) */
         template <bool C = Const>
-        auto operator*() const -> std::enable_if_t<C, reference>
+            requires(C)
+        auto operator*() const -> reference
         {
             return *edgeIt_;
         }
         /** Dereference (non-const overload) */
         template <bool C = Const>
-        auto operator*() -> std::enable_if_t<!C, reference>
+            requires(!C)
+        auto operator*() -> reference
         {
             return *edgeIt_;
         }
@@ -2319,6 +2330,7 @@ private:
 
 #include <cassert>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <vector>
 
@@ -2404,7 +2416,7 @@ void InitializeAnglesAndWeights(MeshPtr& m)
 }
 
 /** @brief Compute ∇CTri w.r.t LambdaTri == CTri */
-template <typename T, class FacePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class FacePtr>
 auto TriGrad(const FacePtr& f) -> T
 {
     T g = -PI<T>;
@@ -2415,7 +2427,7 @@ auto TriGrad(const FacePtr& f) -> T
 }
 
 /** @brief Compute ∇CPlan w.r.t LambdaPlan == CPlan */
-template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class VertPtr>
 auto PlanGrad(const VertPtr& v) -> T
 {
     T g = -2 * PI<T>;
@@ -2426,7 +2438,7 @@ auto PlanGrad(const VertPtr& v) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t LambdaLen == CLen */
-template <typename T, class VertPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class VertPtr>
 auto LenGrad(const VertPtr& vertex) -> T
 {
     T p1{1};
@@ -2439,8 +2451,7 @@ auto LenGrad(const VertPtr& vertex) -> T
 }
 
 /** @brief Compute ∇CLen w.r.t edge->alpha */
-template <typename T, class VertPtr, class EdgePtr,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class VertPtr, class EdgePtr>
 auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 {
     T p1{1};
@@ -2466,7 +2477,7 @@ auto LenGrad(const VertPtr& vertex, const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t an edge's alpha */
-template <typename T, class EdgePtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class EdgePtr>
 auto AlphaGrad(const EdgePtr& edge) -> T
 {
     // δE/δα
@@ -2492,7 +2503,7 @@ auto AlphaGrad(const EdgePtr& edge) -> T
 }
 
 /** @brief Compute ∇F w.r.t all parameters */
-template <typename T, class MeshPtr, std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshPtr>
 auto Gradient(const MeshPtr& mesh) -> T
 {
     T g{0};
@@ -2545,9 +2556,8 @@ auto Gradient(const MeshPtr& mesh) -> T
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <typename T, class MeshType = detail::ABF::Mesh<T>,
-          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>>
 class ABF
 {
 public:
@@ -2783,6 +2793,7 @@ protected:
 
 #include <cassert>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <vector>
 
@@ -2823,9 +2834,8 @@ namespace OpenABF
  * concept](https://eigen.tuxfamily.org/dox-devel/group__TopicSparseSystems.html)
  * and templated on Eigen::SparseMatrix<T>
  */
-template <typename T, class MeshType = detail::ABF::Mesh<T>,
-          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshType = detail::ABF::Mesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>>
 class ABFPlusPlus
 {
 public:
@@ -3087,6 +3097,7 @@ private:
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <iterator>
 #include <optional>
@@ -3406,9 +3417,8 @@ template <template <class...> class U, class... Vs>
 constexpr bool is_instance_of_v<U<Vs...>, U> = std::true_type{};
 
 /** Solve least squares using A'Ab  */
-template <
-    class SparseMatrix, class DenseMatrix, class Solver,
-    std::enable_if_t<!is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = false>
+template <class SparseMatrix, class DenseMatrix, class Solver>
+    requires(!is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>)
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Setup AtA and solver
@@ -3430,9 +3440,8 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 }
 
 /** Solve least squares with LeastSquaresConjugateGradient */
-template <
-    class SparseMatrix, class DenseMatrix, class Solver,
-    std::enable_if_t<is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>, bool> = true>
+template <class SparseMatrix, class DenseMatrix, class Solver>
+    requires(is_instance_of_v<Solver, Eigen::LeastSquaresConjugateGradient>)
 auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
 {
     // Solve
@@ -3492,9 +3501,8 @@ auto SolveLeastSquares(SparseMatrix A, SparseMatrix b) -> DenseMatrix
  * at the mesh sizes we target. Use IC only if you have profiled it favorably
  * against Diagonal for your specific mesh class.
  */
-template <typename T, class MeshType = HalfEdgeMesh<T>,
-          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+template <std::floating_point T, class MeshType = HalfEdgeMesh<T>,
+          class Solver = Eigen::SparseLU<Eigen::SparseMatrix<T>, Eigen::COLAMDOrdering<int>>>
 class AngleBasedLSCM
 {
 public:
@@ -3650,6 +3658,7 @@ private:
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <concepts>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -4620,10 +4629,9 @@ auto SolveLSCMLevel(const typename HalfEdgeMesh<T>::Pointer& levelMesh,
  *       The result is numerically equivalent but may differ in convergence
  *       behavior from a plain AngleBasedLSCM call.
  */
-template <typename T, class MeshType = HalfEdgeMesh<T>,
+template <std::floating_point T, class MeshType = HalfEdgeMesh<T>,
           class Solver =
-              Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower | Eigen::Upper>,
-          std::enable_if_t<std::is_floating_point_v<T>, bool> = true>
+              Eigen::ConjugateGradient<Eigen::SparseMatrix<T>, Eigen::Lower | Eigen::Upper>>
 class HierarchicalLSCM
 {
 public:

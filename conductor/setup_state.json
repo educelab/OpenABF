@@ -12,7 +12,7 @@
     "key_goals": "Zero-to-low dependency header-only integration; multiple algorithms (ABF, ABF++, LSCM); multi-chart flattening and packing; high numerical accuracy; production-efficient implementations.",
     "voice_tone": "Concise and direct",
     "design_principles": "Simplicity over features, Performance first, Developer experience focused",
-    "languages": "C++17, Python 3.x (scripts)",
+    "languages": "C++20, Python 3.x (scripts)",
     "frontend": "None",
     "backend": "None",
     "database": "None",
